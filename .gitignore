@@ -14,3 +14,4 @@ pg_data/
 data_sources/tech_kb_builder_2025w41/indexes/
 data_sources/tech_kb_builder_2025w41/quality_reports/
 data_sources/tech_kb_builder_2025w41/rag/
+.env
