@@ -1,0 +1,149 @@
+strict_grounding: true
+allow_web_search: false
+allow_external_knowledge: false
+allow_industry_common_sense: false
+allow_inference_without_evidence: false
+
+export_policy:
+  block_on_failed_review: true
+  allow_warn_export: false
+  allow_low_confidence_export: false
+  require_evidence_text: true
+  require_source_id: true
+  require_quality_review_passed: true
+
+review_batching:
+  classification_batch_size: 50
+  extraction_batch_size: 50
+  synthesis_batch_size: 10
+  parameter_batch_size: 50
+
+review_dimensions:
+  classification:
+    - domain_match_supported
+    - subdomain_match_supported
+    - evidence_from_input_present
+    - classification_reason_supported
+    - ambiguous_domain_flagged
+    - taxonomy_name_valid
+  extraction:
+    - claim_supported_by_evidence
+    - numbers_supported
+    - dates_supported
+    - entities_supported
+    - source_type_correct
+    - no_extra_background
+    - no_over_generalization
+    - uncertainty_preserved
+  synthesis:
+    - paragraph_supported_by_source_ids
+    - source_type_not_confused
+    - no_external_knowledge
+    - no_industry_common_sense
+    - no_single_source_as_trend
+    - no_news_as_technical_validation
+    - no_wechat_as_objective_fact
+    - uncertainty_preserved
+    - conflicts_flagged
+  domain_cards:
+    - card_section_supported_by_source_ids
+    - missing_information_marked
+    - no_single_source_as_trend
+    - no_news_as_technical_validation
+    - no_wechat_as_objective_fact
+  problem_cards:
+    - card_section_supported_by_source_ids
+    - missing_information_marked
+    - no_problem_invention
+    - no_single_source_as_trend
+  route_cards:
+    - card_section_supported_by_source_ids
+    - missing_information_marked
+    - no_route_invention
+    - no_maturity_backfilling
+  status_cards:
+    - card_section_supported_by_source_ids
+    - missing_information_marked
+    - no_stage_overstatement
+    - distinguish_announcement_planning_fid_construction_operation_commercialization
+  metric_cards:
+    - card_section_supported_by_source_ids
+    - missing_information_marked
+    - no_metric_backfilling
+    - no_unit_or_benchmark_backfilling
+    - parameter_index_linked_when_available
+  parameter_value:
+    - parameter_value_supported_by_evidence_text
+    - number_unit_object_and_conditions_supported
+    - source_id_and_unit_id_traceable
+    - source_type_correctly_labeled
+    - evidence_usage_correct
+    - no_cross_source_type_ranking
+    - no_news_as_journal_best
+    - no_journal_as_industry_project_result
+    - no_wechat_as_objective_best
+    - no_typical_value_backfilling
+    - no_optimal_claim_without_explicit_basis
+    - comparability_warning_when_conditions_missing
+  optimal_parameter:
+    - explicit_best_or_comparable_group_basis_present
+    - no_cross_domain_ranking
+    - no_mixed_source_type_ranking
+    - evidence_category_preserved
+    - best_value_type_correct
+    - source_ids_and_parameter_ids_traceable
+    - test_conditions_summarized
+    - human_review_flag_when_multiple_best_claims
+  kb_export:
+    - only_approved_content
+    - quality_boundary_present
+  chatbot_context:
+    - retrieval_priority_clear
+    - no_external_knowledge
+
+hallucination_types:
+  - unsupported_claim
+  - unsupported_number
+  - unsupported_date
+  - unsupported_entity
+  - unsupported_company_or_institution
+  - unsupported_product
+  - unsupported_policy
+  - unsupported_stage_judgment
+  - unsupported_performance_metric
+  - external_background_added
+  - industry_common_sense_added
+  - over_generalization
+  - source_conflation
+  - source_type_confusion
+  - missing_uncertainty
+  - missing_evidence
+  - missing_source_id
+  - taxonomy_mismatch
+  - unsupported_parameter_value
+  - unsupported_optimality_claim
+  - incomparable_parameter_ranking
+  - missing_test_condition
+  - news_value_as_journal_best
+  - journal_value_as_industry_result
+  - wechat_value_as_objective_best
+  - cross_source_type_ranking
+  - missing_source_type_warning
+
+forbidden_phrases:
+  - "根据公开资料"
+  - "据官网显示"
+  - "行业普遍认为"
+  - "最新数据显示"
+  - "搜索发现"
+  - "通常来说"
+  - "众所周知"
+  - "据我所知"
+  - "业内人士认为"
+  - "目前行业公认"
+  - "鏍规嵁鍏紑璧勬枡"
+
+quality_status:
+  pass: "allow_export"
+  warn: "block_export_and_require_review"
+  fail: "block_export"

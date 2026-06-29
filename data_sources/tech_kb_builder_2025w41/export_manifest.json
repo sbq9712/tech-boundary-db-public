@@ -1,0 +1,313 @@
+{
+  "generated_at": "2026-06-25T11:23:11.209741+00:00",
+  "quality_required": true,
+  "files": [
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\chatbot_context\\answer_guidelines.md",
+      "type": "chatbot_context",
+      "size": 815,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\chatbot_context\\domain_router.md",
+      "type": "chatbot_context",
+      "size": 823,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\chatbot_context\\retrieval_policy.md",
+      "type": "chatbot_context",
+      "size": 4540,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\chatbot_context\\system_context.md",
+      "type": "chatbot_context",
+      "size": 843,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\export_manifest.json",
+      "type": "manifest",
+      "size": 10252,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\domain_index.json",
+      "type": "indexes",
+      "size": 57543,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\entity_index.json",
+      "type": "indexes",
+      "size": 22,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\evidence_map.json",
+      "type": "indexes",
+      "size": 153171656,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\journal_parameter_values.jsonl",
+      "type": "indexes",
+      "size": 129200842,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\news_parameter_values.jsonl",
+      "type": "indexes",
+      "size": 34288201,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\optimal_parameter_index.json",
+      "type": "indexes",
+      "size": 33509117,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\optimal_parameter_index.sqlite",
+      "type": "indexes",
+      "size": 122933248,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\parameter_index_summary.json",
+      "type": "indexes",
+      "size": 2408,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\parameter_values.jsonl",
+      "type": "indexes",
+      "size": 165226785,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\source_index.jsonl",
+      "type": "indexes",
+      "size": 49949314,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\source_index.sqlite",
+      "type": "indexes",
+      "size": 52883456,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\indexes\\wechat_parameter_values.jsonl",
+      "type": "indexes",
+      "size": 1737742,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\knowledge_base.md",
+      "type": "markdown",
+      "size": 2811,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\knowledge_base_compact.md",
+      "type": "markdown",
+      "size": 2539,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\knowledge_base_process_framework.pptx",
+      "type": "manifest",
+      "size": 44533,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\knowledge_base_process_framework.pptx.inspect.ndjson",
+      "type": "manifest",
+      "size": 31896,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\knowledge_base_process_framework_with_case.pptx",
+      "type": "manifest",
+      "size": 48388,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\knowledge_base_process_framework_with_case.pptx.inspect.ndjson",
+      "type": "manifest",
+      "size": 35441,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\.gitkeep",
+      "type": "quality_reports",
+      "size": 1,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\approved_items.jsonl",
+      "type": "quality_reports",
+      "size": 61252312,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\blocked_items.jsonl",
+      "type": "quality_reports",
+      "size": 0,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\classification_review_report.md",
+      "type": "quality_reports",
+      "size": 118,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\export_allowed_ids.json",
+      "type": "quality_reports",
+      "size": 3783207,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\export_blocked_ids.json",
+      "type": "quality_reports",
+      "size": 2,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\extraction_review_report.md",
+      "type": "quality_reports",
+      "size": 114,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\fact_grounding_report.json",
+      "type": "quality_reports",
+      "size": 29683183,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\fact_grounding_report.md",
+      "type": "quality_reports",
+      "size": 18784507,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\project_health_report.md",
+      "type": "quality_reports",
+      "size": 336,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\quality_gate_report.json",
+      "type": "quality_reports",
+      "size": 69600735,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\quality_gate_report.md",
+      "type": "quality_reports",
+      "size": 382,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\review_validation_report.json",
+      "type": "quality_reports",
+      "size": 65567073,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\review_validation_report.md",
+      "type": "quality_reports",
+      "size": 235,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\synthesis_review_report.md",
+      "type": "quality_reports",
+      "size": 113,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\quality_reports\\warn_items.jsonl",
+      "type": "quality_reports",
+      "size": 0,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\rag\\kb_chunks.jsonl",
+      "type": "rag",
+      "size": 50059360,
+      "status": "created",
+      "error": ""
+    },
+    {
+      "path": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\outputs\\rag\\kb_metadata.json",
+      "type": "rag",
+      "size": 1140,
+      "status": "created",
+      "error": ""
+    }
+  ],
+  "statistics": {
+    "domain_cards": 0,
+    "problem_cards": 0,
+    "route_cards": 0,
+    "status_cards": 0,
+    "metric_cards": 0,
+    "sources_indexed": 31265,
+    "claims_indexed": 31265,
+    "entities_indexed": 0,
+    "parameter_values": 59333,
+    "optimal_parameters": 0,
+    "rag_chunks": 20574,
+    "blocked_items": 0,
+    "chatbot_context_files": 4,
+    "journal_parameter_values": 47701,
+    "news_parameter_values": 10800,
+    "wechat_parameter_values": 832,
+    "parameter_evidence_indexed": 59333,
+    "domain_count": 8
+  }
+}

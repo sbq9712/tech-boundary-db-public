@@ -1,0 +1,212 @@
+global_rules:
+  strict_grounding: true
+  allow_web_search: false
+  allow_external_knowledge: false
+  allow_industry_common_sense: false
+  require_source_id: true
+  require_evidence_text: true
+  missing_info_text: "输入内容未说明"
+  need_check_text: "当前输入未找到，需人工核对"
+
+parameter_extraction:
+  batch_size: 30
+  max_raw_text_chars: 8000
+  extract_from:
+    - title
+    - summary
+    - raw_text
+    - claim
+    - evidence_text
+    - key_numbers
+
+optimality_policy:
+  allow_inferred_optimum_only_with_comparable_conditions: true
+  require_direction_for_optimality: true
+  default_optimal_scope: "reported_value"
+  mark_single_value_as_optimal: false
+  allow_pareto_note: true
+
+parameter_direction:
+  higher_is_better:
+    - efficiency
+    - conversion_efficiency
+    - energy_density
+    - power_density
+    - capacity
+    - specific_capacity
+    - cycle_life
+    - capacity_retention
+    - ionic_conductivity
+    - selectivity
+    - yield
+    - uptime
+    - availability
+    - lifetime
+    - purity
+  lower_is_better:
+    - cost
+    - lcoe
+    - lcoh
+    - capex
+    - opex
+    - overpotential
+    - degradation_rate
+    - emission_intensity
+    - carbon_intensity
+    - nox_emission
+    - water_consumption
+    - energy_consumption
+    - failure_rate
+  target_range_or_context_dependent:
+    - temperature
+    - pressure
+    - voltage
+    - current_density
+    - c_rate
+    - humidity
+    - concentration
+    - equivalence_ratio
+    - excess_air_ratio
+
+domain_parameter_focus:
+  光伏:
+    key_parameters:
+      - 光电转换效率
+      - 认证效率
+      - 稳态效率
+      - 衰减率
+      - 组件效率
+      - 寿命
+      - LCOE
+      - 制造成本
+  电池:
+    key_parameters:
+      - 比容量
+      - 能量密度
+      - 功率密度
+      - 循环寿命
+      - 容量保持率
+      - 库仑效率
+      - 离子电导率
+      - 成本
+  氢能:
+    key_parameters:
+      - 制氢成本
+      - 电解效率
+      - 电解槽寿命
+      - 电流密度
+      - 氢气纯度
+      - NOx排放
+      - 热效率
+  产业降碳:
+    key_parameters:
+      - 单位产品碳排放
+      - 捕集率
+      - CO2纯度
+      - 能耗
+      - 成本
+      - 减排比例
+      - 回收率
+  智能科技:
+    key_parameters:
+      - 算力
+      - 能效
+      - 延迟
+      - 准确率
+      - 良率
+      - 功耗
+      - 带宽
+      - 成本
+
+comparability_rules:
+  require_same_domain: true
+  require_same_subdomain: true
+  require_same_route_for_direct_ranking: true
+  require_same_metric_name: true
+  require_same_unit_or_convertible_unit: false
+  require_similar_test_conditions: true
+  block_cross_source_ranking_if_conditions_missing: true
+
+source_type_policy:
+  journal_like:
+    source_types:
+      - literature_summary
+    evidence_category: "journal_evidence"
+    allowed_optimality:
+      - explicit_best
+      - inferred_best_within_group
+      - reported_value
+    default_usage:
+      - technical_performance
+      - experiment_result
+      - model_result
+    ranking_scope:
+      - within_source
+      - within_route
+    warning:
+      - "Journal parameters usually depend on material system, device structure, test conditions and experimental protocol; they cannot directly represent industrial performance."
+  news_like:
+    source_types:
+      - news_original
+    evidence_category: "news_evidence"
+    allowed_optimality:
+      - reported_value
+      - explicit_best
+    default_usage:
+      - industrial_progress
+      - project_scale
+      - cost_claim
+      - product_claim
+      - commercialization_stage
+    ranking_scope:
+      - within_source
+      - within_project_type
+    warning:
+      - "News parameters are usually project, company or reporting-protocol values; they cannot directly serve as scientific experimental best values."
+  wechat_like:
+    source_types:
+      - wechat_article
+    evidence_category: "wechat_opinion"
+    allowed_optimality:
+      - reported_value
+    default_usage:
+      - opinion_or_context
+      - secondary_summary
+    ranking_scope:
+      - not_ranked
+    warning:
+      - "WeChat parameters are treated as opinion, summary or clues by default and cannot be the only evidence for objective best values."
+  policy_like:
+    source_types:
+      - policy_document
+      - technical_report
+    evidence_category: "policy_or_report"
+    allowed_optimality:
+      - reported_value
+      - target_range
+    default_usage:
+      - policy_target
+      - industrial_progress
+    ranking_scope:
+      - not_ranked
+    warning:
+      - "Policy and report values should be treated as targets or reported context unless local evidence proves achieved performance."
+
+cross_source_type_rules:
+  default_allow_cross_ranking: false
+  journal_vs_news:
+    allow_direct_ranking: false
+    warning: "Journal experimental values and news/industry reported values use different evidence types and must not be ranked directly by default."
+  journal_vs_wechat:
+    allow_direct_ranking: false
+    warning: "Journal experimental values and WeChat opinions/summaries must not be ranked directly."
+  news_vs_wechat:
+    allow_direct_ranking: false
+    warning: "News reported values and WeChat opinions/summaries must not be ranked directly."
+
+output_split:
+  journal_parameter_values_path: "outputs/indexes/journal_parameter_values.jsonl"
+  news_parameter_values_path: "outputs/indexes/news_parameter_values.jsonl"
+  wechat_parameter_values_path: "outputs/indexes/wechat_parameter_values.jsonl"
+  unified_parameter_values_path: "outputs/indexes/parameter_values.jsonl"
+  optimal_parameter_index_path: "outputs/indexes/optimal_parameter_index.json"

@@ -1,0 +1,171 @@
+domains:
+  光伏:
+    description: "太阳能光伏材料、器件、制造、系统和应用。"
+    include_keywords: ["光伏", "太阳能电池", "晶硅", "钙钛矿", "perovskite", "TOPCon", "HJT", "IBC"]
+    exclude_keywords: []
+    exclude_rules: ["如果内容中的电池明确指电化学储能，应优先归入电池。"]
+    typical_questions: ["光伏技术路线的效率、成本和产业化边界是什么？"]
+    extraction_focus: ["转换效率", "稳定性", "封装", "制造成本", "量产进展"]
+    technology_routes: ["晶硅", "钙钛矿", "叠层电池", "有机光伏", "组件封装"]
+    progress_stages: ["基础研究", "实验室验证", "中试", "示范", "量产", "商业化应用"]
+    chatbot_answer_notes: ["区分实验室效率、组件效率和量产效率。"]
+    subdomains:
+      钙钛矿:
+        description: "钙钛矿光伏材料、电池器件和稳定性。"
+        include_keywords: ["钙钛矿", "perovskite"]
+        exclude_keywords: []
+        exclude_rules: []
+        typical_questions: ["钙钛矿稳定性和量产瓶颈是什么？"]
+        extraction_focus: ["效率", "稳定性", "封装", "铅泄漏"]
+        technology_routes: ["单结钙钛矿", "钙钛矿叠层"]
+        progress_stages: ["基础研究", "中试", "示范"]
+        chatbot_answer_notes: ["不要把实验室效率直接写成量产水平。"]
+      晶硅: {description: "晶硅光伏。", include_keywords: ["晶硅", "硅片", "TOPCon", "HJT", "PERC"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: ["TOPCon", "HJT", "IBC"], progress_stages: [], chatbot_answer_notes: []}
+      有机光伏: {description: "有机光伏。", include_keywords: ["有机光伏", "OPV"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      叠层电池: {description: "叠层光伏电池。", include_keywords: ["叠层电池", "tandem"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      组件与封装: {description: "组件与封装。", include_keywords: ["组件", "封装", "玻璃", "胶膜"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      光伏系统: {description: "光伏系统和电站。", include_keywords: ["光伏系统", "电站", "逆变器"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      光伏制造与设备: {description: "光伏制造与设备。", include_keywords: ["光伏设备", "丝网印刷", "镀膜", "制绒"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+  电池:
+    description: "涉及电化学储能器件中的材料、结构、制造、测试、安全、回收和系统应用。"
+    include_keywords: ["电池", "锂离子", "钠离子", "固态电池", "锂金属", "cathode", "anode", "electrolyte", "separator"]
+    exclude_keywords: ["光伏电池", "太阳能电池"]
+    exclude_rules: ["如果内容中的'电池'明确指太阳能电池，应优先归入光伏。"]
+    typical_questions: ["某种电池材料的发展现状如何？", "固态电池的技术边界是什么？"]
+    extraction_focus: ["材料体系", "电化学性能", "循环寿命", "安全性", "成本", "制造工艺", "产业化阶段"]
+    technology_routes: ["液态锂离子电池", "固态电池", "钠离子电池", "锂金属电池", "锂硫电池", "回收再生"]
+    progress_stages: ["基础研究", "实验室验证", "中试", "示范", "量产", "商业化应用"]
+    chatbot_answer_notes: ["回答产业化问题时，应区分实验室性能、样品验证、中试、装车测试和量产交付。"]
+    subdomains:
+      正极: {description: "电池正极材料。", include_keywords: ["正极", "cathode", "磷酸铁锂", "三元", "LFP", "NCM", "NCA"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: ["容量", "电压", "循环寿命"], technology_routes: ["磷酸铁锂", "三元正极"], progress_stages: [], chatbot_answer_notes: []}
+      负极: {description: "电池负极材料。", include_keywords: ["负极", "anode", "石墨负极", "硅碳", "锂金属负极"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: ["石墨", "硅碳", "锂金属"], progress_stages: [], chatbot_answer_notes: []}
+      电解质: {description: "液态、凝胶、固态电解质。", include_keywords: ["电解质", "电解液", "electrolyte", "固态电解质", "硫化物电解质", "氧化物电解质"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: ["液态电解液", "硫化物固态电解质", "氧化物固态电解质"], progress_stages: [], chatbot_answer_notes: []}
+      隔膜: {description: "电池隔膜。", include_keywords: ["隔膜", "separator"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      集流体: {description: "集流体。", include_keywords: ["集流体", "铜箔", "铝箔"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      粘结剂: {description: "粘结剂。", include_keywords: ["粘结剂", "binder", "PVDF"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      导电剂: {description: "导电剂。", include_keywords: ["导电剂", "carbon black", "CNT"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      电池制造工艺: {description: "电池制造工艺。", include_keywords: ["制造工艺", "涂布", "辊压", "化成", "干法电极"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      电池测试: {description: "电池测试。", include_keywords: ["测试", "循环测试", "倍率", "EIS"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      电池安全: {description: "电池安全。", include_keywords: ["安全", "热失控", "针刺", "阻燃"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      电池回收: {description: "电池回收。", include_keywords: ["电池回收", "黑粉", "湿法回收", "梯次利用"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: ["湿法回收", "火法回收"], progress_stages: [], chatbot_answer_notes: []}
+      钠离子电池: {description: "钠离子电池。", include_keywords: ["钠离子电池", "钠电"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      固态电池: {description: "固态电池。", include_keywords: ["固态电池", "全固态"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      锂金属电池: {description: "锂金属电池。", include_keywords: ["锂金属电池", "锂金属负极"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      锂硫电池: {description: "锂硫电池。", include_keywords: ["锂硫电池", "Li-S"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      锂空气电池: {description: "锂空气电池。", include_keywords: ["锂空气电池", "Li-air"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+  其他储能:
+    description: "非主流锂离子体系的储能技术和系统集成。"
+    include_keywords: ["储能", "液流电池", "超级电容", "压缩空气储能", "飞轮储能", "重力储能", "热储能"]
+    exclude_keywords: []
+    exclude_rules: []
+    typical_questions: ["哪些路线适合长时储能？"]
+    extraction_focus: ["储能时长", "效率", "成本", "寿命", "应用场景"]
+    technology_routes: ["液流电池", "超级电容器", "压缩空气储能", "重力储能", "热储能"]
+    progress_stages: ["基础研究", "示范", "商业化应用"]
+    chatbot_answer_notes: ["说明和锂电储能的应用差异。"]
+    subdomains:
+      液流电池: {description: "液流电池。", include_keywords: ["液流电池", "全钒液流"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      金属空气电池: {description: "金属空气电池。", include_keywords: ["金属空气电池", "锌空气"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      超级电容器: {description: "超级电容器。", include_keywords: ["超级电容", "supercapacitor"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      飞轮储能: {description: "飞轮储能。", include_keywords: ["飞轮储能"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      压缩空气储能: {description: "压缩空气储能。", include_keywords: ["压缩空气储能", "CAES"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      重力储能: {description: "重力储能。", include_keywords: ["重力储能"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      热储能: {description: "热储能。", include_keywords: ["热储能", "熔盐储能"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      储能系统集成: {description: "储能系统集成。", include_keywords: ["储能系统", "BMS", "EMS"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+  清洁能源:
+    description: "低碳能源载体、发电、转化与减排技术。"
+    include_keywords: ["氢", "氨", "甲醇", "核能", "CCUS", "碳捕集", "生物质", "地热", "风能", "高空风能"]
+    exclude_keywords: []
+    exclude_rules: []
+    typical_questions: []
+    extraction_focus: ["能效", "成本", "减排", "示范项目"]
+    technology_routes: ["绿氢", "绿氨", "绿色甲醇", "核能", "CCUS", "风能"]
+    progress_stages: ["基础研究", "示范", "商业化应用"]
+    chatbot_answer_notes: []
+    subdomains:
+      氢: {description: "氢能。", include_keywords: ["氢", "绿氢", "电解水"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      氨: {description: "氨能源。", include_keywords: ["氨", "绿氨"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      甲醇: {description: "甲醇能源。", include_keywords: ["甲醇", "绿色甲醇"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      热能: {description: "热能技术。", include_keywords: ["热能", "余热"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      核能: {description: "核能。", include_keywords: ["核能", "核电", "聚变", "裂变"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      CCUS: {description: "碳捕集利用与封存。", include_keywords: ["CCUS", "碳捕集", "封存"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      生物质: {description: "生物质能源。", include_keywords: ["生物质"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      地热: {description: "地热。", include_keywords: ["地热"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      风能: {description: "风能。", include_keywords: ["风能", "风电"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      高空风能: {description: "高空风能。", include_keywords: ["高空风能"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+  产业降碳:
+    description: "工业、交通、建筑等部门减排和循环利用。"
+    include_keywords: ["降碳", "脱碳", "低碳", "钢铁", "水泥", "化工", "塑料回收", "碳市场"]
+    exclude_keywords: []
+    exclude_rules: []
+    typical_questions: []
+    extraction_focus: ["排放强度", "工艺路线", "成本", "政策"]
+    technology_routes: ["工业电气化", "循环利用", "低碳工艺", "碳市场"]
+    progress_stages: ["示范", "量产", "商业化应用"]
+    chatbot_answer_notes: ["不要把政策目标写成已实现效果。"]
+    subdomains:
+      钢铁: {description: "钢铁降碳。", include_keywords: ["钢铁", "氢冶金"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      水泥: {description: "水泥降碳。", include_keywords: ["水泥", "熟料"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      化工: {description: "化工降碳。", include_keywords: ["化工"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      建筑: {description: "建筑降碳。", include_keywords: ["建筑"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      交通: {description: "交通降碳。", include_keywords: ["交通"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      石油炼化: {description: "石油炼化。", include_keywords: ["炼化", "石油"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      塑料回收: {description: "塑料回收。", include_keywords: ["塑料回收", "化学回收"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      工业电气化: {description: "工业电气化。", include_keywords: ["工业电气化", "电炉"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      碳市场与政策: {description: "碳市场与政策。", include_keywords: ["碳市场", "碳交易", "政策"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+  智能科技:
+    description: "AI、半导体、通信、机器人、传感器、量子信息和科学仪器。"
+    include_keywords: ["AI", "人工智能", "半导体", "通信", "机器人", "传感器", "量子", "科学仪器", "数据中心", "智能制造"]
+    exclude_keywords: []
+    exclude_rules: []
+    typical_questions: []
+    extraction_focus: ["性能指标", "系统架构", "应用场景", "供应链"]
+    technology_routes: ["大模型", "先进制程", "机器人", "量子信息"]
+    progress_stages: ["基础研究", "实验室验证", "中试", "量产", "商业化应用"]
+    chatbot_answer_notes: []
+    subdomains:
+      AI: {description: "人工智能。", include_keywords: ["AI", "人工智能", "大模型", "机器学习"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      半导体: {description: "半导体。", include_keywords: ["半导体", "芯片", "先进制程"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      通信: {description: "通信。", include_keywords: ["通信", "5G", "6G"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      机器人: {description: "机器人。", include_keywords: ["机器人", "具身智能"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      传感器: {description: "传感器。", include_keywords: ["传感器"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      量子信息: {description: "量子信息。", include_keywords: ["量子信息", "量子计算", "量子通信"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      科学仪器: {description: "科学仪器。", include_keywords: ["科学仪器", "仪器"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      数据中心: {description: "数据中心。", include_keywords: ["数据中心", "算力中心"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      智能制造: {description: "智能制造。", include_keywords: ["智能制造", "工业互联网"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+  关键矿产与资源:
+    description: "关键矿产、材料资源、开采、冶炼和回收。"
+    include_keywords: ["锂", "钴", "镍", "锰", "铜", "稀土", "石墨", "硅材料", "磷资源", "矿产", "资源回收"]
+    exclude_keywords: []
+    exclude_rules: []
+    typical_questions: []
+    extraction_focus: ["资源量", "供需", "价格", "开采", "回收"]
+    technology_routes: ["矿产开采", "冶炼", "资源回收"]
+    progress_stages: ["勘探", "开发", "量产", "回收利用"]
+    chatbot_answer_notes: []
+    subdomains:
+      锂: {description: "锂资源。", include_keywords: ["锂", "碳酸锂", "氢氧化锂"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      钴: {description: "钴资源。", include_keywords: ["钴"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      镍: {description: "镍资源。", include_keywords: ["镍"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      锰: {description: "锰资源。", include_keywords: ["锰"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      铜: {description: "铜资源。", include_keywords: ["铜"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      稀土: {description: "稀土。", include_keywords: ["稀土"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      石墨: {description: "石墨资源。", include_keywords: ["石墨"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      硅材料: {description: "硅材料。", include_keywords: ["硅材料", "多晶硅"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      磷资源: {description: "磷资源。", include_keywords: ["磷资源", "磷矿"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      矿产开采: {description: "矿产开采。", include_keywords: ["矿产开采", "采矿"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      资源回收: {description: "资源回收。", include_keywords: ["资源回收", "再生资源"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+  其他:
+    description: "无法稳定归入其他领域或信息不足的资料。"
+    include_keywords: []
+    exclude_keywords: []
+    exclude_rules: []
+    typical_questions: ["该资料是否需要人工补充分类？"]
+    extraction_focus: ["来源", "标题", "待复核原因"]
+    technology_routes: []
+    progress_stages: []
+    chatbot_answer_notes: ["不确定时说明证据不足，不做确定性判断。"]
+    subdomains:
+      待人工判断: {description: "需要人工判断。", include_keywords: ["待人工判断"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      跨领域: {description: "跨领域内容。", include_keywords: ["跨领域"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}
+      信息不足: {description: "输入信息不足。", include_keywords: ["信息不足"], exclude_keywords: [], exclude_rules: [], typical_questions: [], extraction_focus: [], technology_routes: [], progress_stages: [], chatbot_answer_notes: []}

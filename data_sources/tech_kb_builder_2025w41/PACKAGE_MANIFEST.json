@@ -1,0 +1,130 @@
+﻿[
+    {
+        "path":  "00_PROJECT说明_CHATBOT接入.md",
+        "bytes":  10140
+    },
+    {
+        "path":  "export_manifest.json",
+        "bytes":  10258
+    },
+    {
+        "path":  "chatbot_context/answer_guidelines.md",
+        "bytes":  815
+    },
+    {
+        "path":  "chatbot_context/domain_router.md",
+        "bytes":  823
+    },
+    {
+        "path":  "chatbot_context/retrieval_policy.md",
+        "bytes":  4540
+    },
+    {
+        "path":  "chatbot_context/system_context.md",
+        "bytes":  843
+    },
+    {
+        "path":  "config_snapshot/export_config.yaml",
+        "bytes":  3030
+    },
+    {
+        "path":  "config_snapshot/parameter_rules.yaml",
+        "bytes":  5633
+    },
+    {
+        "path":  "config_snapshot/quality_rules.yaml",
+        "bytes":  4288
+    },
+    {
+        "path":  "config_snapshot/taxonomy.yaml",
+        "bytes":  24657
+    },
+    {
+        "path":  "indexes/domain_index.json",
+        "bytes":  57543
+    },
+    {
+        "path":  "indexes/entity_index.json",
+        "bytes":  22
+    },
+    {
+        "path":  "indexes/evidence_map.json",
+        "bytes":  153171656
+    },
+    {
+        "path":  "indexes/journal_parameter_values.jsonl",
+        "bytes":  129200842
+    },
+    {
+        "path":  "indexes/news_parameter_values.jsonl",
+        "bytes":  34288201
+    },
+    {
+        "path":  "indexes/optimal_parameter_index.json",
+        "bytes":  33509117
+    },
+    {
+        "path":  "indexes/optimal_parameter_index.sqlite",
+        "bytes":  122933248
+    },
+    {
+        "path":  "indexes/parameter_index_summary.json",
+        "bytes":  2408
+    },
+    {
+        "path":  "indexes/parameter_values.jsonl",
+        "bytes":  165226785
+    },
+    {
+        "path":  "indexes/source_index.jsonl",
+        "bytes":  49949314
+    },
+    {
+        "path":  "indexes/source_index.sqlite",
+        "bytes":  52883456
+    },
+    {
+        "path":  "indexes/wechat_parameter_values.jsonl",
+        "bytes":  1737742
+    },
+    {
+        "path":  "knowledge_base/knowledge_base.md",
+        "bytes":  2811
+    },
+    {
+        "path":  "knowledge_base/knowledge_base_compact.md",
+        "bytes":  2539
+    },
+    {
+        "path":  "quality_reports/export_allowed_ids.json",
+        "bytes":  3783207
+    },
+    {
+        "path":  "quality_reports/export_blocked_ids.json",
+        "bytes":  2
+    },
+    {
+        "path":  "quality_reports/fact_grounding_report.json",
+        "bytes":  29683183
+    },
+    {
+        "path":  "quality_reports/fact_grounding_report.md",
+        "bytes":  18784507
+    },
+    {
+        "path":  "quality_reports/quality_gate_report.json",
+        "bytes":  69600735
+    },
+    {
+        "path":  "quality_reports/quality_gate_report.md",
+        "bytes":  382
+    },
+    {
+        "path":  "rag/kb_chunks.jsonl",
+        "bytes":  25821
+    },
+    {
+        "path":  "rag/kb_metadata.json",
+        "bytes":  745
+    }
+]

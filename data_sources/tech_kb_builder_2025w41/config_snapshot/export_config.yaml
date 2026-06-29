@@ -1,0 +1,75 @@
+outputs:
+  final_outputs_dir: "outputs"
+  domain_cards_dir: "outputs/domain_cards"
+  problem_cards_dir: "outputs/problem_cards"
+  route_cards_dir: "outputs/route_cards"
+  status_cards_dir: "outputs/status_cards"
+  metric_cards_dir: "outputs/metric_cards"
+  chatbot_context_dir: "outputs/chatbot_context"
+  rag_dir: "outputs/rag"
+  indexes_dir: "outputs/indexes"
+  quality_reports_dir: "outputs/quality_reports"
+
+inputs:
+  synthesis_dir: "codex_outputs/synthesis"
+  domain_cards_dir: "codex_outputs/synthesis/domain_cards"
+  problem_cards_dir: "codex_outputs/synthesis/problem_cards"
+  route_cards_dir: "codex_outputs/synthesis/route_cards"
+  status_cards_dir: "codex_outputs/synthesis/status_cards"
+  metric_cards_dir: "codex_outputs/synthesis/metric_cards"
+  quality_gate_allowed_ids: "outputs/quality_reports/export_allowed_ids.json"
+  quality_gate_blocked_ids: "outputs/quality_reports/export_blocked_ids.json"
+  quality_gate_report: "outputs/quality_reports/quality_gate_report.json"
+  classified_records_path: "data/processed/classified_records.jsonl"
+  knowledge_units_path: "data/processed/knowledge_units.jsonl"
+  parameter_values_path: "data/processed/parameter_values.jsonl"
+  download_manifest_path: "data/processed/download_manifest.jsonl"
+
+quality:
+  require_quality_pass: true
+  allow_warn_export: false
+  allow_fail_export: false
+  include_quality_summary_in_outputs: true
+
+markdown:
+  add_quality_boundary_header: true
+  include_source_index: true
+  include_generation_time: true
+  include_blocked_summary: true
+
+rag:
+  enabled: true
+  chunk_size_chars: 1500
+  chunk_overlap_chars: 200
+  min_chunk_chars: 200
+  include_source_ids: true
+  include_domain_metadata: true
+
+indexes:
+  source_index_sqlite: "outputs/indexes/source_index.sqlite"
+  source_index_jsonl: "outputs/indexes/source_index.jsonl"
+  entity_index_json: "outputs/indexes/entity_index.json"
+  evidence_map_json: "outputs/indexes/evidence_map.json"
+  domain_index_json: "outputs/indexes/domain_index.json"
+  parameter_values_jsonl: "outputs/indexes/parameter_values.jsonl"
+  journal_parameter_values_jsonl: "outputs/indexes/journal_parameter_values.jsonl"
+  news_parameter_values_jsonl: "outputs/indexes/news_parameter_values.jsonl"
+  wechat_parameter_values_jsonl: "outputs/indexes/wechat_parameter_values.jsonl"
+  optimal_parameter_index_json: "outputs/indexes/optimal_parameter_index.json"
+  optimal_parameter_index_sqlite: "outputs/indexes/optimal_parameter_index.sqlite"
+
+cards:
+  enabled: true
+  require_quality_pass: true
+  card_dirs:
+    domain_cards: "outputs/domain_cards"
+    problem_cards: "outputs/problem_cards"
+    route_cards: "outputs/route_cards"
+    status_cards: "outputs/status_cards"
+    metric_cards: "outputs/metric_cards"
+  input_card_dirs:
+    domain_cards: "codex_outputs/synthesis/domain_cards"
+    problem_cards: "codex_outputs/synthesis/problem_cards"
+    route_cards: "codex_outputs/synthesis/route_cards"
+    status_cards: "codex_outputs/synthesis/status_cards"
+    metric_cards: "codex_outputs/synthesis/metric_cards"
