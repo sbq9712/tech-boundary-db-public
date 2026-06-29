@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.session import SessionLocal
-from app.routers import assistant, auth, dashboards, domains, health, industry_map, info_items, intake
+from app.routers import assistant, auth, conversations, dashboards, domains, health, industry_map, info_items, intake, parameter_observations
 from app.services.bootstrap import seed_domains_if_empty, seed_users_if_empty
 
 logger = logging.getLogger(__name__)
@@ -54,3 +54,5 @@ app.include_router(intake.router, prefix="/api")
 app.include_router(assistant.router, prefix="/api")
 app.include_router(dashboards.router, prefix="/api")
 app.include_router(industry_map.router, prefix="/api")
+app.include_router(parameter_observations.router, prefix="/api")
+app.include_router(conversations.router, prefix="/api")
