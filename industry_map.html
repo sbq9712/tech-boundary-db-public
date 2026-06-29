@@ -1,7 +1,447 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>行业图景</title><style>:root{--bg:#f8f9fc;--text:#1e293b;--muted:#64748b;--line:rgba(0,0,0,.08);--r:14px;--shadow:0 4px 16px rgba(0,0,0,.06);--sans:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif}*{box-sizing:border-box}body{margin:0;font-family:var(--sans);color:var(--text);background:var(--bg)}a{color:#2563eb;text-decoration:none}.topbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}.topbar-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:12px}.brand{font-weight:850}.nav{display:flex;gap:10px;flex-wrap:wrap}.nav a,.nav button{padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:var(--text);font-size:14px;cursor:pointer}.nav button{color:#64748b}.container{max-width:1400px;margin:0 auto;padding:18px}.card{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}.muted{color:var(--muted)}.map{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}@media(max-width:900px){.map{grid-template-columns:1fr}}.node{border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;padding:16px;min-height:180px}.edge{margin:10px 0;padding:8px 10px;border-radius:999px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:12px;text-align:center}.small{font-size:12px}</style></head>
-<body><div class="topbar"><div class="topbar-inner"><div class="brand">技术边界数据库 <span class="muted small">/ 行业图景</span></div><div class="nav"><a href="index.html">核心门户</a><a href="info_table.html">情报总表</a><a href="industry_dashboards.html">行业仪表盘</a><a href="industry_map.html">行业图景</a><a href="sources.html">信息源</a><button onclick="Auth.showChangePassword()">修改密码</button><button onclick="Auth.logout()">退出</button></div></div></div>
-<div class="container"><section class="card"><h1>行业图景</h1><p class="muted">第一阶段只表达结构骨架：技术本体树回答“技术是什么”，行业图景回答“谁在做、用在哪、如何商业化”。两者后端可关联，但不应混成同一棵树。</p></section><section class="map"><div class="node"><h2>技术节点</h2><p class="muted">例：SOFC 堆、系统集成、重整、热管理、逆变并网、余热利用。</p><div class="edge">TECH-* / 未来技术本体</div></div><div class="node"><h2>行业节点</h2><p class="muted">例：数据中心电源、分布式供能、备用电源、燃气基础设施、客户类型。</p><div class="edge">IND-* / 未来行业图谱</div></div><div class="node"><h2>关系与证据</h2><p class="muted">情报、参数事实、预警候选和知识资产共同支撑技术—行业关系。</p><div class="edge">INT / OBS / ALT / ART</div></div></section></div>
-<script src="auth.js"></script>
-<script src="portal_shell.js"></script><script>Auth.requireAuth();</script></body></html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>行业图景</title>
+  <style>
+    :root{
+      --bg:#f6f8fb;
+      --panel:#ffffff;
+      --ink:#172033;
+      --muted:#667085;
+      --line:#d8dee8;
+      --soft:#eef3f8;
+      --root:#102033;
+      --blue:#2563eb;
+      --green:#15803d;
+      --amber:#b45309;
+      --red:#dc2626;
+      --shadow:0 12px 28px rgba(16,24,40,.08);
+      --sans:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%}
+    body{font-family:var(--sans);color:var(--ink);background:var(--bg);font-size:14px}
+    a{color:inherit;text-decoration:none}
+    button,input{font:inherit}
+    .topbar{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.94);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}
+    .topbar-inner{max-width:1440px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:14px}
+    .brand{font-weight:850;white-space:nowrap}
+    .nav{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .nav a,.nav button{padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:var(--ink);font-size:13px;cursor:pointer}
+    .nav button{color:#64748b}
+    .container{max-width:1440px;margin:0 auto;padding:16px}
+    .hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:end;margin-bottom:14px}
+    .hero h1{margin:0;font-size:24px;line-height:1.25}
+    .hero p{margin:8px 0 0;color:var(--muted);line-height:1.65;max-width:900px}
+    .toolbar{display:flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+    .search{width:min(360px,100%);height:38px;border:1px solid var(--line);border-radius:10px;background:#fff;padding:0 12px;color:var(--ink)}
+    .btn{height:38px;border:1px solid var(--line);border-radius:10px;background:#fff;color:#334155;padding:0 12px;cursor:pointer}
+    .btn:hover{background:#f8fafc}
+    .tabs{display:flex;gap:8px;align-items:flex-end;margin:6px 0 0;padding-left:6px;overflow:auto}
+    .tab{border:1px solid var(--line);border-bottom:none;background:#e9eff6;color:#42526d;border-radius:12px 12px 0 0;padding:10px 16px 12px;cursor:pointer;white-space:nowrap}
+    .tab.active{background:#fff;color:#0f172a;font-weight:760;transform:translateY(1px)}
+    .workspace{border:1px solid var(--line);background:#fff;box-shadow:var(--shadow);border-radius:16px;overflow:hidden}
+    .summary{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);background:#fff}
+    .summary-main{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .summary-title{font-weight:760}
+    .meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px}
+    .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 8px;background:#f8fafc}
+    .legend{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:12px}
+    .legend-item{display:inline-flex;gap:5px;align-items:center}
+    .dot{width:14px;height:14px;border-radius:999px;display:inline-grid;place-items:center;font-size:10px;font-weight:800;color:white}
+    .dot.intel{background:var(--green)}
+    .dot.issue{background:var(--amber)}
+    .dot.dashboard{background:var(--blue)}
+    .dot.missing{background:var(--red)}
+    .map-frame{height:calc(100dvh - 236px);min-height:560px;overflow:auto;background:
+      radial-gradient(circle at 20px 20px,#dbe3ee 1px,transparent 1px),
+      linear-gradient(180deg,#fbfdff,#f8fafc);
+      background-size:22px 22px,auto;
+      padding:24px 28px;
+    }
+    .mindmap-canvas{min-width:1180px;width:max-content;padding:10px 30px 30px}
+    .mindmap-root,.mindmap-root ul{list-style:none;margin:0;padding:0}
+    .mindmap-root{display:flex;align-items:center}
+    .mind-node{display:flex;align-items:center;position:relative}
+    .mind-node>details{display:flex;align-items:center}
+    .mind-node summary{list-style:none;cursor:pointer}
+    .mind-node summary::-webkit-details-marker{display:none}
+    .node-card{position:relative;z-index:1;width:190px;min-height:58px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;padding:10px 12px;box-shadow:0 8px 18px rgba(15,23,42,.06)}
+    .node-card .title{display:block;font-weight:760;line-height:1.35;word-break:break-word}
+    .node-card .sub{display:block;margin-top:4px;color:var(--muted);font-size:11px}
+    .depth-0>details>.node-wrap>.node-card{width:210px;background:var(--root);border-color:var(--root);color:#fff}
+    .depth-0>details>.node-wrap>.node-card .sub{color:#cbd5e1}
+    .depth-1>details>.node-wrap>.node-card{background:#e0f2fe;border-color:#7dd3fc}
+    .depth-2>details>.node-wrap>.node-card{background:#ecfeff}
+    .leaf>details>.node-wrap>.node-card{background:#fff}
+    .leaf-actions{display:flex;gap:6px;margin-top:8px;align-items:center}
+    .asset-mark{width:24px;height:24px;border-radius:999px;border:1px solid transparent;display:inline-grid;place-items:center;font-size:12px;font-weight:850;color:#fff}
+    .asset-mark.available.intel{background:var(--green);border-color:#166534}
+    .asset-mark.available.issue{background:var(--amber);border-color:#92400e}
+    .asset-mark.available.dashboard{background:var(--blue);border-color:#1d4ed8}
+    .asset-mark.missing{background:var(--red);border-color:#b91c1c;cursor:not-allowed}
+    a.asset-mark:hover{filter:brightness(.95);transform:translateY(-1px)}
+    .mind-node>details>ul{display:flex;flex-direction:column;gap:10px;margin-left:38px;position:relative}
+    .mind-node>details>ul:before{content:"";position:absolute;left:-20px;top:28px;bottom:28px;width:1px;background:#cbd5e1}
+    .mind-node>details>ul>.mind-node:before{content:"";position:absolute;left:-20px;width:20px;height:1px;background:#cbd5e1}
+    .depth-0>details>ul{gap:16px}
+    .node-wrap{display:block}
+    .match .node-card{outline:3px solid rgba(37,99,235,.18);border-color:#60a5fa}
+    .filtered-out{display:none}
+    .empty{padding:44px 18px;text-align:center;color:var(--muted)}
+    .error{margin:16px;padding:14px;border:1px solid #fecaca;background:#fff1f2;border-radius:12px;color:#991b1b}
+    @media(max-width:900px){
+      .topbar-inner,.hero,.summary{display:block}
+      .nav{justify-content:flex-start;margin-top:10px}
+      .toolbar{justify-content:flex-start;margin-top:12px}
+      .map-frame{height:calc(100dvh - 300px);min-height:500px}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">技术边界数据库 <span style="color:#667085;font-size:12px;">/ 行业图景</span></div>
+      <div class="nav">
+        <a href="index.html">核心门户</a>
+        <a href="info_table.html">情报总表</a>
+        <a href="industry_dashboards.html">行业仪表盘</a>
+        <a href="industry_map.html">行业图景</a>
+        <a href="sources.html">信息源</a>
+        <button onclick="Auth.showChangePassword()">修改密码</button>
+        <button onclick="Auth.logout()">退出</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="container">
+    <section class="hero">
+      <div>
+        <h1>行业图景</h1>
+        <p>按 XMind 的三个 sheet 独立展示。只有叶子节点显示三个资产标识：情报、专刊、仪表盘；有可用资产时可点击跳转，没有资产时标红。</p>
+      </div>
+      <div class="toolbar">
+        <input id="searchInput" class="search" type="search" placeholder="搜索节点" />
+        <button id="expandBtn" class="btn" type="button">展开全部</button>
+        <button id="collapseBtn" class="btn" type="button">折叠到二级</button>
+      </div>
+    </section>
+
+    <div id="tabs" class="tabs"></div>
+    <section class="workspace">
+      <header class="summary">
+        <div class="summary-main">
+          <span id="sheetTitle" class="summary-title">正在加载图景</span>
+          <span id="sheetMeta" class="meta"></span>
+        </div>
+        <div class="legend">
+          <span class="legend-item"><span class="dot intel">情</span>相关情报</span>
+          <span class="legend-item"><span class="dot issue">刊</span>专刊</span>
+          <span class="legend-item"><span class="dot dashboard">盘</span>行业仪表盘</span>
+          <span class="legend-item"><span class="dot missing">!</span>缺失</span>
+        </div>
+      </header>
+      <div id="mapFrame" class="map-frame">
+        <div id="treeRoot" class="empty">正在加载 XMind 数据...</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="auth.js"></script>
+  <script>
+    Auth.requireAuth();
+
+    const API_BASE = window.API_BASE || "/api";
+    const state = {
+      map: null,
+      infos: [],
+      dashboards: [],
+      domains: [],
+      activeSheetId: null,
+      openDepth: 2,
+      query: ""
+    };
+
+    const $ = selector => document.querySelector(selector);
+    const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, ch => ({
+      "&":"&amp;",
+      "<":"&lt;",
+      ">":"&gt;",
+      "\"":"&quot;",
+      "'":"&#39;"
+    }[ch]));
+
+    function normalizeText(value){
+      return String(value || "").toLowerCase().replace(/\s+/g, "");
+    }
+
+    function loadJson(path){
+      return fetch(path, { cache:"no-store" }).then(response => {
+        if(!response.ok) throw new Error(`${path} ${response.status}`);
+        return response.json();
+      });
+    }
+
+    async function loadApi(path){
+      const response = await Auth.authFetch(`${API_BASE}${path}`, { cache:"no-store" });
+      if(!response || !response.ok) throw new Error(`${path} ${response?.status}`);
+      return response.json();
+    }
+
+    async function loadWithFallback(apiPath, fallbackPath, fallbackValue){
+      try{
+        return await loadApi(apiPath);
+      }catch(err){
+        if(fallbackPath){
+          try{
+            return await loadJson(fallbackPath);
+          }catch(fileErr){
+            return fallbackValue;
+          }
+        }
+        return fallbackValue;
+      }
+    }
+
+    function flattenDomains(nodes, output = []){
+      (nodes || []).forEach(node => {
+        output.push({ id: node.id, name: node.name, parent_id: node.parent_id || null });
+        flattenDomains(node.children || [], output);
+      });
+      return output;
+    }
+
+    function buildDomainTextById(){
+      const byId = new Map(state.domains.map(domain => [domain.id, domain]));
+      const cache = new Map();
+      function pathFor(id){
+        if(cache.has(id)) return cache.get(id);
+        const names = [];
+        let current = byId.get(id);
+        while(current){
+          names.push(current.name);
+          current = current.parent_id ? byId.get(current.parent_id) : null;
+        }
+        const path = names.reverse().join(" ");
+        cache.set(id, path);
+        return path;
+      }
+      return pathFor;
+    }
+
+    function getInfoText(info, domainPathFor){
+      const domainIds = Array.isArray(info.domain_ids) ? info.domain_ids : [info.domain_id].filter(Boolean);
+      const domains = domainIds.map(id => `${id} ${domainPathFor(id)}`).join(" ");
+      return normalizeText([
+        info.title,
+        info.content,
+        info.comment,
+        (info.tags || []).join(" "),
+        (info.info_types || []).join(" "),
+        (info.source_types || []).join(" "),
+        domains
+      ].join(" "));
+    }
+
+    function getDashboardText(item){
+      return normalizeText([
+        item.id,
+        item.name,
+        item.scope,
+        item.query,
+        item.domain,
+        (item.metrics || []).join(" ")
+      ].join(" "));
+    }
+
+    function nodeTerms(node){
+      const path = Array.isArray(node.path) ? node.path : [];
+      const roots = new Set(["零碳产业", "AI与智能科技", "通用技术"]);
+      return Array.from(new Set([node.title, ...path]
+        .map(value => String(value || "").trim())
+        .filter(value => value.length >= 2 && !roots.has(value))));
+    }
+
+    function findMatches(node, rows, textGetter){
+      const terms = nodeTerms(node).map(normalizeText).filter(Boolean);
+      if(!terms.length) return [];
+      return rows.filter(row => {
+        const text = textGetter(row);
+        return terms.some(term => text.includes(term));
+      });
+    }
+
+    function decorateMap(){
+      const domainPathFor = buildDomainTextById();
+      const infoText = new Map(state.infos.map(info => [info, getInfoText(info, domainPathFor)]));
+      const dashboardText = new Map(state.dashboards.map(item => [item, getDashboardText(item)]));
+      function walk(node){
+        const children = node.children || [];
+        if(!children.length){
+          const infoMatches = findMatches(node, state.infos, info => infoText.get(info) || "");
+          const dashboardMatches = findMatches(node, state.dashboards, item => dashboardText.get(item) || "");
+          const dashboardQuery = dashboardMatches[0]?.query || dashboardMatches[0]?.id || node.title;
+          node.assets = {
+            intel: {
+              available: infoMatches.length > 0,
+              count: infoMatches.length,
+              href: `info_table.html?q=${encodeURIComponent(node.title)}&from_map=1`
+            },
+            special_issue: {
+              available: false,
+              count: 0,
+              href: ""
+            },
+            dashboard: {
+              available: dashboardMatches.length > 0,
+              count: dashboardMatches.length,
+              href: `index.html#dashboard?q=${encodeURIComponent(dashboardQuery)}`
+            }
+          };
+        }
+        children.forEach(walk);
+      }
+      (state.map?.sheets || []).forEach(sheet => walk(sheet.root));
+    }
+
+    function countLeaves(node){
+      const children = node.children || [];
+      if(!children.length) return 1;
+      return children.reduce((sum, child) => sum + countLeaves(child), 0);
+    }
+
+    function getActiveSheet(){
+      const sheets = state.map?.sheets || [];
+      return sheets.find(sheet => sheet.id === state.activeSheetId) || sheets[0] || null;
+    }
+
+    function renderTabs(){
+      const sheets = state.map?.sheets || [];
+      $("#tabs").innerHTML = sheets.map(sheet => `
+        <button class="tab ${sheet.id === state.activeSheetId ? "active" : ""}" type="button" data-sheet-id="${escapeHtml(sheet.id)}">
+          ${escapeHtml(sheet.title)}
+        </button>
+      `).join("");
+      document.querySelectorAll("[data-sheet-id]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.activeSheetId = button.dataset.sheetId;
+          const params = new URLSearchParams(location.search);
+          params.set("sheet", state.activeSheetId);
+          history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
+          render();
+        });
+      });
+    }
+
+    function markerHtml(kind, symbol, label, asset){
+      const className = `asset-mark ${asset.available ? "available" : "missing"} ${kind}`;
+      const title = asset.available
+        ? `${label}：${asset.count} 项，点击查看`
+        : `${label}：暂无`;
+      if(asset.available && asset.href){
+        return `<a class="${className}" href="${asset.href}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${symbol}</a>`;
+      }
+      return `<span class="${className}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${symbol}</span>`;
+    }
+
+    function nodeMatchesQuery(node){
+      const query = normalizeText(state.query);
+      if(!query) return { visible:true, self:false };
+      const self = normalizeText([node.title, ...(node.path || [])].join(" ")).includes(query);
+      const childMatches = (node.children || []).map(nodeMatchesQuery);
+      return { visible:self || childMatches.some(item => item.visible), self };
+    }
+
+    function renderNode(node){
+      const children = node.children || [];
+      const leaf = children.length === 0;
+      const match = nodeMatchesQuery(node);
+      const open = state.query || node.depth < state.openDepth;
+      const assets = node.assets || {};
+      const markers = leaf ? `
+        <div class="leaf-actions">
+          ${markerHtml("intel", "情", "情报", assets.intel || { available:false, count:0 })}
+          ${markerHtml("issue", "刊", "专刊", assets.special_issue || { available:false, count:0 })}
+          ${markerHtml("dashboard", "盘", "仪表盘", assets.dashboard || { available:false, count:0 })}
+        </div>
+      ` : "";
+      return `
+        <li class="mind-node depth-${Number(node.depth) || 0} ${leaf ? "leaf" : ""} ${match.self ? "match" : ""} ${match.visible ? "" : "filtered-out"}">
+          <details ${open ? "open" : ""}>
+            <summary class="node-wrap">
+              <span class="node-card">
+                <span class="title">${escapeHtml(node.title)}</span>
+                <span class="sub">${leaf ? "具体行业" : `${children.length} 个下级节点`}</span>
+                ${markers}
+              </span>
+            </summary>
+            ${children.length ? `<ul>${children.map(renderNode).join("")}</ul>` : ""}
+          </details>
+        </li>
+      `;
+    }
+
+    function render(){
+      renderTabs();
+      const sheet = getActiveSheet();
+      if(!sheet){
+        $("#sheetTitle").textContent = "暂无行业图景数据";
+        $("#sheetMeta").innerHTML = "";
+        $("#treeRoot").className = "empty";
+        $("#treeRoot").textContent = "未找到可展示的 sheet";
+        return;
+      }
+      const leafCount = countLeaves(sheet.root);
+      $("#sheetTitle").textContent = sheet.title;
+      $("#sheetMeta").innerHTML = `
+        <span class="pill">节点 ${sheet.node_count || "-"}</span>
+        <span class="pill">叶子 ${leafCount}</span>
+        <span class="pill">最大层级 ${sheet.max_depth || "-"}</span>
+      `;
+      $("#treeRoot").className = "mindmap-canvas";
+      $("#treeRoot").innerHTML = `<ul class="mindmap-root">${renderNode(sheet.root)}</ul>`;
+    }
+
+    async function main(){
+      const params = new URLSearchParams(location.search);
+      const [mapData, infos, dashboardsData, domainsData] = await Promise.all([
+        loadWithFallback("/industry-map", "./data/industry_map.json", null),
+        loadWithFallback("/info-items?status=published", "./data/info_items.json", []),
+        loadWithFallback("/dashboards", null, { items: [] }),
+        loadWithFallback("/domains/tree", "./data/domains.json", [])
+      ]);
+      state.map = mapData;
+      state.infos = Array.isArray(infos) ? infos : [];
+      state.dashboards = Array.isArray(dashboardsData?.items) ? dashboardsData.items : [];
+      state.domains = Array.isArray(domainsData) && domainsData.some(item => item.children)
+        ? flattenDomains(domainsData)
+        : (Array.isArray(domainsData) ? domainsData : []);
+      state.activeSheetId = params.get("sheet") || state.map?.sheets?.[0]?.id || null;
+      decorateMap();
+      render();
+    }
+
+    $("#searchInput").addEventListener("input", event => {
+      state.query = event.target.value.trim();
+      render();
+    });
+    $("#expandBtn").addEventListener("click", () => {
+      state.openDepth = 99;
+      render();
+    });
+    $("#collapseBtn").addEventListener("click", () => {
+      state.openDepth = 2;
+      render();
+    });
+
+    main().catch(err => {
+      console.error(err);
+      $("#treeRoot").className = "error";
+      $("#treeRoot").textContent = `行业图景加载失败：${err.message || err}`;
+    });
+  </script>
+  <script src="portal_shell.js"></script>
+</body>
+</html>

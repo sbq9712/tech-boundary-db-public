@@ -25,9 +25,14 @@ services:
       HERMES_AGENT_CLI: ${HERMES_AGENT_CLI:-hermes}
       HERMES_AGENT_TIMEOUT_SECONDS: ${HERMES_AGENT_TIMEOUT_SECONDS:-120}
       HERMES_AGENT_TOOLSETS: ${HERMES_AGENT_TOOLSETS:-}
+      TECHDB_AGENT_API_KEY: ${TECHDB_AGENT_API_KEY:-}
+      TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://api.xiaowang886.xyz/v1}
+      TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-claude-opus-4-8}
+      TECHDB_KB_PATH: /knowledge-base
     volumes:
       - ./data_sources:/app/data_sources:ro
       - ./backend/scripts:/app/scripts:ro
+      - /mnt/d/##EDMUNDS/知识库:/knowledge-base:ro
     depends_on:
       db:
         condition: service_healthy

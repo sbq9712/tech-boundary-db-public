@@ -921,7 +921,17 @@
         if(alertFilter === "false" && hasAlert) return false;
         if(keyword){
           const lower = keyword.toLowerCase();
-          const target = `${info.title} ${info.content} ${info.comment || ""}`.toLowerCase();
+          const domainText = getDomainsForInfo(info).map(id => domainPath(id)).join(" ");
+          const target = [
+            info.title || "",
+            info.content || "",
+            info.comment || "",
+            (info.tags || []).join(" "),
+            (info.info_types || []).join(" "),
+            (info.source_types || []).join(" "),
+            getDomainsForInfo(info).join(" "),
+            domainText
+          ].join(" ").toLowerCase();
           if(!target.includes(lower)) return false;
         }
         if(indicatorFilter && !info.__filteredIndicator) return false;
@@ -1046,6 +1056,17 @@
 
     $("#fromDate").value = qp("from") || "";
     $("#toDate").value = qp("to") || "";
+    $("#keyword").value = qp("q") || qp("keyword") || "";
+    const initialDomainQuery = qp("domain") || qp("domainQuick") || "";
+    if(initialDomainQuery){
+      domainQuick.value = initialDomainQuery;
+      const match = domains.find(d => domainPath(d.id) === initialDomainQuery || d.name === initialDomainQuery || d.id === initialDomainQuery);
+      if(match){
+        domainSelect.value = match.id;
+      }else if(!$("#keyword").value){
+        $("#keyword").value = initialDomainQuery;
+      }
+    }
 
     render();
   }
