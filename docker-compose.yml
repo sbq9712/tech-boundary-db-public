@@ -25,6 +25,9 @@ services:
       HERMES_AGENT_CLI: ${HERMES_AGENT_CLI:-hermes}
       HERMES_AGENT_TIMEOUT_SECONDS: ${HERMES_AGENT_TIMEOUT_SECONDS:-120}
       HERMES_AGENT_TOOLSETS: ${HERMES_AGENT_TOOLSETS:-}
+    volumes:
+      - ./data_sources:/app/data_sources:ro
+      - ./backend/scripts:/app/scripts:ro
     depends_on:
       db:
         condition: service_healthy
