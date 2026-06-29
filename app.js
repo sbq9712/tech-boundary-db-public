@@ -144,6 +144,127 @@ function maxDepth(node){const children=node.children||[];return children.length?
 function indicatorText(item){const indicators=item.draft_data&&Array.isArray(item.draft_data.indicators)?item.draft_data.indicators:[];return indicators.length?escapeHtml(indicators.slice(0,3).map(x=>`${x.name||'指标'} ${x.value||''}${x.unit||''}`).join('；')):'—';}
 function updatePanels(extra){assistantPanels=(extra&&extra.panel_recommendations)||emptyPanels();const root=document.getElementById('homeInsights');if(root)root.innerHTML=renderInsightPanels();}
 function renderInlineResources(extra){const panels=(extra&&extra.panel_recommendations)||emptyPanels();const citations=(extra&&Array.isArray(extra.citations))?extra.citations:[];const sections=[];if(citations.length){sections.push(`<div class="inline-resource-group"><h4>相关文档</h4>${citations.slice(0,6).map(path=>`<a href="#sources" title="${escapeHtml(path)}">${escapeHtml(path)}</a>`).join('')}</div>`);}const boundaries=panels.parameter_boundaries||[];if(boundaries.length){sections.push(`<div class="inline-resource-group"><h4>参数边界</h4>${boundaries.slice(0,4).map(item=>`<span>${escapeHtml(item.title||item.name||item.value||'参数边界')}</span>`).join('')}</div>`);}const alerts=panels.alert_intel||[];if(alerts.length){sections.push(`<div class="inline-resource-group"><h4>预警情报</h4>${alerts.slice(0,4).map(item=>`<span>${escapeHtml(item.title||item.name||'预警情报')}</span>`).join('')}</div>`);}const dashboards=panels.dashboard_links||[];if(dashboards.length){sections.push(`<div class="inline-resource-group"><h4>相关仪表盘</h4>${dashboards.slice(0,4).map(item=>`<a href="#dashboard${item.id?`?q=${encodeURIComponent(item.id)}`:''}">${escapeHtml(item.name||item.title||'相关仪表盘')}</a>`).join('')}</div>`);}return sections.length?`<div class="inline-resources">${sections.join('')}</div>`:'';}
-async function submitQuery(){const input=document.getElementById("queryInput");const answer=document.getElementById("answer");const query=input.value.trim();if(!query){input.focus();return;}addHomeMessage('user',query);answer.insertAdjacentHTML("beforeend",`<div class="user-msg"><strong>你</strong><p>${escapeHtml(query)}</p></div><div class="assistant-msg pending"><strong>系统</strong><p>正在处理…</p></div>`);input.value="";homeDraft="";localStorage.removeItem('home_query_draft');answer.scrollTop=answer.scrollHeight;try{const res=await fetch("/api/assistant/query",{method:"POST",headers:{"Content-Type":"application/json",...authHeaders()},body:JSON.stringify({query})});const data=await res.json();const responseText=data.response||data.message||"已收到。";addHomeMessage('assistant',responseText,data.extra);updatePanels(data.extra);const pending=answer.querySelector(".pending");if(pending)pending.outerHTML=`<div class="assistant-msg"><strong>系统</strong><p>${escapeHtml(responseText)}</p>${renderInlineResources(data.extra)}</div>`;}catch(err){const pending=answer.querySelector(".pending");if(pending)pending.outerHTML=`<div class="assistant-msg"><strong>系统</strong><p>提交失败，请稍后重试。</p></div>`;}}
+async function submitQuery(){
+  const input=document.getElementById("queryInput");
+  const answer=document.getElementById("answer");
+  const query=input.value.trim();
+  if(!query){input.focus();return;}
+
+  // UI: user message + thinking container
+  addHomeMessage('user',query);
+  answer.insertAdjacentHTML("beforeend",
+    `<div class="user-msg"><strong>你</strong><p>${escapeHtml(query)}</p></div>`+
+    `<div class="assistant-msg streaming" id="streamingMsg">`+
+    `<div class="thinking-stages" id="thinkingStages"></div>`+
+    `<div class="response-text" id="responseText"></div>`+
+    `<div class="citations-area" id="citationsArea"></div>`+
+    `</div>`
+  );
+  input.value="";homeDraft="";localStorage.removeItem('home_query_draft');
+  answer.scrollTop=answer.scrollHeight;
+
+  const stagesEl=document.getElementById("thinkingStages");
+  const respEl=document.getElementById("responseText");
+  const citEl=document.getElementById("citationsArea");
+  let fullText="";
+
+  try{
+    const sseUrl=`/api/assistant/stream?query=${encodeURIComponent(query)}`;
+    const res=await fetch(sseUrl,{headers:authHeaders()});
+    if(!res.ok){
+      const errData=await res.json().catch(()=>({detail:`HTTP ${res.status}`}));
+      respEl.innerHTML=`<span class="error">⚠ ${escapeHtml(errData.detail||'请求失败')}</span>`;
+      return;
+    }
+    const reader=res.body.getReader();
+    const decoder=new TextDecoder();
+    let buffer="";
+    let currentEvent="";
+
+    while(true){
+      const {done,value}=await reader.read();
+      if(done)break;
+      buffer+=decoder.decode(value,{stream:true});
+      const lines=buffer.split("\n");
+      buffer=lines.pop();
+
+      for(const line of lines){
+        if(line.startsWith("event: ")){
+          currentEvent=line.slice(7).trim();
+        }else if(line.startsWith("data: ")){
+          const dataStr=line.slice(6);
+          let data;
+          try{data=JSON.parse(dataStr);}catch(_){continue;}
+
+          if(currentEvent==="status"){
+            // Append thinking stage as a chip
+            stagesEl.insertAdjacentHTML("beforeend",
+              `<div class="stage-chip">${data.message}</div>`);
+            // Mark previous chips as done
+            const chips=stagesEl.querySelectorAll(".stage-chip");
+            chips.forEach((c,i)=>{if(i<chips.length-1)c.classList.add("done");});
+            answer.scrollTop=answer.scrollHeight;
+
+          }else if(currentEvent==="token"){
+            // Real-time typing: append raw content (no escape — it's markdown)
+            respEl.innerHTML=renderMarkdown(fullText+data.content);
+            fullText+=data.content;
+            answer.scrollTop=answer.scrollHeight;
+
+          }else if(currentEvent==="done"){
+            // Final: citations + retrieval stats
+            const stats=data.retrieval_summary||{};
+            citEl.innerHTML=renderCitations(data.citations||[],stats);
+
+          }else if(currentEvent==="error"){
+            respEl.innerHTML=`<span class="error">⚠ ${escapeHtml(data.error||'LLM调用失败')}</span>`;
+          }
+        }
+      }
+    }
+
+    // Save to history
+    addHomeMessage('assistant',fullText);
+    // Remove streaming class
+    const sm=document.getElementById("streamingMsg");
+    if(sm)sm.classList.remove("streaming");
+
+  }catch(err){
+    respEl.innerHTML=`<span class="error">⚠ 连接失败，请稍后重试。</span>`;
+  }
+}
+
+function renderMarkdown(text){
+  // Minimal markdown: headers, bold, italic, code, line breaks, lists
+  let html=escapeHtml(text);
+  html=html.replace(/^### (.+)$/gm,'<h4>$1</h4>');
+  html=html.replace(/^## (.+)$/gm,'<h3>$1</h3>');
+  html=html.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  html=html.replace(/`(.+?)`/g,'<code>$1</code>');
+  html=html.replace(/^\* (.+)$/gm,'<li>$1</li>');
+  html=html.replace(/(<li>.*<\/li>)/s,'<ul>$1</ul>');
+  html=html.replace(/\n/g,'<br>');
+  return html;
+}
+
+function renderCitations(citations,stats){
+  let html='<div class="citations-block">';
+  html+=`<div class="retrieval-stats">检索：${stats.knowledge_base||0} 篇知识库 · ${stats.sources||0} 条文献 · ${stats.parameters||0} 条参数</div>`;
+  if(citations.length){
+    html+='<div class="citation-list"><strong>引用来源：</strong>';
+    citations.forEach(c=>{
+      if(c.type==='parameter'){
+        html+=`<span class="cite-tag param">${escapeHtml(c.parameter_name)}: ${escapeHtml(c.value_range)} <em>${c.verification_status}</em></span>`;
+      }else if(c.type==='knowledge_base'){
+        html+=`<span class="cite-tag kb">📄 ${escapeHtml(c.title)}</span>`;
+      }else if(c.type==='source'){
+        html+=`<span class="cite-tag src">${escapeHtml((c.title||'').slice(0,40))}...</span>`;
+      }
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+  return html;
+}
 function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));}
 window.addEventListener("hashchange",render);window.addEventListener("DOMContentLoaded",render);
