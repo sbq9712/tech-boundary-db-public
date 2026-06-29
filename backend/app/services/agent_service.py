@@ -33,8 +33,11 @@ AI_TIMEOUT = int(os.getenv("TECHDB_AGENT_TIMEOUT_SECONDS", "120"))
 
 
 def _normalize_query(query: str) -> list[str]:
-    """Extract search terms from query."""
-    normalized = re.sub(r"[\s/，。；;:：、（）()\[\]{}]+", " ", query.lower())
+    """Extract search terms from query, splitting on ASCII↔CJK boundaries too."""
+    # Insert space between ASCII and CJK character transitions
+    text = re.sub(r"([A-Za-z0-9])([^\x00-\x7F])", r"\1 \2", query)
+    text = re.sub(r"([^\x00-\x7F])([A-Za-z0-9])", r"\1 \2", text)
+    normalized = re.sub(r"[\s/，。；;:：、（）()\[\]{}%]+", " ", text.lower())
     return [term for term in normalized.split() if len(term) >= 2]
 
 
@@ -273,39 +276,51 @@ async def stream_agent_response(
     
     full_response = ""
     
-    async with httpx.AsyncClient(timeout=AI_TIMEOUT) as client:
-        async with client.stream(
-            "POST",
-            f"{AI_BASE_URL}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {AI_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": AI_MODEL,
-                "messages": messages,
-                "stream": True,
-                "temperature": 0.3,
-            },
-        ) as response:
-            response.raise_for_status()
-            
-            async for line in response.aiter_lines():
-                if not line.strip() or line.strip() == "data: [DONE]":
-                    continue
+    try:
+        async with httpx.AsyncClient(timeout=AI_TIMEOUT) as client:
+            async with client.stream(
+                "POST",
+                f"{AI_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {AI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": AI_MODEL,
+                    "messages": messages,
+                    "stream": True,
+                    "temperature": 0.3,
+                },
+            ) as response:
+                if response.status_code == 429:
+                    yield f'event: error\ndata: {json.dumps({"error": "LLM API rate limit exceeded, please retry later"}, ensure_ascii=False)}\n\n'
+                    return
                 
-                if line.startswith("data: "):
-                    try:
-                        chunk_data = json.loads(line[6:])
-                        delta = chunk_data.get("choices", [{}])[0].get("delta", {})
-                        content = delta.get("content", "")
-                        
-                        if content:
-                            full_response += content
-                            yield f'event: token\ndata: {json.dumps({"content": content}, ensure_ascii=False)}\n\n'
-                    
-                    except json.JSONDecodeError:
+                response.raise_for_status()
+                
+                async for line in response.aiter_lines():
+                    if not line.strip() or line.strip() == "data: [DONE]":
                         continue
+                    
+                    if line.startswith("data: "):
+                        try:
+                            chunk_data = json.loads(line[6:])
+                            delta = chunk_data.get("choices", [{}])[0].get("delta", {})
+                            content = delta.get("content", "")
+                            
+                            if content:
+                                full_response += content
+                                yield f'event: token\ndata: {json.dumps({"content": content}, ensure_ascii=False)}\n\n'
+                        
+                        except json.JSONDecodeError:
+                            continue
+    
+    except httpx.HTTPStatusError as e:
+        yield f'event: error\ndata: {json.dumps({"error": f"LLM API error: {e.response.status_code}"}, ensure_ascii=False)}\n\n'
+        return
+    except Exception as e:
+        yield f'event: error\ndata: {json.dumps({"error": f"LLM call failed: {str(e)}"}, ensure_ascii=False)}\n\n'
+        return
     
     # Stage 4: Done - send citations and metadata
     citations = []
