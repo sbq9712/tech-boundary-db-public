@@ -1,0 +1,16 @@
+backend/.venv/
+backend/__pycache__/
+backend/app/__pycache__/
+backend/app/**/__pycache__/
+backend/.pytest_cache/
+backend/scripts/__pycache__/
+__pycache__/
+*.pyc
+.env.local
+.idea/
+.codex/
+pg_data/
+*.zip
+data_sources/tech_kb_builder_2025w41/indexes/
+data_sources/tech_kb_builder_2025w41/quality_reports/
+data_sources/tech_kb_builder_2025w41/rag/

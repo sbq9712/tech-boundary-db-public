@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>登录 — 前沿技术情报与预警平台</title>
+  <style>
+    :root{
+      --bg:#f8f9fc; --text:#1e293b; --muted:#64748b; --line:rgba(0,0,0,.08);
+      --r:14px;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family:var(--sans); color:var(--text);
+      min-height:100vh;
+      display:flex; align-items:center; justify-content:center;
+      background: #f8f9fc;
+    }
+
+    .card{
+      width:100%; max-width:380px;
+      background:#ffffff;
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:36px 32px;
+      box-shadow:0 8px 32px rgba(0,0,0,.08);
+    }
+    .brand{
+      text-align:center;
+      font-size:15px; font-weight:800;
+      margin-bottom:6px;
+    }
+    .subtitle{
+      text-align:center;
+      color:var(--muted); font-size:12px;
+      margin-bottom:28px;
+    }
+
+    label{
+      display:block;
+      font-size:12px; color:var(--muted);
+      margin-bottom:6px;
+    }
+    .field{ margin-bottom:16px; }
+    input{
+      width:100%;
+      background:#ffffff;
+      border:1px solid #d1d5db;
+      color:var(--text);
+      padding:11px 14px;
+      border-radius:12px;
+      font-size:14px;
+      outline:none;
+      transition:border-color .15s;
+    }
+    input:focus{ border-color:rgba(37,99,235,.5); }
+
+    .btn{
+      width:100%;
+      padding:12px;
+      border-radius:12px;
+      border:none;
+      background:linear-gradient(135deg,#5865f2,#4752c4);
+      color:#fff;
+      font-size:14px; font-weight:600;
+      cursor:pointer;
+      margin-top:8px;
+      transition:opacity .15s;
+    }
+    .btn:hover{ opacity:.88; }
+    .btn:disabled{ opacity:.5; cursor:not-allowed; }
+
+    .error{
+      color:#f87171;
+      font-size:13px;
+      text-align:center;
+      min-height:20px;
+      margin-top:12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">前沿技术情报与预警平台</div>
+    <div class="subtitle">（样机）</div>
+
+    <div class="field">
+      <label for="username">用户名</label>
+      <input type="text" id="username" placeholder="请输入用户名" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label for="password">密码</label>
+      <input type="password" id="password" placeholder="请输入密码" autocomplete="current-password" />
+    </div>
+
+    <button class="btn" id="btnLogin">登录</button>
+    <div class="error" id="errorMsg"></div>
+  </div>
+
+<script>
+  const API_BASE = window.API_BASE || "/api";
+
+  // 已登录则直接跳回目标页
+  const stored = localStorage.getItem("auth_token");
+  if (stored) {
+    const params = new URLSearchParams(location.search);
+    location.replace(params.get("next") || "/index.html");
+  }
+
+  const btnLogin = document.getElementById("btnLogin");
+  const errorMsg = document.getElementById("errorMsg");
+
+  async function doLogin() {
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+    if (!username || !password) {
+      errorMsg.textContent = "请填写用户名和密码";
+      return;
+    }
+    btnLogin.disabled = true;
+    errorMsg.textContent = "";
+    try {
+      const r = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        errorMsg.textContent = data.detail || "用户名或密码错误";
+        return;
+      }
+      const data = await r.json();
+      localStorage.setItem("auth_token", data.access_token);
+      const params = new URLSearchParams(location.search);
+      location.replace(params.get("next") || "/index.html");
+    } catch (e) {
+      errorMsg.textContent = "网络错误，请稍后重试";
+    } finally {
+      btnLogin.disabled = false;
+    }
+  }
+
+  btnLogin.addEventListener("click", doLogin);
+  document.getElementById("password").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doLogin();
+  });
+</script>
+</body>
+</html>

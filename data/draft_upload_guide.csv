@@ -1,0 +1,194 @@
+section,domain_cn,domain_field_en,description,indicator_name,indicator_unit
+template_field,预警时效,duration,支持 week / month / quarter / custom,,-
+template_field,自定义预警到期日,custom_expires_on,当 duration=custom 时必填，格式为 YYYY-MM-DD，且必须晚于当天,,-
+domain_mapping,CCUS,DOM_CCUS_L1,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,捕集或分离,DOM_CCUS_L2_CAPTURE,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,吸收法,DOM_CCUS_L3_CAPTURE_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,化学吸收,DOM_CCUS_L4_CAPTURE_01_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,物理吸收,DOM_CCUS_L4_CAPTURE_01_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,物理化学吸收,DOM_CCUS_L4_CAPTURE_01_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,吸附法,DOM_CCUS_L3_CAPTURE_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,物理吸附,DOM_CCUS_L4_CAPTURE_02_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,化学吸附,DOM_CCUS_L4_CAPTURE_02_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,膜分离法,DOM_CCUS_L3_CAPTURE_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,聚合物膜,DOM_CCUS_L4_CAPTURE_03_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,无机膜,DOM_CCUS_L4_CAPTURE_03_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,膜反应器,DOM_CCUS_L4_CAPTURE_03_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,混合基质膜,DOM_CCUS_L4_CAPTURE_03_04,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电驱膜分离,DOM_CCUS_L4_CAPTURE_03_05,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,膜接触器,DOM_CCUS_L4_CAPTURE_03_06,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,相变分离,DOM_CCUS_L3_CAPTURE_04,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,冷凝分离,DOM_CCUS_L4_CAPTURE_04_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,凝华分离,DOM_CCUS_L4_CAPTURE_04_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,化学链分离,DOM_CCUS_L3_CAPTURE_05,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,化学链燃烧（发电）,DOM_CCUS_L4_CAPTURE_05_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,化学链气化（合成气）,DOM_CCUS_L4_CAPTURE_05_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,化学链重整（合成气调制）,DOM_CCUS_L4_CAPTURE_05_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,化学链制氢（制氢）,DOM_CCUS_L4_CAPTURE_05_04,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电化学分离,DOM_CCUS_L3_CAPTURE_06,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,pH摆动法,DOM_CCUS_L4_CAPTURE_06_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,氧化还原摆动法,DOM_CCUS_L4_CAPTURE_06_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电吸附,DOM_CCUS_L4_CAPTURE_06_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,富氧燃烧,DOM_CCUS_L3_CAPTURE_07,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,富氧燃烧,DOM_CCUS_L4_CAPTURE_07_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,加压富氧燃烧,DOM_CCUS_L4_CAPTURE_07_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,操作方式,DOM_CCUS_L3_CAPTURE_08,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,TSA,DOM_CCUS_L4_CAPTURE_08_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,VSA,DOM_CCUS_L4_CAPTURE_08_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,PSA,DOM_CCUS_L4_CAPTURE_08_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,TVSA,DOM_CCUS_L4_CAPTURE_08_04,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,ESA,DOM_CCUS_L4_CAPTURE_08_05,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,湿度摆动,DOM_CCUS_L4_CAPTURE_08_06,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电化学再生,DOM_CCUS_L4_CAPTURE_08_07,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,运输,DOM_CCUS_L2_TRANSPORT,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,管道运输,DOM_CCUS_L3_TRANSPORT_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,气态管输,DOM_CCUS_L4_TRANSPORT_01_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,超临界管输,DOM_CCUS_L4_TRANSPORT_01_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,船运,DOM_CCUS_L3_TRANSPORT_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,船用储罐,DOM_CCUS_L4_TRANSPORT_02_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,港口基础设施,DOM_CCUS_L4_TRANSPORT_02_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,陆运,DOM_CCUS_L3_TRANSPORT_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,公路罐车,DOM_CCUS_L4_TRANSPORT_03_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,铁路罐车,DOM_CCUS_L4_TRANSPORT_03_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,利用,DOM_CCUS_L2_UTILIZATION,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,作为产品,DOM_CCUS_L3_UTILIZATION_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,食品级气体,DOM_CCUS_L4_UTILIZATION_01_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,工业气体,DOM_CCUS_L4_UTILIZATION_01_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,制冷,DOM_CCUS_L4_UTILIZATION_01_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,物理利用,DOM_CCUS_L3_UTILIZATION_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,萃取剂,DOM_CCUS_L4_UTILIZATION_02_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,CO₂-EOR,DOM_CCUS_L4_UTILIZATION_02_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,CO₂-EGR,DOM_CCUS_L4_UTILIZATION_02_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,CO₂-ECBM（煤层气）,DOM_CCUS_L4_UTILIZATION_02_04,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,热化学利用,DOM_CCUS_L3_UTILIZATION_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,催化加氢,DOM_CCUS_L4_UTILIZATION_03_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,聚合物单体/中间体,DOM_CCUS_L4_UTILIZATION_03_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,聚合物,DOM_CCUS_L4_UTILIZATION_03_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,含氮化学品,DOM_CCUS_L4_UTILIZATION_03_04,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电化学转化,DOM_CCUS_L3_UTILIZATION_04,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,C1产物,DOM_CCUS_L4_UTILIZATION_04_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,C2+产物,DOM_CCUS_L4_UTILIZATION_04_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,C–N耦合产物,DOM_CCUS_L4_UTILIZATION_04_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,光驱转化,DOM_CCUS_L3_UTILIZATION_05,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,光催化,DOM_CCUS_L4_UTILIZATION_05_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,光电催化,DOM_CCUS_L4_UTILIZATION_05_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,光热催化,DOM_CCUS_L4_UTILIZATION_05_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,生物转化,DOM_CCUS_L3_UTILIZATION_06,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,光合作用,DOM_CCUS_L4_UTILIZATION_06_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,厌氧转化,DOM_CCUS_L4_UTILIZATION_06_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,酶催化转化,DOM_CCUS_L4_UTILIZATION_06_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,矿化利用,DOM_CCUS_L3_UTILIZATION_07,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,直接矿化,DOM_CCUS_L4_UTILIZATION_07_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,间接矿化,DOM_CCUS_L4_UTILIZATION_07_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,封存,DOM_CCUS_L2_STORAGE,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,封存场景,DOM_CCUS_L3_STORAGE_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,咸水层封存,DOM_CCUS_L4_STORAGE_01_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,油气藏封存,DOM_CCUS_L4_STORAGE_01_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,煤层封存,DOM_CCUS_L4_STORAGE_01_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,玄武岩封存,DOM_CCUS_L4_STORAGE_01_04,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,增强风化,DOM_CCUS_L4_STORAGE_01_05,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,封存机理,DOM_CCUS_L3_STORAGE_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,构造封存,DOM_CCUS_L4_STORAGE_02_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,残余封存,DOM_CCUS_L4_STORAGE_02_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,溶解封存,DOM_CCUS_L4_STORAGE_02_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,矿物封存,DOM_CCUS_L4_STORAGE_02_04,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,工程实施,DOM_CCUS_L3_STORAGE_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,注入工程,DOM_CCUS_L4_STORAGE_03_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,压力管理,DOM_CCUS_L4_STORAGE_03_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,监测技术,DOM_CCUS_L4_STORAGE_03_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,支撑技术,DOM_CCUS_L2_SUPPORT,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,通用操作,DOM_CCUS_L3_SUPPORT_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,压缩,DOM_CCUS_L4_SUPPORT_01_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,纯化,DOM_CCUS_L4_SUPPORT_01_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,关键装备,DOM_CCUS_L3_SUPPORT_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,吸收装备,DOM_CCUS_L4_SUPPORT_02_01,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,吸附装备,DOM_CCUS_L4_SUPPORT_02_02,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,膜装备,DOM_CCUS_L4_SUPPORT_02_03,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电化学装备,DOM_CCUS_L4_SUPPORT_02_04,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,压缩装备,DOM_CCUS_L4_SUPPORT_02_05,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,封存装备,DOM_CCUS_L4_SUPPORT_02_06,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,供氧设备,DOM_CCUS_L4_SUPPORT_02_07,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电池与储能,DOM_L1_BATTERY,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,锂电体系,DOM_L2_BAT_LIION,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,界面与SEI,DOM_L3_BAT_SEI,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电解液添加剂与成膜,DOM_L4_BAT_SEI_ADD,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,正极材料,DOM_L3_BAT_CATHODE,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,LFP体系与掺杂包覆,DOM_L4_BAT_CATHODE_LFP,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,高镍NCM与单晶路线,DOM_L4_BAT_CATHODE_NCM,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,固态电池,DOM_L2_BAT_SOLID,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,固态电解质,DOM_L3_SOLID_ELEC,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,硫化物电解质与界面稳定,DOM_L4_SOLID_SULFIDE,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,氧化物电解质与致密化工艺,DOM_L4_SOLID_OXIDE,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,氢能与合成燃料,DOM_L1_H2,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电解制氢,DOM_L2_H2_ELEC,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,PEM电解,DOM_L3_H2_PEM,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,低铱催化剂与膜电极寿命,DOM_L4_H2_PEM_IR,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,碱性电解(AEL),DOM_L3_H2_AEL,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,大电流密度堆叠与隔膜,DOM_L4_H2_AEL_STACK,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,可再生与电力系统,DOM_L1_RENEW,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,电网与储能调度,DOM_L2_RENEW_GRID,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,灵活性资源与需求响应,DOM_L3_GRID_FLEX,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,虚拟电厂VPP与聚合控制,DOM_L4_GRID_VPP,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,低碳材料与过程,DOM_L1_MATERIALS,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,水泥与建材脱碳,DOM_L2_MAT_CEMENT,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,替代胶凝材料,DOM_L3_CEMENT_ALT,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,镁基矿化与CO₂固化建材,DOM_L4_CEMENT_MG,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,政策与碳市场,DOM_L1_POLICY,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,碳市场与MRV,DOM_L2_POLICY_MARKET,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,核算/核证与方法学,DOM_L3_MRV,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+domain_mapping,CCUS项目MRV与信用方法学,DOM_L4_MRV_CCS,在批量模板的 domains 字段填写英文 domain id（多个用分号分隔）,,-
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,企业/研究机构/高校,-
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,企业/研究机构/高校,-
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,企业/研究机构/高校,-
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,企业/研究机构/高校,-
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,产品/项目,-
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,产品/项目,-
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,产品/项目,-
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,产品/项目,-
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,活性成分,-
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,活性成分,-
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,再生能耗 (GJ/tCO2),GJ/tCO2
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,再生能耗 (kWh/tCO2),kWh/tCO2
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,整体能耗 (kWh/tCO2),kWh/tCO2
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,材料成本 (元/kg),元/kg
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,吸收速率 (gCO2/g·h),gCO2/g·h
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,产能 (万吨/年),万吨/年
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,设备投资 (万元),万元
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,循环寿命 (圈),圈
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,单圈吸收量 (gCO2/g),gCO2/g
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,运行温度 (℃),℃
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,运行压力 (MPa),MPa
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,捕集率 (%),%
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,CO2纯度 (%),%
+indicator_preset,捕集或分离,DOM_CCUS_L2_CAPTURE,仅对应 CCUS 二级分类可用,综合捕集成本 (元/t),元/t
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,固定投资（元/km）,元/km
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,opex(元/t·km),元/t·km
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,储运压力(MPa),MPa
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,储运温度(℃),℃
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,CO2运输相态,-
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,运输距离（km）,km
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,运输能力（Mt/年）,Mt/年
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,能耗（kWh/t·km）,kWh/t·km
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,设备寿命（年）,年
+indicator_preset,运输,DOM_CCUS_L2_TRANSPORT,仅对应 CCUS 二级分类可用,泄露率（%/年）,%/年
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,泄露率（%/年）,%/年
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,产物成分,-
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,产物单位成本（元/kg）,元/kg
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,产物价格（元/kg）,元/kg
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,产物附加值（元/kg）,元/kg
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,附加值（元/kg CO2）,元/kg CO2
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,国际年需求（万吨/年）,万吨/年
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,国内年需求（万吨/年）,万吨/年
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,国际市场规模（亿元/年）,亿元/年
+indicator_preset,利用,DOM_CCUS_L2_UTILIZATION,仅对应 CCUS 二级分类可用,国内市场规模（亿元/年）,亿元/年
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,地质类型,-
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,封存总量（万吨）,万吨
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,封存深度（m）,m
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,封存年限（年）,年
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,封存比例（%）,%
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,注入速率（t/天）,t/天
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,诱发地震/环境风险,-
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,运行成本（元/tCO2）,元/tCO2
+indicator_preset,封存,DOM_CCUS_L2_STORAGE,仅对应 CCUS 二级分类可用,附加值（元/tCO2）,元/tCO2
+indicator_preset,支撑技术,DOM_CCUS_L2_SUPPORT,仅对应 CCUS 二级分类可用,功率（kW）,kW
+indicator_preset,支撑技术,DOM_CCUS_L2_SUPPORT,仅对应 CCUS 二级分类可用,价格（RMB）,RMB

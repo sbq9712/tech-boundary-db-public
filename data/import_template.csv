@@ -1,0 +1,2 @@
+title,published_at,source_url,source_types,info_types,domains,importance_score,is_new_tech,content,tags,classification,comment,alert_manual,alert_title,alert_body,reviewer_comment,duration,custom_expires_on
+"示例标题","2026-01-10","https://example.com/demo","产业新闻;学术文献","技术","DOM_CCUS_L4_CAPTURE_02_02;DOM_CCUS_L4_CAPTURE_02_01",4,true,"示例正文内容","化学吸附;寿命评估","internal","初步研判","false","","","","month",""

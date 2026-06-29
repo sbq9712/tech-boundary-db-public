@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>技术仪表盘（样机）</title>
+  <style>
+    :root{
+      --bg:#f8f9fc; --text:#1e293b; --muted:#64748b; --line:rgba(0,0,0,.08);
+      --r:14px; --shadow: 0 4px 16px rgba(0,0,0,.06);
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family:var(--sans); color:var(--text);
+      background: #f8f9fc;
+    }
+    a{ color:#2563eb; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+    .topbar{
+      position:sticky; top:0; z-index:20;
+      backdrop-filter: blur(10px);
+      background: rgba(255,255,255,.92);
+      border-bottom:1px solid var(--line);
+    }
+    .topbar-inner{
+      max-width:1400px; margin:0 auto;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; gap:12px;
+    }
+    .brand{ font-weight:850; }
+    .nav{ display:flex; gap:10px; flex-wrap:wrap; }
+    .nav a{
+      padding:8px 10px; border-radius:10px;
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+      color:var(--text); font-size:14px;
+    }
+
+    .container{ max-width:1400px; margin:0 auto; padding:16px; }
+    .grid{ display:grid; grid-template-columns: 340px 1fr 420px; gap:14px; }
+    @media (max-width: 1280px){ .grid{ grid-template-columns: 340px 1fr; } .right{ grid-column: span 2; } }
+    @media (max-width: 960px){ .grid{ grid-template-columns: 1fr; } .right{ grid-column: auto; } }
+
+    .card{
+      background: #ffffff;
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .hd{ padding:12px 14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .bd{ padding:12px 14px; }
+    .muted{ color:var(--muted); }
+    .small{ font-size:12px; }
+    .mono{ font-family:var(--mono); }
+
+    label{ display:block; margin:8px 0 6px; color:var(--muted); font-size:12px; }
+    input, select{
+      width:100%;
+      background:#ffffff;
+      border:1px solid #d1d5db;
+      color:var(--text);
+      padding:10px;
+      border-radius:12px;
+      font-size:13px;
+      outline:none;
+    }
+    input[type="date"]{ padding:9px 10px; }
+    .row{ display:flex; gap:10px; }
+    .row > *{ flex:1; }
+
+    .chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .chip{
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .chip:hover{ background:#e2e8f0; }
+
+    .btn{
+      cursor:pointer;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #d1d5db;
+      background:#f1f5f9;
+      color:var(--text);
+      font-size:13px;
+      width:100%;
+    }
+    .btn:hover{ background:#e2e8f0; }
+
+    .pill{
+      display:inline-flex; align-items:center; gap:6px;
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .dot{ width:8px; height:8px; border-radius:999px; background:#aaa; }
+    .dot.yellow{ background:#facc15; }
+    .dot.orange{ background:#fb923c; }
+    .dot.red{ background:#f87171; }
+
+    .list{ display:flex; flex-direction:column; gap:10px; }
+    .item{
+      border:1px solid #e2e8f0;
+      background:#f8fafc;
+      border-radius:14px;
+      padding:10px 12px;
+    }
+    .item:hover{ background:#f1f5f9; }
+    .item-title{ font-weight:750; }
+    .item-meta{ margin-top:6px; display:flex; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:12px; }
+
+    canvas{ width:100%; height:240px; display:block; background:#f8fafc; border-radius:12px; border:1px solid #e2e8f0; }
+
+    table{
+      width:100%; border-collapse:separate; border-spacing:0;
+      border:1px solid #e2e8f0;
+      border-radius:12px;
+      overflow:hidden;
+      background:#f8fafc;
+    }
+    th,td{ padding:10px; border-bottom:1px solid #e2e8f0; font-size:13px; vertical-align:top; }
+    th{ background:#f1f5f9; font-weight:650; white-space:nowrap; }
+    tr:last-child td{ border-bottom:none; }
+    tr:hover td{ background:#f8fafc; }
+
+    .error{
+      border:1px solid rgba(248,113,113,.35);
+      background:rgba(248,113,113,.08);
+      padding:12px 14px;
+      border-radius:14px;
+      margin-bottom:14px;
+      display:none;
+    }
+
+
+    .tree{
+      border:1px solid #e2e8f0;
+      background:#f8fafc;
+      border-radius:12px;
+      padding:8px;
+      max-height: 360px;
+      overflow:auto;
+    }
+    .tree-row{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 8px;
+      border-radius:10px;
+    }
+    .tree-row:hover{ background:#f1f5f9; }
+    .tree-toggle{
+      width:22px; height:22px;
+      display:inline-flex; align-items:center; justify-content:center;
+      border:1px solid #d1d5db;
+      border-radius:8px;
+      background:#f1f5f9;
+      cursor:pointer;
+      user-select:none;
+      font-family: var(--mono);
+      font-size:12px;
+    }
+    .tree-toggle.empty{
+      opacity:.25;
+      cursor:default;
+    }
+    .tree-node{
+      cursor:pointer;
+      user-select:none;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      flex:1;
+    }
+    .tree-node.active{
+      font-weight:800;
+      color:#2563eb;
+    }
+    .tree-indent{
+      width: 16px;
+      flex: 0 0 16px;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">前沿技术情报与预警平台（样机） <span class="muted small">/ 技术仪表盘</span></div>
+      <div class="nav">
+        <a href="index.html">核心门户</a>
+        <a href="info_table.html">情报总表</a>
+        <a href="industry_dashboards.html">行业仪表盘</a>
+        <a href="industry_map.html">行业图景</a>
+        <a href="sources.html">信息源</a>
+        <a href="upload_review.html?v=20260326d">上传&复核</a>
+        <a href="drafts.html">草稿管理</a>
+        <a href="excel_import.html">批量导入</a>
+        <button onclick="Auth.showChangePassword()" style="cursor:pointer;padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:14px;">修改密码</button>
+        <button onclick="Auth.logout()" style="cursor:pointer;padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:14px;">退出</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div id="errorBox" class="error"></div>
+
+    <div class="grid">
+      <!-- LEFT -->
+      <div class="card">
+        <div class="hd">
+          <div>
+            <div style="font-weight:850;">领域与筛选</div>
+            <div class="muted small">领域跳转 + 时间 + 关键词 + 预警筛选</div>
+          </div>
+        </div>
+        <div class="bd">
+          <div class="pill" style="width:100%; justify-content:space-between;">
+            <span id="pathText" class="small">-</span>
+            <span id="domainIdText" class="mono small">-</span>
+          </div>
+
+          <label style="margin-top:12px;">领域选择（树形展开）</label>
+<div id="domainTree" class="tree"></div>
+
+            <label style="margin-top:12px;">领域快速跳转（输入可选）</label>
+            <input id="domainSearch" placeholder="例如：CCUS / 运输 / 管网 / 固体吸附…" />
+            <div class="chips" id="domainSearchResults"></div>
+
+
+          <label style="margin-top:12px;">时间范围</label>
+          <div class="row">
+            <div>
+              <label>From</label>
+              <input id="fromDate" type="date" />
+            </div>
+            <div>
+              <label>To</label>
+              <input id="toDate" type="date" />
+            </div>
+          </div>
+
+          <label style="margin-top:12px;">是否仅看预警</label>
+          <select id="alertOnly">
+            <option value="">全部</option>
+            <option value="true">仅预警（active）</option>
+          </select>
+
+          <label style="margin-top:12px;">关键词（标题/正文）</label>
+          <input id="q" placeholder="输入关键词过滤情报…" />
+
+          <label style="margin-top:12px;">排序</label>
+          <select id="sortBy">
+            <option value="importance">重要度优先</option>
+            <option value="time">时间优先</option>
+          </select>
+
+          <div style="margin-top:12px;" class="row">
+            <button class="btn" id="btnApply">应用筛选</button>
+            <button class="btn" id="btnGoInfoTable">去情报总表</button>
+          </div>
+
+          <div class="muted small" style="margin-top:10px;">
+            Tip：真实系统里，指标趋势与统计由后端算；样机在前端聚合。
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER -->
+      <div class="card">
+        <div class="hd">
+          <div>
+            <div style="font-weight:850;">情报列表</div>
+            <div class="muted small">点击进入详情；显示预警颜色与关键元信息</div>
+          </div>
+          <div class="pill"><span class="muted small">结果数：</span><span id="countText">0</span></div>
+        </div>
+        <div class="bd">
+          <div id="list" class="list"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="card right">
+        <div class="hd">
+          <div>
+            <div style="font-weight:850;">指标趋势</div>
+            <div class="muted small">选择一个指标（按当前筛选结果绘图）</div>
+          </div>
+          <div class="pill"><span class="muted small">领域层级：</span><span id="levelText">-</span></div>
+        </div>
+        <div class="bd">
+          <div id="lvl4Summary" class="item" style="display:none;">
+            <div class="item-title">4级领域技术总结（占位）</div>
+            <div class="muted small" style="margin-top:6px; line-height:1.6;">
+              这里是人工维护的“技术发展阶段/卡点总结”。样机阶段先用占位文案，后续可在 domains 表里加 summary 字段或单独表维护。
+            </div>
+          </div>
+
+          <label style="margin-top:12px;">选择指标</label>
+          <select id="indicatorSel"></select>
+
+          <div style="margin-top:10px;">
+            <canvas id="chart" width="900" height="360"></canvas>
+            <div class="muted small" style="margin-top:8px;" id="chartHint">-</div>
+          </div>
+
+          <div class="item" style="margin-top:12px;">
+            <div class="item-title">表格列（样机：勾选显示）</div>
+            <div class="muted small" style="margin-top:6px;">模拟你提到的“动态选列 + 可移除”</div>
+            <div class="chips" id="colChips" style="margin-top:10px;"></div>
+          </div>
+
+          <div style="margin-top:12px; overflow:auto;">
+            <table>
+              <thead>
+                <tr id="tblHead"></tr>
+              </thead>
+              <tbody id="tblBody"></tbody>
+            </table>
+          </div>
+
+          <div class="muted small" style="margin-top:10px;">
+            如果你还没准备 indicator_defs/indicator_values.json：趋势图会提示缺失，但页面仍可体验列表/筛选。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="/auth.js"></script>
+<script type="module">
+  Auth.requireAuth();
+  const $ = s => document.querySelector(s);
+  const API_BASE = window.API_BASE || "/api";
+
+  async function loadApi(path){
+    const r = await Auth.authFetch(`${API_BASE}${path}`, { cache: "no-store" });
+    if(!r) return null;
+    if(!r.ok){ const t = await r.text(); throw new Error(`API请求失败 (${r.status}) ${t}`); }
+    if(r.status === 204) return null;
+    return r.json();
+  }
+
+  // URL helpers
+  function sp(){ return new URLSearchParams(location.search); }
+  function qp(k){ return sp().get(k); }
+  function setQuery(obj){
+    const p = sp();
+    for(const [k,v] of Object.entries(obj)){
+      if(v === null || v === undefined || v === "") p.delete(k);
+      else p.set(k, v);
+    }
+    history.replaceState(null, "", `${location.pathname}?${p.toString()}`);
+  }
+
+  // date helpers
+  function todayISO(){
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+  }
+  function daysAgoISO(n){
+    const d = new Date();
+    d.setDate(d.getDate()-n);
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+  }
+  function fmtDate(s){ return (s||"").slice(0,10); }
+  function inRange(dateStr, from, to){
+    const d = fmtDate(dateStr);
+    if(!d) return false;
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  }
+
+  async function loadJson(path){
+    const r = await fetch(path, { cache:"no-store" });
+    if(!r.ok) throw new Error(`加载失败：${path} (${r.status})`);
+    return r.json();
+  }
+
+  // domain helpers
+  function buildDomainMap(domains){
+    const m = new Map();
+    domains.forEach(d=>m.set(d.id,d));
+    return m;
+  }
+  function domainPath(domainId, dm){
+    const names=[];
+    let cur = dm.get(domainId);
+    while(cur){
+      names.push(cur.name);
+      cur = cur.parent_id ? dm.get(cur.parent_id) : null;
+    }
+    return names.reverse().join(" / ");
+  }
+  function collectSubtreeIds(domainId, domains){
+    const out = new Set();
+    const byParent = new Map();
+    for(const d of domains){
+      if(!byParent.has(d.parent_id)) byParent.set(d.parent_id, []);
+      byParent.get(d.parent_id).push(d.id);
+    }
+    const stack=[domainId];
+    while(stack.length){
+      const cur = stack.pop();
+      if(!cur || out.has(cur)) continue;
+      out.add(cur);
+      const kids = byParent.get(cur) || [];
+      kids.forEach(k=>stack.push(k));
+    }
+    return out;
+  }
+
+  // business helpers
+  function isTech(info){ return (info.info_types||[]).includes("技术"); }
+  function getActiveAlert(infoId, alerts){
+    return alerts.find(a => a.info_item_id === infoId && a.status==="active") || null;
+  }
+  function labelColor(c){
+    if(c==="yellow") return "黄";
+    if(c==="orange") return "橙";
+    if(c==="red") return "红";
+    return c || "-";
+  }
+  function dotClass(c){
+    if(c==="yellow") return "yellow";
+    if(c==="orange") return "orange";
+    if(c==="red") return "red";
+    return "";
+  }
+  function sortItems(items, sortBy){
+    const arr=[...items];
+    if(sortBy==="time"){
+      arr.sort((a,b)=>fmtDate(b.published_at).localeCompare(fmtDate(a.published_at)));
+    }else{
+      arr.sort((a,b)=>{
+        const ia=a.importance_score??0, ib=b.importance_score??0;
+        if(ib!==ia) return ib-ia;
+        return fmtDate(b.published_at).localeCompare(fmtDate(a.published_at));
+      });
+    }
+    return arr;
+  }
+
+  // chart (vanilla canvas line)
+  function drawLineChart(canvas, points, yLabel){
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+
+    // background grid
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1;
+    for(let i=1;i<=4;i++){
+      const y = (h/5)*i;
+      ctx.beginPath();
+      ctx.moveTo(0,y);
+      ctx.lineTo(w,y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    if(!points.length){
+      ctx.fillStyle = "rgba(30,41,59,.75)";
+      ctx.font = "14px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillText("无可绘制数据（当前筛选下该指标没有数值）", 18, 28);
+      return;
+    }
+
+    const xs = points.map(p=>p.x);
+    const ys = points.map(p=>p.y);
+
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const pad = (maxY-minY)*0.08 || 1;
+
+    const y0 = minY - pad;
+    const y1 = maxY + pad;
+
+    const left=50, right=18, top=18, bottom=40;
+    const pw = w-left-right;
+    const ph = h-top-bottom;
+
+    function X(i){
+      if(points.length===1) return left + pw/2;
+      return left + (pw*(i/(points.length-1)));
+    }
+    function Y(v){
+      return top + ph * (1 - (v - y0)/(y1-y0));
+    }
+
+    // axes labels
+    ctx.fillStyle = "rgba(30,41,59,.75)";
+    ctx.font = "12px " + getComputedStyle(document.body).fontFamily;
+    ctx.fillText(`${yLabel}（min=${minY.toFixed(2)}, max=${maxY.toFixed(2)}）`, left, h-12);
+
+    // line
+    ctx.strokeStyle = "rgba(37,99,235,.95)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    points.forEach((p,i)=>{
+      const x = X(i);
+      const y = Y(p.y);
+      if(i===0) ctx.moveTo(x,y);
+      else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+
+    // points
+    ctx.fillStyle = "rgba(37,99,235,.95)";
+    points.forEach((p,i)=>{
+      const x=X(i), y=Y(p.y);
+      ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+    });
+
+    // x labels (first/last)
+    ctx.fillStyle = "rgba(30,41,59,.65)";
+    ctx.font = "11px " + getComputedStyle(document.body).fontFamily;
+    ctx.fillText(points[0].x, left, h-22);
+    if(points.length>1){
+      const last = points[points.length-1].x;
+      const tw = ctx.measureText(last).width;
+      ctx.fillText(last, w-right-tw, h-22);
+    }
+  }
+
+  // dynamic table columns
+  const ALL_COLS = [
+    { key:"title", label:"标题" },
+    { key:"published_at", label:"发布时间" },
+    { key:"importance_score", label:"重要度" },
+    { key:"alert", label:"预警" },
+    { key:"source_types", label:"来源" }
+  ];
+
+  function renderColChips(selected, onToggle){
+    const box = $("#colChips");
+    box.innerHTML = "";
+    for(const c of ALL_COLS){
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.textContent = (selected.has(c.key) ? "✓ " : "") + c.label;
+      chip.addEventListener("click", ()=> onToggle(c.key));
+      box.appendChild(chip);
+    }
+  }
+
+  function renderTable(items, alerts, domainMap, selectedCols){
+    const head = $("#tblHead");
+    const body = $("#tblBody");
+    head.innerHTML = "";
+    body.innerHTML = "";
+
+    const cols = ALL_COLS.filter(c => selectedCols.has(c.key));
+
+    cols.forEach(c=>{
+      const th = document.createElement("th");
+      th.textContent = c.label;
+      head.appendChild(th);
+    });
+
+    for(const it of items.slice(0, 12)){ // 样机：展示前12条
+      const tr = document.createElement("tr");
+      for(const c of cols){
+        const td = document.createElement("td");
+        if(c.key==="title"){
+          td.innerHTML = `<a href="info_detail.html?id=${encodeURIComponent(it.id)}">${it.title}</a>
+                          <div class="muted small">${domainPath(it.domain_id, domainMap)}</div>`;
+        }else if(c.key==="published_at"){
+          td.textContent = fmtDate(it.published_at);
+        }else if(c.key==="importance_score"){
+          td.textContent = String(it.importance_score ?? "-");
+        }else if(c.key==="alert"){
+          const a = getActiveAlert(it.id, alerts);
+          td.innerHTML = a
+            ? `<span class="pill"><span class="dot ${dotClass(a.alert_color)}"></span> ${labelColor(a.alert_color)}</span>`
+            : "—";
+        }else if(c.key==="source_types"){
+          td.textContent = (it.source_types || []).join(" / ");
+        }
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    }
+  }
+
+  async function main(){
+    try{
+      // Load domains (flatten tree from API) and published info items in parallel
+      const [domainTree, rawItems] = await Promise.all([
+        loadApi("/domains/tree"),
+        loadApi("/info-items?status=published")
+      ]);
+
+      // Flatten the domain tree into a flat array (same shape as domains.json)
+      const domains = [];
+      (function flattenTree(nodes){
+        for(const n of (nodes || [])){
+          domains.push({ id: n.id, name: n.name, parent_id: n.parent_id ?? null, level: n.level, sort_order: n.sort_order, is_active: n.is_active });
+          flattenTree(n.children || []);
+        }
+      })(domainTree || []);
+
+      // Normalize info items: add domain_id (first entry) for backwards-compat filtering
+      const infoItems = (rawItems || []).map(it => ({
+        ...it,
+        domain_id: (it.domain_ids || [])[0] || null
+      }));
+
+      // Build alerts from embedded alert fields on info items
+      const alerts = infoItems
+        .filter(it => it.alert_status === "active")
+        .map(it => ({ info_item_id: it.id, status: it.alert_status, alert_color: it.alert_color }));
+
+      // indicator files are optional (static config served by nginx)
+      let indicatorDefs = [];
+      let indicatorValues = [];
+      try{
+        indicatorDefs = await loadJson("./data/indicator_defs.json");
+        indicatorValues = await loadJson("./data/indicator_values.json");
+      }catch(_){
+        // keep empty, show hint later
+      }
+
+      const domainMap = buildDomainMap(domains);
+
+
+
+      // ---- Domain tree (expand/collapse) ----
+function buildChildrenIndex(domains){
+  const byParent = new Map();
+  for(const d of domains){
+    if(d.is_active === false) continue;
+    const p = d.parent_id ?? null;
+    if(!byParent.has(p)) byParent.set(p, []);
+    byParent.get(p).push(d);
+  }
+  // sort children
+  for(const [p, arr] of byParent.entries()){
+    arr.sort((a,b)=>{
+      const sa = a.sort_order ?? 999, sb = b.sort_order ?? 999;
+      if(sa !== sb) return sa - sb;
+      return (a.name||"").localeCompare(b.name||"");
+    });
+  }
+  return byParent;
+}
+
+const CHILDREN = buildChildrenIndex(domains);
+// expanded set: store node ids that are expanded
+const expanded = new Set();
+
+// 仅展开到当前 domainId 的路径（其他路径保持折叠）
+function expandTo(domainId){
+  expanded.clear();
+  let cur = domainMap.get(domainId);
+  while(cur && cur.parent_id){
+    expanded.add(cur.parent_id);
+    cur = domainMap.get(cur.parent_id);
+  }
+}
+
+function applyDomainSelection(nextId){
+  domainId = nextId;
+  setQuery({ domain_id: domainId });
+  syncHeader();
+  renderAll();
+  expandTo(domainId);
+  renderTree();
+}
+
+function hasChildren(id){
+  return (CHILDREN.get(id) || []).length > 0;
+}
+
+function renderTree(){
+  const box = $("#domainTree");
+  if(!box) return;
+  box.innerHTML = "";
+
+  // roots = parent_id null
+  const roots = (CHILDREN.get(null) || []);
+
+  function renderNode(node, depth){
+    const row = document.createElement("div");
+    row.className = "tree-row";
+
+    // indent
+    for(let i=0;i<depth;i++){
+      const ind = document.createElement("div");
+      ind.className = "tree-indent";
+      row.appendChild(ind);
+    }
+
+    // toggle
+    const toggle = document.createElement("div");
+    const children = CHILDREN.get(node.id) || [];
+    const expandable = children.length > 0;
+    toggle.className = "tree-toggle" + (expandable ? "" : " empty");
+    toggle.textContent = expandable ? (expanded.has(node.id) ? "−" : "+") : "·";
+    if(expandable){
+      toggle.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        applyDomainSelection(node.id);
+      });
+    }
+    row.appendChild(toggle);
+
+    // label
+    const label = document.createElement("div");
+    label.className = "tree-node" + (node.id === domainId ? " active" : "");
+    label.textContent = `L${node.level} · ${node.name}`;
+    label.title = domainPath(node.id, domainMap);
+    label.addEventListener("click", ()=>{
+      applyDomainSelection(node.id);
+    });
+    row.appendChild(label);
+
+    box.appendChild(row);
+
+    // children
+    if(expanded.has(node.id)){
+      for(const child of children){
+        renderNode(child, depth + 1);
+      }
+    }
+  }
+
+  for(const r of roots){
+    renderNode(r, 0);
+  }
+}
+
+
+
+      // init domain
+      const ccusRoot = domains.find(d =>
+  (d.parent_id == null) &&
+  (String(d.id).includes("CCUS") || String(d.name).toUpperCase().includes("CCUS"))
+);
+
+let domainId =
+  qp("domain_id") ||
+  ccusRoot?.id ||
+  domains.find(d=>!d.parent_id)?.id ||
+  domains[0]?.id;
+
+      expandTo(domainId);
+renderTree();
+
+      const level = domainMap.get(domainId)?.level ?? "-";
+
+
+      // init dates
+      $("#fromDate").value = qp("from") || daysAgoISO(30);
+      $("#toDate").value = qp("to") || todayISO();
+
+      // init filters
+      $("#alertOnly").value = qp("alert_only") || "";
+      $("#q").value = qp("q") || "";
+      $("#sortBy").value = qp("sort") || "importance";
+
+
+
+      // left domain header
+      function syncHeader(){
+        $("#pathText").textContent = domainPath(domainId, domainMap);
+        $("#domainIdText").textContent = domainId;
+        $("#levelText").textContent = String(domainMap.get(domainId)?.level ?? "-");
+        const isLvl4 = String(domainMap.get(domainId)?.level) === "4";
+        $("#lvl4Summary").style.display = isLvl4 ? "" : "none";
+      }
+
+      // domain search
+
+
+      $("#domainSearch").addEventListener("input", ()=>{
+        const q = $("#domainSearch").value.trim().toLowerCase();
+        const box = $("#domainSearchResults");
+        box.innerHTML = "";
+        if(!q) return;
+        const hits = domains
+          .filter(d => (d.name||"").toLowerCase().includes(q))
+          .slice(0, 10);
+        for(const d of hits){
+          const chip = document.createElement("div");
+          chip.className = "chip";
+          chip.textContent = `${d.name}（L${d.level}）`;
+          chip.title = domainPath(d.id, domainMap);
+          chip.addEventListener("click", ()=>{
+  $("#domainSearch").value = "";
+  $("#domainSearchResults").innerHTML = "";
+  applyDomainSelection(d.id);
+});
+
+          box.appendChild(chip);
+        }
+        if(hits.length===0){
+          box.innerHTML = `<div class="muted small">无匹配结果</div>`;
+        }
+      });
+
+      // indicator select
+      function fillIndicatorSel(availableDefIds){
+        const sel = $("#indicatorSel");
+        sel.innerHTML = "";
+        if(!indicatorDefs.length){
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "（缺少 indicator_defs/indicator_values）";
+          sel.appendChild(opt);
+          return;
+        }
+        const defs = indicatorDefs
+          .filter(d => availableDefIds.has(d.id))
+          .sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+
+        if(defs.length===0){
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "（当前筛选下无指标数据）";
+          sel.appendChild(opt);
+          return;
+        }
+
+        const opt0 = document.createElement("option");
+        opt0.value = defs[0].id;
+        opt0.textContent = defs[0].name + (defs[0].unit_default ? ` (${defs[0].unit_default})` : "");
+        sel.appendChild(opt0);
+
+        for(let i=1;i<defs.length;i++){
+          const opt = document.createElement("option");
+          opt.value = defs[i].id;
+          opt.textContent = defs[i].name + (defs[i].unit_default ? ` (${defs[i].unit_default})` : "");
+          sel.appendChild(opt);
+        }
+      }
+
+      // list render
+      function renderList(items){
+        $("#countText").textContent = String(items.length);
+        const box = $("#list");
+        box.innerHTML = "";
+        if(items.length===0){
+          box.innerHTML = `<div class="muted">无符合条件的情报</div>`;
+          return;
+        }
+        for(const it of items.slice(0, 20)){
+          const a = getActiveAlert(it.id, alerts);
+          const el = document.createElement("div");
+          el.className = "item";
+          el.innerHTML = `
+            <div class="item-title">
+              <a href="info_detail.html?id=${encodeURIComponent(it.id)}">${it.title}</a>
+            </div>
+            <div class="item-meta">
+              <span>${fmtDate(it.published_at)}</span>
+              <span>重要度 ${it.importance_score ?? "-"}</span>
+              ${a ? `<span class="pill"><span class="dot ${dotClass(a.alert_color)}"></span> 预警${labelColor(a.alert_color)}</span>` : `<span class="muted">无预警</span>`}
+              <span class="muted">${domainPath(it.domain_id, domainMap)}</span>
+            </div>
+          `;
+          box.appendChild(el);
+        }
+      }
+
+      // chart data by indicator
+      function buildChartPoints(filteredItems, indicatorDefId){
+        if(!indicatorDefId || !indicatorValues.length) return [];
+        const setIds = new Set(filteredItems.map(x=>x.id));
+        const vals = indicatorValues
+          .filter(v => setIds.has(v.info_item_id) && v.indicator_def_id === indicatorDefId && typeof v.value_number === "number")
+          .map(v => ({ info_item_id: v.info_item_id, y: v.value_number }))
+          .filter(v => Number.isFinite(v.y));
+
+        // map to date for x, use info published_at
+        const infoById = new Map(filteredItems.map(i=>[i.id,i]));
+        const points = vals.map(v=>{
+          const info = infoById.get(v.info_item_id);
+          return { x: fmtDate(info?.published_at || ""), y: v.y };
+        }).filter(p=>p.x);
+
+        // sort by date
+        points.sort((a,b)=>a.x.localeCompare(b.x));
+        return points;
+      }
+
+      function getIndicatorLabel(defId){
+        const d = indicatorDefs.find(x=>x.id===defId);
+        if(!d) return "指标";
+        return d.name + (d.unit_default ? ` (${d.unit_default})` : "");
+      }
+
+      // dynamic columns
+      const selectedCols = new Set(["title","published_at","importance_score","alert"]);
+      function toggleCol(k){
+        if(selectedCols.has(k)) selectedCols.delete(k);
+        else selectedCols.add(k);
+        renderColChips(selectedCols, toggleCol);
+        // refresh table using latest cached list
+        renderTable(LAST_ITEMS, alerts, domainMap, selectedCols);
+      }
+      renderColChips(selectedCols, toggleCol);
+
+      let LAST_ITEMS = [];
+
+      function renderAll(){
+        const subtree = collectSubtreeIds(domainId, domains);
+        const from = $("#fromDate").value;
+        const to = $("#toDate").value;
+        const alertOnly = $("#alertOnly").value === "true";
+        const q = $("#q").value.trim().toLowerCase();
+        const sortBy = $("#sortBy").value;
+
+        setQuery({
+          domain_id: domainId,
+          from, to,
+          alert_only: alertOnly ? "true" : "",
+          q: q || "",
+          sort: sortBy
+        });
+
+        let items = infoItems.filter(i =>
+          i.status === "published" &&
+          subtree.has(i.domain_id) &&
+          inRange(i.published_at, from, to)
+        );
+
+        if(alertOnly){
+          items = items.filter(i => !!getActiveAlert(i.id, alerts));
+        }
+        if(q){
+          items = items.filter(i =>
+            (i.title||"").toLowerCase().includes(q) ||
+            (i.content||"").toLowerCase().includes(q)
+          );
+        }
+
+        items = sortItems(items, sortBy);
+        LAST_ITEMS = items;
+
+        renderList(items);
+        renderTable(items, alerts, domainMap, selectedCols);
+
+        // indicator select candidates
+        const availableDefIds = new Set();
+        if(indicatorValues.length){
+          const setIds = new Set(items.map(x=>x.id));
+          for(const v of indicatorValues){
+            if(setIds.has(v.info_item_id)) availableDefIds.add(v.indicator_def_id);
+          }
+        }
+        fillIndicatorSel(availableDefIds);
+
+        // draw chart
+        const defId = $("#indicatorSel").value;
+        const pts = buildChartPoints(items, defId);
+        drawLineChart($("#chart"), pts, getIndicatorLabel(defId));
+        $("#chartHint").textContent = indicatorDefs.length
+          ? `已绘制：${getIndicatorLabel(defId)}；点数=${pts.length}`
+          : "缺少 indicator_defs.json / indicator_values.json：趋势图不可用（样机其余功能正常）";
+      }
+
+      $("#btnApply").addEventListener("click", renderAll);
+      $("#btnGoInfoTable").addEventListener("click", ()=>{
+        const q = new URLSearchParams({
+          domain_id: domainId,
+          from: $("#fromDate").value,
+          to: $("#toDate").value
+        });
+        location.href = `info_table.html?${q.toString()}`;
+      });
+
+      $("#indicatorSel").addEventListener("change", ()=>{
+        const defId = $("#indicatorSel").value;
+        const pts = buildChartPoints(LAST_ITEMS, defId);
+        drawLineChart($("#chart"), pts, getIndicatorLabel(defId));
+        $("#chartHint").textContent = indicatorDefs.length
+          ? `已绘制：${getIndicatorLabel(defId)}；点数=${pts.length}`
+          : "缺少指标文件：趋势图不可用";
+      });
+
+      syncHeader();
+      renderAll();
+
+    }catch(err){
+      $("#errorBox").style.display = "";
+      $("#errorBox").innerHTML = `
+        <div style="font-weight:850;margin-bottom:6px;">页面加载失败</div>
+        <div class="muted small">${(err && err.message) ? err.message : String(err)}</div>
+        <div class="muted small" style="margin-top:10px;">
+          提示：请用本地服务器打开，并确认 ./data 下 JSON 文件命名与路径一致。
+        </div>
+      `;
+    }
+  }
+
+  main();
+</script>
+<script src="auth.js"></script>
+<script src="portal_shell.js"></script>
+</body>
+</html>

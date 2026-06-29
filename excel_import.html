@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>批量导入（样机）</title>
+  <style>
+    :root{
+      --bg:#f8f9fc; --text:#1e293b; --muted:#64748b; --line:rgba(0,0,0,.08);
+      --r:14px; --shadow: 0 4px 16px rgba(0,0,0,.06);
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family:var(--sans); color:var(--text);
+      background: #f8f9fc;
+    }
+    a{ color:#2563eb; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    .topbar{
+      position:sticky; top:0; z-index:20;
+      backdrop-filter: blur(10px);
+      background: rgba(255,255,255,.92);
+      border-bottom:1px solid var(--line);
+    }
+    .topbar-inner{
+      max-width:1400px; margin:0 auto;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; gap:12px;
+    }
+    .brand{ font-weight:850; }
+    .nav{ display:flex; gap:10px; flex-wrap:wrap; }
+    .nav a{
+      padding:8px 10px; border-radius:10px;
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+      color:var(--text); font-size:14px;
+    }
+
+    .container{ max-width:1200px; margin:0 auto; padding:16px; }
+    .card{
+      background: #ffffff;
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .hd{ padding:12px 14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .bd{ padding:12px 14px; }
+    .muted{ color:var(--muted); }
+    .small{ font-size:12px; }
+
+    input[type="file"]{
+      width:100%;
+      background:#ffffff;
+      border:1px solid #d1d5db;
+      color:var(--text);
+      padding:10px;
+      border-radius:12px;
+      font-size:13px;
+      outline:none;
+    }
+
+    table{ width:100%; border-collapse:separate; border-spacing:0; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; background:#f8fafc; }
+    th,td{ padding:10px; border-bottom:1px solid #e2e8f0; font-size:12px; vertical-align:top; }
+    th{ background:#f1f5f9; font-weight:650; white-space:nowrap; }
+    tr:last-child td{ border-bottom:none; }
+
+    .btn{ cursor:pointer; padding:8px 10px; border-radius:10px; border:1px solid #d1d5db; background:#f1f5f9; color:var(--text); font-size:12px; }
+    .btn:hover{ background:#e2e8f0; }
+
+    .error{ color:#fca5a5; }
+    .success{ color:#a7f3d0; }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">前沿技术情报与预警平台（样机） <span class="muted small">/ 批量导入</span></div>
+    <div class="nav">
+        <a href="index.html">核心门户</a>
+        <a href="info_table.html">情报总表</a>
+        <a href="industry_dashboards.html">行业仪表盘</a>
+        <a href="industry_map.html">行业图景</a>
+        <a href="sources.html">信息源</a>
+        <a href="upload_review.html?v=20260326d">上传&复核</a>
+        <a href="drafts.html">草稿管理</a>
+        <a href="excel_import.html">批量导入</a>
+        <button onclick="Auth.showChangePassword()" style="cursor:pointer;padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:14px;">修改密码</button>
+        <button onclick="Auth.logout()" style="cursor:pointer;padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:14px;">退出</button>
+      </div>
+  </div>
+</div>
+
+<div class="container">
+  <section class="card">
+    <div class="hd">
+      <div style="font-weight:750;">批量导入（仅支持 CSV）</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn" href="data/draft_template.csv" download>下载草稿模板</a>
+        <a class="btn" href="data/upload_template.csv" download>下载批量上传模板</a>
+        <a class="btn" href="data/draft_upload_guide.csv" download>下载CSV说明模板</a>
+      </div>
+    </div>
+    <div class="bd">
+      <input type="file" id="fileInput" accept=".csv,text/csv" />
+      <div class="muted small" style="margin-top:8px;">仅支持 CSV 文件导入，不支持 Excel `.xlsx`。`domains` 字段可填写多个领域 ID，并用英文分号 `;` 分隔。</div>
+
+      <div id="status" style="margin-top:10px;"></div>
+
+      <div style="overflow:auto; margin-top:12px;">
+        <table>
+          <thead>
+            <tr>
+              <th>标题</th>
+              <th>发布时间</th>
+              <th>领域</th>
+              <th>重要度</th>
+              <th>预警手动</th>
+              <th>校验</th>
+            </tr>
+          </thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn" id="btnCommitDraft">批量生成草稿</button>
+        <button class="btn" id="btnCommitPublish">批量发布（跳过草稿）</button>
+        <a class="btn" href="drafts.html">进入草稿管理</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="/auth.js"></script>
+<script>
+  Auth.requireAuth();
+  const $ = s => document.querySelector(s);
+  const API_BASE = window.API_BASE || "/api";
+  const indicatorState = {
+    defs: [],
+    byId: new Map(),
+    byNormName: new Map()
+  };
+  const domainState = {
+    rows: [],
+    byId: new Map()
+  };
+
+  async function loadApi(path, options = {}){
+    const r = await Auth.authFetch(`${API_BASE}${path}`, {
+      cache: "no-store",
+      ...options
+    });
+    if(!r) return null;
+    if(!r.ok){
+      const text = await r.text();
+      throw new Error(`API请求失败 (${r.status}) ${text}`);
+    }
+    if(r.status === 204) return null;
+    return await r.json();
+  }
+
+  async function loadJson(path){
+    const r = await fetch(path, { cache: "no-store" });
+    if(!r.ok){
+      throw new Error(`加载失败 (${r.status}) ${path}`);
+    }
+    return await r.json();
+  }
+
+  function normalizeIndicatorName(name){
+    return String(name || "")
+      .replace(/\s+/g, "")
+      .replace(/[()（）[\]【】]/g, "")
+      .replace(/₂/g, "2")
+      .toLowerCase();
+  }
+
+  function buildIndicatorNormNameMap(defs){
+    const map = new Map();
+    (defs || []).forEach(def => {
+      [def?.name, def?.match_name].forEach(rawName => {
+        const normalized = normalizeIndicatorName(rawName);
+        if(normalized && !map.has(normalized)){
+          map.set(normalized, def);
+        }
+      });
+    });
+    return map;
+  }
+
+  async function ensureIndicatorDefs(){
+    if(indicatorState.defs.length) return;
+    const defs = await loadJson("./data/indicator_defs.json");
+    indicatorState.defs = (defs || []).filter(def => def && def.is_active !== false);
+    indicatorState.byId = new Map(indicatorState.defs.map(def => [def.id, def]));
+    indicatorState.byNormName = buildIndicatorNormNameMap(indicatorState.defs);
+  }
+
+  async function ensureDomainMeta(){
+    if(domainState.rows.length) return;
+    const tree = await loadApi("/domains/tree");
+    const rows = [];
+    (function flattenTree(nodes){
+      for(const n of (nodes || [])){
+        rows.push({ id: n.id, name: n.name, parent_id: n.parent_id ?? null, level: n.level, sort_order: n.sort_order, is_active: n.is_active });
+        flattenTree(n.children || []);
+      }
+    })(tree || []);
+    domainState.rows = rows;
+    domainState.byId = new Map(rows.map(row => [row.id, row]));
+  }
+
+  function getCcuseLevel2DomainIds(domainIds){
+    const result = new Set();
+    (domainIds || []).forEach(domainId => {
+      let current = domainState.byId.get(domainId);
+      const visited = new Set();
+      while(current && !visited.has(current.id)){
+        visited.add(current.id);
+        if(String(current.id || "").startsWith("DOM_CCUS_L2_")){
+          result.add(current.id);
+          break;
+        }
+        current = current.parent_id ? domainState.byId.get(current.parent_id) : null;
+      }
+    });
+    return Array.from(result);
+  }
+
+  function getInvalidDomainIds(domainIds){
+    return (domainIds || []).filter(domainId => {
+      const domain = domainState.byId.get(domainId);
+      return !domain || Number(domain.level) !== 4;
+    });
+  }
+
+  function getAllowedIndicatorDefs(domainIds){
+    const ccusLevel2Ids = new Set(getCcuseLevel2DomainIds(domainIds));
+    if(!ccusLevel2Ids.size){
+      return indicatorState.defs;
+    }
+    return indicatorState.defs.filter(def => {
+      const allowed = Array.isArray(def.allowed_domain_ids) ? def.allowed_domain_ids : [];
+      if(!allowed.length) return true;
+      return allowed.some(id => ccusLevel2Ids.has(id));
+    });
+  }
+
+  function matchIndicatorDef(rawId, name, domainIds){
+    if(rawId){
+      return indicatorState.byId.get(rawId) || null;
+    }
+    const normalizedName = normalizeIndicatorName(name);
+    if(!normalizedName) return null;
+    const allowedDefs = getAllowedIndicatorDefs(domainIds);
+    return allowedDefs.find(def => {
+      return [def?.name, def?.match_name].some(rawName => normalizeIndicatorName(rawName) === normalizedName);
+    }) || null;
+  }
+
+  function collectIndicatorEntries(row){
+    const domainIds = parseList(row.domains);
+    const allowedIds = new Set(getAllowedIndicatorDefs(domainIds).map(def => def.id));
+    const entries = [];
+    for(let i = 1; i <= 20; i++){
+      const rawId = (row[`indicator_${i}_id`] || "").trim();
+      const name = (row[`indicator_${i}_name`] || "").trim();
+      const value = (row[`indicator_${i}_value`] || "").trim();
+      const unit = (row[`indicator_${i}_unit`] || "").trim();
+      if(!rawId && !name && !value && !unit) continue;
+      const matched = matchIndicatorDef(rawId, name, domainIds);
+      let error = "";
+      if(!matched){
+        error = `指标 ${i} 未命中预设指标`;
+      }else if(!allowedIds.has(matched.id)){
+        error = `指标 ${i} 不属于当前 CCUS 二级分类可用范围`;
+      }
+      entries.push({ index: i, rawId, name, value, unit, matched, error });
+    }
+    return entries;
+  }
+
+  function parseCSV(text){
+    const rows = [];
+    let row = [];
+    let cell = "";
+    let inQuotes = false;
+
+    for(let i = 0; i < text.length; i++){
+      const ch = text[i];
+      const next = text[i + 1];
+      if(ch === '"'){
+        if(inQuotes && next === '"'){
+          cell += '"';
+          i++;
+        }else{
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+      if(ch === "," && !inQuotes){
+        row.push(cell);
+        cell = "";
+        continue;
+      }
+      if((ch === "\n" || ch === "\r") && !inQuotes){
+        if(ch === "\r" && next === "\n") i++;
+        row.push(cell);
+        rows.push(row);
+        row = [];
+        cell = "";
+        continue;
+      }
+      cell += ch;
+    }
+
+    if(cell.length || row.length){
+      row.push(cell);
+      rows.push(row);
+    }
+
+    if(rows.length === 0) return [];
+    const header = rows[0].map(x => (x || "").trim());
+    return rows.slice(1).filter(cells => cells.some(v => (v || "").trim())).map(cells => {
+      const obj = {};
+      header.forEach((key, idx) => {
+        obj[key] = (cells[idx] || "").trim();
+      });
+      return obj;
+    });
+  }
+
+  function textLooksCorrupted(text){
+    return text.includes("�");
+  }
+
+  async function readCsvText(file){
+    const buf = await file.arrayBuffer();
+    let text = new TextDecoder("utf-8").decode(buf);
+    if(textLooksCorrupted(text)){
+      try{
+        text = new TextDecoder("gb18030").decode(buf);
+      }catch{
+      }
+    }
+    return text;
+  }
+
+  function pad2(n){
+    return String(n).padStart(2, "0");
+  }
+
+  function normalizeDateValue(value){
+    if(value instanceof Date && Number.isFinite(value.getTime())){
+      const y = value.getFullYear();
+      const m = pad2(value.getMonth() + 1);
+      const d = pad2(value.getDate());
+      return `${y}-${m}-${d}`;
+    }
+    const raw = String(value ?? "").trim();
+    if(!raw) return "";
+
+    if(/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(raw)){
+      const [y, m, d] = raw.split(/[-/.]/).map(Number);
+      return `${y}-${pad2(m)}-${pad2(d)}`;
+    }
+
+    if(/^\d+(\.\d+)?$/.test(raw)){
+      const serial = Number(raw);
+      if(Number.isFinite(serial) && serial > 20000 && serial < 90000){
+        const utc = new Date(Math.round((serial - 25569) * 86400 * 1000));
+        const y = utc.getUTCFullYear();
+        const m = pad2(utc.getUTCMonth() + 1);
+        const d = pad2(utc.getUTCDate());
+        return `${y}-${m}-${d}`;
+      }
+    }
+
+    return raw;
+  }
+
+  function normalizeRow(rawRow){
+    const row = { ...rawRow };
+    row.published_at = normalizeDateValue(row.published_at);
+    row.custom_expires_on = normalizeDateValue(row.custom_expires_on);
+    row.duration = String(row.duration || "").trim().toLowerCase();
+    return row;
+  }
+
+  function normalizeClassification(v){
+    const val = (v || "").trim();
+    if(!val) return "内部";
+    const lower = val.toLowerCase();
+    if(lower === "public") return "公开";
+    if(lower === "internal") return "内部";
+    if(lower === "secret") return "秘密";
+    if(lower === "top_secret") return "机密";
+    return val;
+  }
+
+  function parseBool(v){
+    const val = String(v).trim().toLowerCase();
+    return val === "true" || val === "1" || val === "yes" || val === "y" || val === "是";
+  }
+
+  function parseList(v){
+    return String(v || "").split(/[;；,，]/).map(s => s.trim()).filter(Boolean);
+  }
+
+  function formatDateInputValue(date){
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function durationToExpiresAt(duration, customExpiresOn = ""){
+    if(duration === "custom"){
+      if(!customExpiresOn) return null;
+      const date = new Date(`${customExpiresOn}T23:59:59`);
+      if(Number.isNaN(date.getTime())) return null;
+      return date.toISOString();
+    }
+    const now = new Date();
+    if(duration === "week"){
+      now.setDate(now.getDate() + 7);
+    }else if(duration === "month"){
+      now.setMonth(now.getMonth() + 1);
+    }else if(duration === "quarter"){
+      now.setMonth(now.getMonth() + 3);
+    }else{
+      return null;
+    }
+    return now.toISOString();
+  }
+
+  function validateCustomExpiresOn(row){
+    const duration = String(row.duration || "month").trim();
+    const customExpiresOn = String(row.custom_expires_on || "").trim();
+    if(duration !== "custom") return "";
+    if(!customExpiresOn) return "duration=custom 时必须填写 custom_expires_on";
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(customExpiresOn)) return "custom_expires_on 格式必须为 YYYY-MM-DD";
+    if(customExpiresOn <= formatDateInputValue(new Date())) return "custom_expires_on 必须晚于当天";
+    return "";
+  }
+
+  function extractIndicators(row){
+    return collectIndicatorEntries(row)
+      .filter(entry => !entry.error && entry.matched)
+      .map(entry => ({
+        indicator_id: entry.matched.id,
+        name: entry.matched.name,
+        value: entry.value,
+        unit: entry.unit || entry.matched.unit_default || "",
+        keep: true
+      }));
+  }
+
+  function validate(row, mode){
+    const required = mode === "publish"
+      ? ["title", "content", "domains"]
+      : ["title", "content", "domains"];
+    const missing = required.filter(key => !row[key]);
+    if(missing.length){
+      return `缺少字段：${missing.join("、")}`;
+    }
+    const importance = Number(row.importance_score || 3);
+    if(!Number.isFinite(importance) || importance < 1 || importance > 5){
+      return "importance_score 必须是 1-5";
+    }
+    if(parseBool(row.alert_manual)){
+      const alertRequired = ["alert_title", "alert_body", "reviewer_comment", "duration", "alert_color"];
+      const missingAlert = alertRequired.filter(key => !row[key]);
+      if(missingAlert.length){
+        return `预警缺失：${missingAlert.join("、")}`;
+      }
+      const customExpiresError = validateCustomExpiresOn(row);
+      if(customExpiresError) return customExpiresError;
+    }
+    if(mode === "publish" && parseList(row.domains).length === 0){
+      return "发布模式下 domains 至少要有一个领域";
+    }
+    const invalidDomainIds = getInvalidDomainIds(parseList(row.domains));
+    if(invalidDomainIds.length){
+      return `domains 仅允许填写四级领域ID，以下不符合要求：${invalidDomainIds.join("；")}`;
+    }
+    const invalidIndicator = collectIndicatorEntries(row).find(entry => entry.error);
+    if(invalidIndicator){
+      return invalidIndicator.error;
+    }
+    return "";
+  }
+
+  function toDraft(row){
+    return {
+      title: row.title,
+      published_at: row.published_at,
+      source_url: row.source_url,
+      source_types: parseList(row.source_types),
+      info_types: parseList(row.info_types),
+      domain_ids: parseList(row.domains),
+      importance_score: Number(row.importance_score || 3),
+      is_new_tech: parseBool(row.is_new_tech),
+      content: row.content,
+      tags: parseList(row.tags),
+      classification: normalizeClassification(row.classification),
+      comment: row.comment || "",
+      alert_manual: parseBool(row.alert_manual),
+      alert_title: row.alert_title || "",
+      alert_body: row.alert_body || "",
+      reviewer_comment: row.reviewer_comment || "",
+      duration: row.duration || "month",
+      custom_expires_on: row.custom_expires_on || "",
+      alert_color: row.alert_color || "orange",
+      indicators: extractIndicators(row),
+      status: "draft"
+    };
+  }
+
+  async function createDraftRow(row){
+    const draft = toDraft(row);
+    await loadApi("/info-items/draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: draft.title,
+        content: draft.content,
+        source_url: draft.source_url || null,
+        published_at: draft.published_at ? `${draft.published_at}T00:00:00Z` : null,
+        importance_score: draft.importance_score,
+        is_new_tech: draft.is_new_tech,
+        comment: draft.comment || null,
+        source_types: draft.source_types,
+        info_types: draft.info_types,
+        tags: draft.tags,
+        domain_ids: draft.domain_ids,
+        classification: draft.classification || null,
+        status: "draft",
+        draft_data: {
+          indicators: draft.indicators || [],
+          duration: draft.duration || "month",
+          custom_expires_on: draft.custom_expires_on || null,
+          manual_alert: !!draft.alert_manual
+        },
+        alert: draft.alert_manual ? {
+          enabled: true,
+          alert_title: draft.alert_title || "",
+          alert_body: draft.alert_body || "",
+          reviewer_comment: draft.reviewer_comment || "",
+          alert_color: draft.alert_color || "orange",
+          expires_at: durationToExpiresAt(draft.duration || "month", draft.custom_expires_on || "")
+        } : null
+      })
+    });
+  }
+
+  async function publishRow(row){
+    return await loadApi("/info-items/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: row.title,
+        content: row.content,
+        source_url: row.source_url || null,
+        published_at: row.published_at ? `${row.published_at}T00:00:00Z` : null,
+        importance_score: Number(row.importance_score || 3),
+        is_new_tech: parseBool(row.is_new_tech),
+        comment: row.comment || null,
+        source_types: parseList(row.source_types),
+        info_types: parseList(row.info_types),
+        tags: parseList(row.tags),
+        domain_ids: parseList(row.domains),
+        classification: normalizeClassification(row.classification),
+        draft_data: {
+          indicators: extractIndicators(row),
+          duration: row.duration || "month",
+          custom_expires_on: row.custom_expires_on || null,
+          manual_alert: parseBool(row.alert_manual)
+        },
+        alert: parseBool(row.alert_manual) ? {
+          enabled: true,
+          alert_title: row.alert_title || "",
+          alert_body: row.alert_body || "",
+          reviewer_comment: row.reviewer_comment || "",
+          alert_color: row.alert_color || "orange",
+          expires_at: durationToExpiresAt(row.duration || "month", row.custom_expires_on || "")
+        } : null
+      })
+    });
+  }
+
+  let previewRows = [];
+
+  $("#fileInput").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    try{
+      await ensureIndicatorDefs();
+      await ensureDomainMeta();
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      if(ext !== "csv"){
+        throw new Error("仅支持 CSV 文件，请使用 .csv 模板后重新上传");
+      }
+      const text = await readCsvText(file);
+      previewRows = parseCSV(text).map(normalizeRow);
+      renderPreview();
+    }catch(err){
+      $("#status").textContent = `读取文件失败：${err.message || err}`;
+      $("#status").className = "error";
+    }
+  });
+
+  function renderPreview(){
+    const tbody = $("#previewBody");
+    tbody.innerHTML = "";
+    if(previewRows.length === 0){
+      $("#status").textContent = "";
+      return;
+    }
+
+    let errorCount = 0;
+    previewRows.forEach(row => {
+      const error = validate(row, "draft");
+      if(error) errorCount++;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.title || "-"}</td>
+        <td>${row.published_at || "-"}</td>
+        <td>${row.domains || "-"}</td>
+        <td>${row.importance_score || "-"}</td>
+        <td>${row.alert_manual || "false"}</td>
+        <td class="${error ? "error" : "success"}">${error || "通过"}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    $("#status").textContent = errorCount ? `发现 ${errorCount} 行错误，需修正后再提交。` : "校验通过，可批量生成草稿或直接发布。";
+    $("#status").className = errorCount ? "error" : "success";
+  }
+
+  $("#btnCommitDraft").addEventListener("click", async () => {
+    if(previewRows.length === 0){
+      alert("请先上传 CSV 文件");
+      return;
+    }
+    await ensureIndicatorDefs();
+    await ensureDomainMeta();
+    const invalid = previewRows.find(row => validate(row, "draft"));
+    if(invalid){
+      alert("存在校验错误，无法提交。");
+      return;
+    }
+    let ok = 0;
+    let fail = 0;
+    const errors = [];
+    for(const row of previewRows){
+      try{
+        await createDraftRow(row);
+        ok++;
+      }catch(err){
+        fail++;
+        if(errors.length < 3){
+          errors.push(err?.message || "未知错误");
+        }
+      }
+    }
+    if(fail){
+      alert(`批量生成草稿完成：成功 ${ok} 条，失败 ${fail} 条。\n${errors.join("\n")}`);
+    }else{
+      alert(`已批量生成草稿，共 ${ok} 条。`);
+    }
+  });
+
+  $("#btnCommitPublish").addEventListener("click", async () => {
+    if(previewRows.length === 0){
+      alert("请先上传 CSV 文件");
+      return;
+    }
+    await ensureIndicatorDefs();
+    await ensureDomainMeta();
+    const invalid = previewRows.find(row => validate(row, "publish"));
+    if(invalid){
+      alert("存在校验错误，无法批量发布。");
+      return;
+    }
+    let ok = 0;
+    let fail = 0;
+    const errors = [];
+    for(const row of previewRows){
+      try{
+        await publishRow(row);
+        ok++;
+      }catch(err){
+        fail++;
+        if(errors.length < 3){
+          errors.push(err?.message || "未知错误");
+        }
+      }
+    }
+    if(fail){
+      alert(`批量发布完成：成功 ${ok} 条，失败 ${fail} 条。\n${errors.join("\n")}`);
+    }else{
+      alert(`批量发布成功，共 ${ok} 条。`);
+    }
+  });
+</script>
+
+<script src="auth.js"></script>
+<script src="portal_shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "VAL_0001",
+    "info_item_id": "INFO_CCUS_0001",
+    "indicator_def_id": "IND_CCUS_CAPTURE_04",
+    "value_number": 2.1,
+    "value_text": null,
+    "unit": "GJ/tCO₂",
+    "value_date": "2026-01-03",
+    "created_by": "user_reviewer_01"
+  },
+  {
+    "id": "VAL_0002",
+    "info_item_id": "INFO_CCUS_0001",
+    "indicator_def_id": "IND_CCUS_CAPTURE_11",
+    "value_number": 3200,
+    "value_text": null,
+    "unit": "圈",
+    "value_date": "2026-01-03",
+    "created_by": "user_reviewer_01"
+  },
+  {
+    "id": "VAL_0003",
+    "info_item_id": "INFO_CCUS_0001",
+    "indicator_def_id": "IND_CCUS_CAPTURE_15",
+    "value_number": null,
+    "value_text": "92",
+    "unit": "%",
+    "value_date": "2026-01-03",
+    "created_by": "user_reviewer_01"
+  }
+]

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>信息源</title><style>:root{--bg:#f8f9fc;--text:#1e293b;--muted:#64748b;--line:rgba(0,0,0,.08);--r:14px;--shadow:0 4px 16px rgba(0,0,0,.06);--sans:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif}*{box-sizing:border-box}body{margin:0;font-family:var(--sans);color:var(--text);background:var(--bg)}a{color:#2563eb;text-decoration:none}.topbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}.topbar-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:12px}.brand{font-weight:850}.nav{display:flex;gap:10px;flex-wrap:wrap}.nav a,.nav button{padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:var(--text);font-size:14px;cursor:pointer}.nav button{color:#64748b}.container{max-width:1400px;margin:0 auto;padding:18px}.card{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}@media(max-width:900px){.grid{grid-template-columns:1fr}}.source{border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;padding:14px}.pill{display:inline-flex;margin-top:8px;padding:5px 9px;border-radius:999px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:12px}.small{font-size:12px}</style></head>
+<body><div class="topbar"><div class="topbar-inner"><div class="brand">技术边界数据库 <span class="muted small">/ 信息源</span></div><div class="nav"><a href="index.html">核心门户</a><a href="info_table.html">情报总表</a><a href="industry_dashboards.html">行业仪表盘</a><a href="industry_map.html">行业图景</a><a href="sources.html">信息源</a><a href="upload_review.html?v=20260326d">上传&复核</a><a href="excel_import.html">批量导入</a><button onclick="Auth.showChangePassword()">修改密码</button><button onclick="Auth.logout()">退出</button></div></div></div>
+<div class="container"><section class="card"><h1>信息源</h1><p class="muted">这里先管理“信息如何进入系统”的接口边界。真实 source/evidence 表、快照、付费来源合规和自动采集器在后续阶段建设。</p></section><section id="sources" class="grid"><div class="source muted">加载中…</div></section></div>
+<script src="auth.js"></script>
+<script src="portal_shell.js"></script><script>
+Auth.requireAuth();
+async function main(){
+  const r = await Auth.authFetch('/api/sources');
+  if(!r) return;
+  const data = await r.json();
+  const wrap = document.getElementById('sources');
+  const current = (data.current_available_paths || []).map(path => `<div class="source"><h2>${path}</h2><p class="muted">当前可用的信息进入路径。</p><a class="pill" href="${path}">打开</a></div>`).join('');
+  const future = (data.future_capabilities || []).map(ch => `<div class="source"><h2>${ch.name}</h2><p class="muted">${ch.description}</p><div class="small muted">状态：${ch.status}</div><div class="pill">${ch.id}</div></div>`).join('');
+  wrap.innerHTML = current + future;
+}
+main().catch(err => { document.getElementById('sources').innerHTML = `<div class="source">加载失败：${err}</div>`; });
+</script></body></html>

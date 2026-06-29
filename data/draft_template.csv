@@ -1,0 +1,2 @@
+title,published_at,source_url,source_types,info_types,domains,importance_score,is_new_tech,content,tags,classification,comment,alert_manual,alert_title,alert_body,reviewer_comment,duration,custom_expires_on,alert_color
+"草稿示例标题","2026-03-01","https://example.com/draft","产业新闻;学术文献","技术;市场","DOM_CCUS_L4_CAPTURE_02_02",4,true,"草稿示例正文","标签A;标签B","内部","草稿备注","true","示例预警标题","示例预警内容","示例复核意见","custom","2026-04-10","orange"

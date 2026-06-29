@@ -1,0 +1,1181 @@
+<!-- info_detail.html
+Static prototype page (no backend). It loads local JSON files from /data and renders:
+- Info header + attributes
+- Domain path (level 1-4)
+- Content
+- Indicator table (joined from indicator_values + indicator_defs)
+- Alert card (joined from alerts)
+
+Run with a local server (e.g., VSCode Live Server) so fetch() works.
+Open: info_detail.html?id=INFO_CCUS_0001
+-->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>情报详情（样机）</title>
+  <style>
+    :root{
+      --bg:#f8f9fc;
+      --panel:#ffffff;
+      --panel2:#f8fafc;
+      --text:#1e293b;
+      --muted:#64748b;
+      --line:rgba(0,0,0,.08);
+      --chip:#f1f5f9;
+      --shadow: 0 4px 16px rgba(0,0,0,.06);
+      --radius:16px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family:var(--sans);
+      background: #f8f9fc;
+      color:var(--text);
+    }
+    a{ color:#2563eb; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+    .topbar{
+      position:sticky; top:0; z-index:10;
+      backdrop-filter: blur(10px);
+      background: rgba(255,255,255,.92);
+      border-bottom:1px solid var(--line);
+    }
+    .topbar-inner{
+      max-width:1100px; margin:0 auto;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px;
+      gap:12px;
+    }
+    .brand{ font-weight:700; letter-spacing:.2px; }
+    .nav{
+      display:flex; gap:10px; flex-wrap:wrap;
+      align-items:center;
+    }
+    .nav a{
+      padding:8px 10px; border-radius:10px;
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+      color:var(--text);
+      font-size:14px;
+    }
+    .nav a:hover{ background:#e2e8f0; }
+    .container{ max-width:1100px; margin:0 auto; padding:18px 16px 60px; }
+    .grid{
+      display:grid;
+      grid-template-columns: 1.3fr .7fr;
+      gap:14px;
+    }
+    .grid > .left-stack, .grid > .right-stack{ min-width:0; }
+    @media (max-width: 960px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+    .card{
+      background: #ffffff;
+      border:1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .card .hd{
+      padding:14px 16px;
+      border-bottom:1px solid var(--line);
+      display:flex; align-items:flex-start; justify-content:space-between;
+      gap:12px;
+    }
+    .card .bd{ padding:14px 16px; }
+    .title{
+      font-size:20px; line-height:1.25; margin:0 0 8px 0;
+      font-weight:750;
+    }
+    .meta{
+      display:flex; flex-wrap:wrap; gap:8px 10px;
+      color:var(--muted); font-size:13px;
+    }
+    .pill{
+      display:inline-flex; align-items:center; gap:6px;
+      background:var(--chip);
+      border:1px solid #e2e8f0;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      color:var(--text);
+      white-space:nowrap;
+    }
+    .pill .dot{ width:8px; height:8px; border-radius:999px; background:#aaa; }
+    .pill.yellow .dot{ background:#facc15; }
+    .pill.orange .dot{ background:#fb923c; }
+    .pill.red .dot{ background:#f87171; }
+
+    .kv{
+      display:grid;
+      grid-template-columns: 120px 1fr;
+      gap:10px;
+      padding:10px 0;
+      border-top:1px dashed rgba(0,0,0,.08);
+    }
+    .kv:first-child{ border-top:none; padding-top:0; }
+    .k{ color:var(--muted); font-size:13px; }
+    .v{ font-size:13px; line-height:1.55; }
+
+    .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+    .chip{
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      color:var(--text);
+    }
+
+    .content{
+      white-space:pre-wrap;
+      line-height:1.65;
+      font-size:14px;
+      color:#1e293b;
+    }
+    .muted{ color:var(--muted); }
+
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      overflow:hidden;
+      border-radius:12px;
+      border:1px solid #e2e8f0;
+      background:#f8fafc;
+    }
+    th, td{
+      padding:10px 10px;
+      border-bottom:1px solid #e2e8f0;
+      font-size:13px;
+      vertical-align:top;
+    }
+    th{
+      text-align:left;
+      color:#1e293b;
+      font-weight:650;
+      background:#f1f5f9;
+    }
+    tr:last-child td{ border-bottom:none; }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid #e2e8f0;
+      background:#f1f5f9;
+      font-size:12px;
+    }
+    .badge b{ font-family:var(--mono); font-weight:650; font-size:11px; opacity:.9; }
+    .error{
+      border:1px solid rgba(248,113,113,.35);
+      background:rgba(248,113,113,.08);
+      padding:14px 16px;
+      border-radius:14px;
+    }
+    .debug{
+      border:1px solid rgba(96,165,250,.30);
+      background:rgba(96,165,250,.08);
+      padding:14px 16px;
+      border-radius:14px;
+      white-space:pre-wrap;
+      word-break:break-all;
+      font-size:12px;
+      margin-bottom:14px;
+      display:none;
+    }
+    .actions{
+      display:flex; gap:8px; flex-wrap:wrap;
+    }
+    .btn{
+      cursor:pointer;
+      padding:9px 12px;
+      border-radius:12px;
+      border:1px solid #d1d5db;
+      background:#f1f5f9;
+      color:var(--text);
+      font-size:13px;
+    }
+    .btn:hover{ background:#e2e8f0; }
+    .small{ font-size:12px; }
+    .right-stack{ display:flex; flex-direction:column; gap:14px; }
+    .modal{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center; justify-content:center;
+      z-index:50;
+      padding:16px;
+    }
+    .modal .box{
+      width:min(720px, 100%);
+      background:#ffffff;
+      border:1px solid #d1d5db;
+      border-radius:16px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .modal .box .hd{ border-bottom:1px solid #e2e8f0; }
+    .modal .box .bd{ padding:14px; }
+    .modal input, .modal select{
+      width:100%;
+      background:#ffffff;
+      border:1px solid #d1d5db;
+      color:var(--text);
+      padding:10px;
+      border-radius:12px;
+      font-size:13px;
+      outline:none;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">前沿技术情报与预警平台（样机）</div>
+      <div class="nav">
+        <a href="index.html">核心门户</a>
+        <a href="info_table.html">情报总表</a>
+        <a href="industry_dashboards.html">行业仪表盘</a>
+        <a href="industry_map.html">行业图景</a>
+        <a href="sources.html">信息源</a>
+        <a href="upload_review.html?v=20260326d">上传&复核</a>
+        <a href="drafts.html">草稿管理</a>
+        <a href="excel_import.html">批量导入</a>
+        <button onclick="Auth.showChangePassword()" style="cursor:pointer;padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:14px;">修改密码</button>
+        <button onclick="Auth.logout()" style="cursor:pointer;padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:14px;">退出</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="actions" style="margin: 10px 0 14px;">
+      <button class="btn" id="btnBack">← 返回</button>
+      <button class="btn" id="btnPrevInfo" style="display:none;">‹ 上一条</button>
+      <button class="btn" id="btnNextInfo" style="display:none;">下一条 ›</button>
+      <button class="btn" id="btnCopyLink">复制当前链接</button>
+      <button class="btn" id="btnCreateRevision">创建修订稿</button>
+      <span class="badge"><b>ID</b> <span id="infoId">-</span></span>
+      <span class="badge"><b>状态</b> <span id="status">-</span></span>
+    </div>
+
+    <div id="errorBox" class="error" style="display:none;"></div>
+
+    <div class="grid" id="mainGrid" style="display:none;">
+      <!-- LEFT -->
+      <div class="left-stack" style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card">
+          <div class="hd">
+            <div style="min-width:0;">
+              <h1 class="title" id="title">-</h1>
+              <div class="meta">
+                <span>发布时间：<span id="publishedAt">-</span></span>
+                <span>录入时间：<span id="createdAt">-</span></span>
+                <span>最后操作人：<span id="lastModifiedBy">-</span></span>
+                <span>领域：<span id="domainPath">-</span></span>
+              </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+              <span class="pill" id="alertPill" style="display:none;"><span class="dot"></span>预警</span>
+              <span class="pill"><span class="dot" style="background:#60a5fa;"></span>重要度 <span id="importanceScore">-</span></span>
+              <span class="pill"><span class="dot" style="background:#34d399;"></span><span id="novelty">-</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div>
+              <div style="font-weight:700;">正文</div>
+              <div class="muted small">样机：支持换行与段落。后续可加“折叠/展开”“复制摘要”等。</div>
+            </div>
+            <button class="btn" id="btnToggleContent">折叠</button>
+          </div>
+          <div class="bd">
+            <div id="content" class="content">-</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div>
+              <div style="font-weight:700;">指标</div>
+              <div class="muted small">优先展示结构化指标；若为上传/批量发布录入的指标，也会直接回显。</div>
+            </div>
+            <button class="btn" id="btnEditIndicators">编辑指标</button>
+          </div>
+          <div class="bd">
+            <div id="indicatorsEmpty" class="muted" style="display:none;">暂无指标</div>
+            <div id="indicatorsTableWrap" style="overflow:auto;"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div>
+              <div style="font-weight:700;">详细信息</div>
+              <div class="muted small">来源、类型、标签、comment、密级与上传复核信息。</div>
+            </div>
+            <button class="btn" id="btnEditDetails">编辑</button>
+          </div>
+          <div class="bd">
+            <div class="kv">
+              <div class="k">来源 URL</div>
+              <div class="v"><a id="sourceUrl" href="#" target="_blank" rel="noopener">-</a></div>
+            </div>
+            <div class="kv">
+              <div class="k">来源类型</div>
+              <div class="v"><div class="chips" id="sourceTypes"></div></div>
+            </div>
+            <div class="kv">
+              <div class="k">情报类型</div>
+              <div class="v"><div class="chips" id="infoTypes"></div></div>
+            </div>
+            <div class="kv">
+              <div class="k">标签</div>
+              <div class="v"><div class="chips" id="tags"></div></div>
+            </div>
+            <div class="kv">
+              <div class="k">comment</div>
+              <div class="v" id="comment">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">密级</div>
+              <div class="v" id="classification">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">上传/复核</div>
+              <div class="v"><span class="muted">上传：</span><span id="createdBy">-</span>　<span class="muted">复核：</span><span id="reviewedBy">-</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="right-stack">
+        <div class="card" id="alertCard" style="display:none;">
+          <div class="hd">
+            <div>
+              <div style="font-weight:700;">技术预警</div>
+              <div class="muted small">绑定情报：到期可自动解除；样机仅展示。</div>
+            </div>
+            <span class="pill" id="alertColorPill"><span class="dot"></span><span id="alertColorText">-</span></span>
+          </div>
+          <div class="bd">
+            <div class="kv">
+              <div class="k">预警标题</div>
+              <div class="v" id="alertTitle">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">预警内容</div>
+              <div class="v" id="alertBody">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">评论/结论</div>
+              <div class="v" id="reviewerComment">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">到期时间</div>
+              <div class="v"><span id="expiresAt">-</span> <span class="muted">（status: </span><span id="alertStatus">-</span><span class="muted">）</span></div>
+            </div>
+
+            <div style="margin-top:12px;" class="actions">
+              <button class="btn" id="btnManualAlert">人工编辑预警</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <div style="font-weight:700;">调试信息</div>
+          </div>
+          <div class="bd">
+            <div class="kv">
+              <div class="k">domain_id</div>
+              <div class="v"><span class="badge"><b>DOM</b> <span id="domainId">-</span></span></div>
+            </div>
+            <div class="kv">
+              <div class="k">has_alert</div>
+              <div class="v" id="hasAlert">-</div>
+            </div>
+            <div class="kv">
+              <div class="k">数据文件</div>
+              <div class="v muted small">
+                /api/domains/tree<br/>
+                /api/info-items/{id}<br/>
+                /data/indicator_defs.json<br/>
+                /data/indicator_values.json
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- grid -->
+  </div><!-- container -->
+
+  <div class="modal" id="manualAlertModal">
+    <div class="box">
+      <div class="hd">
+        <div style="font-weight:700;">人工预警编辑</div>
+        <button class="btn" id="btnCloseManual">关闭</button>
+      </div>
+      <div class="bd">
+        <div class="muted small" id="manualAlertTitle">-</div>
+        <label style="margin-top:10px;">预警标题</label>
+        <input id="manualAlertTitleInput" placeholder="填写预警标题" />
+        <label>预警内容</label>
+        <input id="manualAlertBodyInput" placeholder="填写预警内容" />
+        <label>预警颜色</label>
+        <select id="manualAlertColor">
+          <option value="yellow">黄色</option>
+          <option value="orange" selected>橙色</option>
+          <option value="red">红色</option>
+        </select>
+        <label>预警到期时间</label>
+        <input id="manualAlertExpiresAt" type="datetime-local" />
+        <label>解除预警（填写原因）</label>
+        <input id="manualDismissReason" placeholder="如需解除，填写原因" />
+        <div class="actions" style="margin-top:12px;">
+          <button class="btn" id="btnSaveManual">保存</button>
+          <button class="btn" id="btnDismissManual">解除预警</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="detailsEditModal">
+    <div class="box" style="min-width:560px;max-width:720px;width:90vw;">
+      <div class="hd">
+        <div style="font-weight:700;padding-left:12px;">编辑详细信息</div>
+        <button class="btn" id="btnCloseDetailsEdit">关闭</button>
+      </div>
+      <div class="bd">
+        <label>来源 URL</label>
+        <input id="editSourceUrl" placeholder="https://..." />
+
+        <label style="margin-top:10px;">来源类型（可多选）</label>
+        <div class="chips" id="editSourceTypeChips" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+
+        <label style="margin-top:10px;">情报类型（可多选）</label>
+        <div class="chips" id="editInfoTypeChips" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+
+        <label style="margin-top:10px;">标签（逗号分隔）</label>
+        <input id="editTags" placeholder="例如：固体吸附, 低湿烟气" />
+
+        <label style="margin-top:10px;">comment</label>
+        <input id="editComment" placeholder="备注 / 研判" />
+
+        <label style="margin-top:10px;">密级</label>
+        <select id="editClassification">
+          <option value="公开">公开</option>
+          <option value="内部">内部</option>
+          <option value="秘密">秘密</option>
+          <option value="机密">机密</option>
+        </select>
+
+        <div class="muted small" style="margin-top:12px;">上传/复核信息不可编辑。</div>
+
+        <div class="actions" style="margin-top:14px;">
+          <button class="btn" id="btnSaveDetails">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="indicatorEditModal">
+    <div class="box" style="min-width:560px;max-width:720px;width:90vw;">
+      <div class="hd">
+        <div style="font-weight:700;padding-left:12px;">编辑指标</div>
+        <button class="btn" id="btnCloseIndicatorEdit">关闭</button>
+      </div>
+      <div class="bd">
+        <div class="muted small" style="margin-bottom:12px;">仅显示当前情报所属 CCUS 子领域的预设指标。</div>
+        <div id="indicatorEditRows"></div>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.08);">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;">添加指标</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select id="newIndicatorSelect" style="flex:2;min-width:180px;"></select>
+            <input id="newIndicatorValue" placeholder="数值" style="flex:1;min-width:90px;" />
+            <input id="newIndicatorUnit" placeholder="单位" style="flex:1;min-width:80px;" />
+            <button class="btn" id="btnAddIndicator">添加</button>
+          </div>
+        </div>
+        <div class="actions" style="margin-top:16px;">
+          <button class="btn" id="btnSaveIndicators">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/auth.js"></script>
+  <script type="module">
+    Auth.requireAuth();
+    // ---------- tiny utils ----------
+    const $ = (sel) => document.querySelector(sel);
+    const API_BASE = window.API_BASE || "/api";
+    const escapeHtml = (s) => (s ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
+
+    // 将 Unicode 下标数字（₀–₉）转为 <sub> 标签，先 escape 保证安全
+    function renderWithSubs(s){
+      return escapeHtml(s ?? "")
+        .replace(/₀/g,"<sub>0</sub>").replace(/₁/g,"<sub>1</sub>")
+        .replace(/₂/g,"<sub>2</sub>").replace(/₃/g,"<sub>3</sub>")
+        .replace(/₄/g,"<sub>4</sub>").replace(/₅/g,"<sub>5</sub>")
+        .replace(/₆/g,"<sub>6</sub>").replace(/₇/g,"<sub>7</sub>")
+        .replace(/₈/g,"<sub>8</sub>").replace(/₉/g,"<sub>9</sub>");
+    }
+
+    function getDomainIds(item){
+      if(Array.isArray(item.domain_ids) && item.domain_ids.length){
+        return item.domain_ids;
+      }
+      if(item.domain_id){
+        return [item.domain_id];
+      }
+      return [];
+    }
+    function normalizeIndicatorName(name){
+      return String(name || "")
+        .replace(/\s+/g, "")
+        .replace(/[()（）[\]【】]/g, "")
+        .replace(/CO₂/gi, "CO2")
+        .toLowerCase();
+    }
+
+    function stripIndicatorDisplayName(name){
+      return String(name || "").replace(/\s*[（(][^()（）]*[）)]\s*$/u, "").trim();
+    }
+
+    function getQueryParam(name){
+      const url = new URL(window.location.href);
+      return url.searchParams.get(name);
+    }
+    function fmtDate(s){
+      if(!s) return "-";
+      // Handle ISO datetime or YYYY-MM-DD
+      const d = new Date(s);
+      if(!isNaN(d.getTime())){
+        const y = d.getFullYear();
+        const m = String(d.getMonth()+1).padStart(2,"0");
+        const day = String(d.getDate()).padStart(2,"0");
+        return `${y}-${m}-${day}`;
+      }
+      return s;
+    }
+    function renderChips(el, arr){
+      el.innerHTML = "";
+      (arr ?? []).forEach(x=>{
+        const span = document.createElement("span");
+        span.className = "chip";
+        span.textContent = x;
+        el.appendChild(span);
+      });
+      if(!(arr && arr.length)){
+        const span = document.createElement("span");
+        span.className = "muted small";
+        span.textContent = "（无）";
+        el.appendChild(span);
+      }
+    }
+
+    // Domain path: walk parent chain
+    function buildDomainMap(domains){
+      const map = new Map();
+      domains.forEach(d => map.set(d.id, d));
+      return map;
+    }
+    function domainPath(domainId, domainMap){
+      const names = [];
+      let cur = domainMap.get(domainId);
+      while(cur){
+        names.push(cur.name);
+        cur = cur.parent_id ? domainMap.get(cur.parent_id) : null;
+      }
+      return names.reverse().join(" / ");
+    }
+
+    // ---------- data loading ----------
+    async function loadJson(path){
+      const r = await fetch(path, { cache: "no-store" });
+      if(!r.ok) throw new Error(`加载失败：${path} (${r.status})`);
+      return await r.json();
+    }
+    async function loadApi(path, options = {}){
+      const r = await Auth.authFetch(`${API_BASE}${path}`, { cache: "no-store", ...options });
+      if(!r) return null;
+      if(!r.ok) throw new Error(`API加载失败：${path} (${r.status})`);
+      if(r.status === 204) return null;
+      return await r.json();
+    }
+
+    function toLocalDateTimeInput(iso){
+      if(!iso) return "";
+      const d = new Date(iso);
+      if(Number.isNaN(d.getTime())) return "";
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${y}-${m}-${day}T${hh}:${mm}`;
+    }
+
+    function toIsoFromLocalDateTimeInput(value){
+      if(!value) return null;
+      const d = new Date(value);
+      if(Number.isNaN(d.getTime())) return null;
+      return d.toISOString();
+    }
+
+    async function main(){
+      const id = getQueryParam("id") || "INFO_CCUS_0001";
+      $("#infoId").textContent = id;
+
+      try{
+        const [
+          domainTree,
+          info,
+          indicatorDefs,
+          indicatorValues
+        ] = await Promise.all([
+          loadApi("/domains/tree"),
+          loadApi(`/info-items/${encodeURIComponent(id)}`),
+          loadJson("./data/indicator_defs.json"),
+          loadJson("./data/indicator_values.json")
+        ]);
+
+        const domains = [];
+        (function flatten(nodes){
+          (nodes || []).forEach(node => {
+            domains.push({ id: node.id, name: node.name, parent_id: node.parent_id ?? null });
+            flatten(node.children || []);
+          });
+        })(domainTree);
+
+        const domainMap = buildDomainMap(domains);
+        const alert = info.alert_status === "active" ? {
+          alert_title: info.alert_title,
+          alert_body: info.alert_body,
+          reviewer_comment: info.alert_reviewer_comment,
+          alert_color: info.alert_color,
+          status: info.alert_status,
+          expires_at: info.alert_expires_at
+        } : null;
+
+        // join indicators:
+        // 1) static indicator_values.json
+        // 2) draft_data.indicators (fallback to uploaded indicators, even if not in preset defs)
+        const activeDefs = (indicatorDefs || []).filter(d => d && d.is_active !== false);
+        const defMap = new Map(activeDefs.map(d => [d.id, d]));
+        const defByNormName = new Map(
+          activeDefs.map(d => [normalizeIndicatorName(d.name), d])
+        );
+
+        const hasIndicatorValue = (value) => {
+          if(value === null || value === undefined) return false;
+          if(typeof value === "number") return Number.isFinite(value);
+          return String(value).trim() !== "";
+        };
+
+        const draftIndicators = Array.isArray(info?.draft_data?.indicators) ? info.draft_data.indicators : [];
+        const vals = draftIndicators
+          .filter(ind => ind?.keep !== false)
+          .map(ind => {
+            const matchedDef = ind?.indicator_id
+              ? defMap.get(ind.indicator_id)
+              : defByNormName.get(normalizeIndicatorName(ind?.name));
+            return {
+              name: stripIndicatorDisplayName(matchedDef?.name || ind?.name || "-"),
+              unit: ind?.unit || matchedDef?.unit_default || "",
+              value: hasIndicatorValue(ind?.value) ? String(ind.value) : "-",
+              value_date: info.published_at || "",
+              indicator_def_id: matchedDef?.id || ind?.indicator_id || null,
+              evidence: matchedDef ? "来自上传复核" : "来自上传录入"
+            };
+          })
+          .filter(v => v.name && (v.value !== "-" || String(v.unit || "").trim()));
+
+        const existingIndicatorKeys = new Set(
+          vals.map(v => `${String(v.indicator_def_id || "")}__${normalizeIndicatorName(v.name)}__${String(v.value ?? "").trim()}__${String(v.unit || "").trim()}`)
+        );
+
+        indicatorValues
+          .filter(v => v.info_item_id === id)
+          .forEach(v => {
+            const def = defMap.get(v.indicator_def_id);
+            if(!def) return;
+            const rawValue = v.value_number ?? v.value_text ?? "";
+            if(!hasIndicatorValue(rawValue)) return;
+            const key = `${String(v.indicator_def_id || "")}__${normalizeIndicatorName(def.name)}__${String(rawValue).trim()}__${String(v.unit ?? def.unit_default ?? "").trim()}`;
+            if(existingIndicatorKeys.has(key)) return;
+            vals.push({
+              name: stripIndicatorDisplayName(def.name),
+              unit: v.unit ?? def.unit_default ?? "",
+              value: rawValue,
+              value_date: v.value_date ?? "",
+              indicator_def_id: v.indicator_def_id,
+              evidence: "来自本情报"
+            });
+            existingIndicatorKeys.add(key);
+          });
+
+        // ---------- render info ----------
+        $("#mainGrid").style.display = "";
+        $("#status").textContent = info.status ?? "-";
+
+        $("#title").innerHTML = renderWithSubs(info.title ?? "-");
+        $("#publishedAt").textContent = fmtDate(info.published_at);
+        $("#createdAt").textContent = fmtDate(info.created_at);
+        $("#lastModifiedBy").textContent = info.last_modified_by ?? "-";
+        const domainIds = getDomainIds(info);
+        $("#domainId").textContent = domainIds.join(", ") || "-";
+        $("#domainPath").textContent = domainIds.length ? domainIds.map(id => domainPath(id, domainMap)).join("；") : "-";
+
+        $("#importanceScore").textContent = String(info.importance_score ?? "-");
+        $("#novelty").textContent = info.is_new_tech ? "新技术" : "已有技术";
+        $("#hasAlert").textContent = alert ? "true" : "false";
+
+        const url = info.source_url ?? "#";
+        const a = $("#sourceUrl");
+        a.href = url;
+        a.textContent = url;
+
+        renderChips($("#sourceTypes"), info.source_types);
+        renderChips($("#infoTypes"), info.info_types);
+        renderChips($("#tags"), info.tags);
+
+        $("#comment").textContent = info.comment ?? "-";
+        $("#classification").textContent = info.classification ?? "-";
+        $("#createdBy").textContent = info.created_by ?? "-";
+        $("#reviewedBy").textContent = info.last_modified_by ?? "-";
+
+        // content（用 innerHTML 以支持 <sub> 下标渲染）
+        $("#content").innerHTML = renderWithSubs(info.content ?? "-").replace(/\n/g, "<br>");
+
+        // alert pill in header
+        if(alert){
+          const pill = $("#alertPill");
+          pill.style.display = "inline-flex";
+          pill.classList.remove("yellow","orange","red");
+          pill.classList.add(alert.alert_color || "");
+          pill.querySelector(".dot").style.background =
+            alert.alert_color === "yellow" ? "#facc15" :
+            alert.alert_color === "orange" ? "#fb923c" :
+            alert.alert_color === "red" ? "#f87171" : "#aaa";
+          pill.lastChild ? null : null;
+          pill.childNodes[1].nodeValue = "预警";
+        }
+
+        // ---------- render indicators ----------
+        if(!vals.length){
+          $("#indicatorsEmpty").style.display = "";
+          $("#indicatorsTableWrap").innerHTML = "";
+        }else{
+          $("#indicatorsEmpty").style.display = "none";
+          const rows = vals.map(v => `
+            <tr>
+              <td>${escapeHtml(v.name)}</td>
+              <td>${escapeHtml(String(v.value))}</td>
+              <td>${escapeHtml(v.unit || "-")}</td>
+              <td>${escapeHtml(fmtDate(v.value_date))}</td>
+              <td class="muted">${escapeHtml(v.evidence || "来自本情报")}</td>
+            </tr>
+          `).join("");
+
+          $("#indicatorsTableWrap").innerHTML = `
+            <table>
+              <thead>
+                <tr>
+                  <th style="min-width:160px;">指标</th>
+                  <th style="min-width:120px;">数值</th>
+                  <th style="min-width:90px;">单位</th>
+                  <th style="min-width:110px;">日期</th>
+                  <th style="min-width:120px;">证据</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          `;
+        }
+
+        // ---------- render alert card ----------
+        if(alert){
+          $("#alertCard").style.display = "";
+          $("#alertTitle").textContent = alert.alert_title ?? "-";
+          $("#alertBody").textContent = alert.alert_body ?? "-";
+          $("#reviewerComment").textContent = alert.reviewer_comment ?? "-";
+          $("#expiresAt").textContent = alert.expires_at ? fmtDate(alert.expires_at) : "永久/未设置";
+          $("#alertStatus").textContent = alert.status ?? "-";
+
+          const cp = $("#alertColorPill");
+          cp.classList.remove("yellow","orange","red");
+          cp.classList.add(alert.alert_color || "");
+          cp.querySelector(".dot").style.background =
+            alert.alert_color === "yellow" ? "#facc15" :
+            alert.alert_color === "orange" ? "#fb923c" :
+            alert.alert_color === "red" ? "#f87171" : "#aaa";
+          $("#alertColorText").textContent =
+            alert.alert_color === "yellow" ? "黄" :
+            alert.alert_color === "orange" ? "橙" :
+            alert.alert_color === "red" ? "红" : (alert.alert_color ?? "-");
+        }
+
+        // ---------- buttons ----------
+        const _fromPage = new URL(window.location.href).searchParams.get("from") || "info_table";
+        $("#btnBack").onclick = () => {
+          window.location.href = _fromPage === "index" ? "index.html" : "info_table.html";
+        };
+
+        // ---------- prev / next navigation ----------
+        try{
+          const navIds = JSON.parse(sessionStorage.getItem("detailNavIds") || "[]");
+          const navIdx = navIds.indexOf(id);
+          if(navIdx !== -1){
+            const btnPrev = $("#btnPrevInfo");
+            const btnNext = $("#btnNextInfo");
+            if(navIdx > 0){
+              btnPrev.style.display = "";
+              btnPrev.onclick = () => { window.location.href = `info_detail.html?id=${navIds[navIdx - 1]}`; };
+            }
+            if(navIdx < navIds.length - 1){
+              btnNext.style.display = "";
+              btnNext.onclick = () => { window.location.href = `info_detail.html?id=${navIds[navIdx + 1]}`; };
+            }
+          }
+        }catch(_){}
+        $("#btnCopyLink").onclick = async () => {
+          try{
+            await navigator.clipboard.writeText(window.location.href);
+            alert("已复制链接");
+          }catch{
+            prompt("复制失败，请手动复制：", window.location.href);
+          }
+        };
+
+        let contentCollapsed = false;
+        $("#btnToggleContent").onclick = () => {
+          contentCollapsed = !contentCollapsed;
+          $("#content").style.display = contentCollapsed ? "none" : "";
+          $("#btnToggleContent").textContent = contentCollapsed ? "展开" : "折叠";
+        };
+
+        $("#btnCreateRevision").onclick = () => {
+          const revisionPayload = {
+            ...info,
+            manual_alert: info.alert_status === "active",
+            reviewer_comment: info.alert_reviewer_comment || "",
+            id: "",
+            status: "draft",
+            revision_of: info.id,
+            revision_mode: true
+          };
+          localStorage.setItem("currentDraft", JSON.stringify(revisionPayload));
+          window.location.href = "upload_review.html?v=20260326d&mode=revision";
+        };
+
+        $("#btnManualAlert").addEventListener("click", () => {
+          $("#manualAlertTitle").textContent = info.title ?? "-";
+          $("#manualAlertTitleInput").value = alert?.alert_title || "";
+          $("#manualAlertBodyInput").value = alert?.alert_body || "";
+          $("#manualAlertColor").value = alert?.alert_color || "orange";
+          $("#manualAlertExpiresAt").value = toLocalDateTimeInput(alert?.expires_at);
+          $("#manualDismissReason").value = "";
+          $("#manualAlertModal").style.display = "flex";
+        });
+
+        $("#btnCloseManual").addEventListener("click", () => {
+          $("#manualAlertModal").style.display = "none";
+        });
+
+        $("#btnSaveManual").addEventListener("click", async () => {
+          try{
+            await loadApi(`/info-items/${encodeURIComponent(id)}/alert`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                enabled: true,
+                alert_title: $("#manualAlertTitleInput").value.trim() || "人工预警",
+                alert_body: $("#manualAlertBodyInput").value.trim() || "人工补充说明",
+                reviewer_comment: "详情页人工编辑",
+                alert_color: $("#manualAlertColor").value,
+                expires_at: toIsoFromLocalDateTimeInput($("#manualAlertExpiresAt").value)
+              })
+            });
+            $("#manualAlertModal").style.display = "none";
+            window.location.reload();
+          }catch(e){
+            alert(e?.message || "保存失败");
+          }
+        });
+
+        $("#btnDismissManual").addEventListener("click", async () => {
+          const reason = $("#manualDismissReason").value.trim();
+          if(!reason){
+            alert("请填写解除原因");
+            return;
+          }
+          try{
+            await loadApi(`/info-items/${encodeURIComponent(id)}/alert`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                enabled: false,
+                dismiss_reason: reason
+              })
+            });
+            $("#manualAlertModal").style.display = "none";
+            window.location.reload();
+          }catch(e){
+            alert(e?.message || "解除失败");
+          }
+        });
+
+        // ---------- details edit modal ----------
+        const SOURCE_TYPE_OPTIONS = ["产业新闻", "学术文献", "报告发布", "政策", "企业公告"];
+        const INFO_TYPE_OPTIONS = ["技术", "政策"];
+        const CLASSIFICATION_OPTIONS = ["公开", "内部", "秘密", "机密"];
+
+        function renderToggleChips(container, options, selected){
+          container.innerHTML = "";
+          const sel = new Set(selected || []);
+          options.forEach(opt => {
+            const span = document.createElement("span");
+            span.className = "chip";
+            span.textContent = opt;
+            span.dataset.value = opt;
+            span.style.cursor = "pointer";
+            const setOn = (on) => {
+              if(on){
+                span.style.background = "rgba(96,165,250,.25)";
+                span.style.borderColor = "rgba(96,165,250,.55)";
+                span.dataset.on = "1";
+              }else{
+                span.style.background = "";
+                span.style.borderColor = "";
+                span.dataset.on = "";
+              }
+            };
+            setOn(sel.has(opt));
+            span.onclick = () => setOn(span.dataset.on !== "1");
+            container.appendChild(span);
+          });
+        }
+
+        function collectChipSelections(container){
+          return Array.from(container.querySelectorAll(".chip"))
+            .filter(ch => ch.dataset.on === "1")
+            .map(ch => ch.dataset.value);
+        }
+
+        $("#btnEditDetails").addEventListener("click", () => {
+          $("#editSourceUrl").value = info.source_url || "";
+          renderToggleChips($("#editSourceTypeChips"), SOURCE_TYPE_OPTIONS, info.source_types || []);
+          renderToggleChips($("#editInfoTypeChips"), INFO_TYPE_OPTIONS, info.info_types || []);
+          $("#editTags").value = (info.tags || []).join(", ");
+          $("#editComment").value = info.comment || "";
+          const cls = info.classification && CLASSIFICATION_OPTIONS.includes(info.classification)
+            ? info.classification : "内部";
+          $("#editClassification").value = cls;
+          $("#detailsEditModal").style.display = "flex";
+        });
+
+        $("#btnCloseDetailsEdit").addEventListener("click", () => {
+          $("#detailsEditModal").style.display = "none";
+        });
+
+        $("#btnSaveDetails").addEventListener("click", async () => {
+          const payload = {
+            source_url: $("#editSourceUrl").value.trim() || null,
+            source_types: collectChipSelections($("#editSourceTypeChips")),
+            info_types: collectChipSelections($("#editInfoTypeChips")),
+            tags: $("#editTags").value.split(/[,，]/).map(t => t.trim()).filter(Boolean),
+            comment: $("#editComment").value.trim() || null,
+            classification: $("#editClassification").value || null
+          };
+          try{
+            await loadApi(`/info-items/${encodeURIComponent(id)}/details`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            });
+            $("#detailsEditModal").style.display = "none";
+            window.location.reload();
+          }catch(e){
+            alert(e?.message || "保存失败");
+          }
+        });
+
+        // ---------- indicator edit modal ----------
+        // Collect L2 CCUS domain IDs for this item
+        function getL2DomainIds(domainIds){
+          const l2Ids = new Set();
+          for(const id of domainIds){
+            let cur = domainMap.get(id);
+            while(cur){
+              if(cur.id && cur.id.startsWith("DOM_CCUS_L2_")){
+                l2Ids.add(cur.id);
+                break;
+              }
+              cur = cur.parent_id ? domainMap.get(cur.parent_id) : null;
+            }
+          }
+          return l2Ids;
+        }
+
+        function getAllowedDefs(l2Ids){
+          return activeDefs.filter(d => {
+            const allowed = d.allowed_domain_ids || [];
+            return allowed.length > 0 && allowed.some(id => l2Ids.has(id));
+          });
+        }
+
+        const itemDomainIds = getDomainIds(info);
+        const l2Ids = getL2DomainIds(itemDomainIds);
+        const allowedDefs = getAllowedDefs(l2Ids);
+        const allowedDefMap = new Map(allowedDefs.map(d => [d.id, d]));
+
+        let indEditRows = []; // [{indicator_id, name, value, unit}]
+
+        function renderIndEditRows(){
+          const container = $("#indicatorEditRows");
+          if(!indEditRows.length){
+            container.innerHTML = '<div class="muted small">暂无指标，请从下方添加。</div>';
+            return;
+          }
+          container.innerHTML = indEditRows.map((row, i) => `
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+              <span style="flex:2;font-size:13px;line-height:1.3;">${escapeHtml(row.name)}</span>
+              <input class="ind-val" data-idx="${i}" value="${escapeHtml(String(row.value))}" placeholder="数值" style="flex:1;min-width:80px;" />
+              <input class="ind-unit" data-idx="${i}" value="${escapeHtml(row.unit)}" placeholder="单位" style="flex:1;min-width:70px;" />
+              <button class="btn ind-del" data-idx="${i}" style="padding:4px 10px;flex-shrink:0;">×</button>
+            </div>
+          `).join("");
+          container.querySelectorAll(".ind-val").forEach(el => {
+            el.oninput = e => { indEditRows[+e.target.dataset.idx].value = e.target.value; };
+          });
+          container.querySelectorAll(".ind-unit").forEach(el => {
+            el.oninput = e => { indEditRows[+e.target.dataset.idx].unit = e.target.value; };
+          });
+          container.querySelectorAll(".ind-del").forEach(el => {
+            el.onclick = e => {
+              indEditRows.splice(+e.target.dataset.idx, 1);
+              renderIndEditRows();
+            };
+          });
+        }
+
+        $("#btnEditIndicators").addEventListener("click", () => {
+          // seed from currently displayed vals
+          indEditRows = vals.map(v => ({
+            indicator_id: v.indicator_def_id || null,
+            name: v.indicator_def_id
+              ? (allowedDefMap.get(v.indicator_def_id)?.name || v.name)
+              : v.name,
+            value: (v.value === "-" ? "" : v.value),
+            unit: v.unit || ""
+          }));
+
+          // populate select with allowed defs not already in list
+          const sel = $("#newIndicatorSelect");
+          sel.innerHTML = '<option value="">-- 选择指标 --</option>' +
+            allowedDefs.map(d =>
+              `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`
+            ).join("");
+          $("#newIndicatorValue").value = "";
+          $("#newIndicatorUnit").value = "";
+
+          sel.onchange = () => {
+            const def = allowedDefMap.get(sel.value);
+            $("#newIndicatorUnit").value = def ? (def.unit_default || "") : "";
+          };
+
+          renderIndEditRows();
+          $("#indicatorEditModal").style.display = "flex";
+        });
+
+        $("#btnCloseIndicatorEdit").addEventListener("click", () => {
+          $("#indicatorEditModal").style.display = "none";
+        });
+
+        $("#btnAddIndicator").addEventListener("click", () => {
+          const sel = $("#newIndicatorSelect");
+          const defId = sel.value;
+          if(!defId){ alert("请先选择指标"); return; }
+          const def = allowedDefMap.get(defId);
+          const value = $("#newIndicatorValue").value.trim();
+          if(!value){ alert("请填写数值"); return; }
+          const unit = $("#newIndicatorUnit").value.trim() || (def?.unit_default || "");
+          indEditRows.push({
+            indicator_id: defId,
+            name: def?.name || defId,
+            value,
+            unit
+          });
+          sel.value = "";
+          $("#newIndicatorValue").value = "";
+          $("#newIndicatorUnit").value = "";
+          renderIndEditRows();
+        });
+
+        $("#btnSaveIndicators").addEventListener("click", async () => {
+          // Auto-commit any pending new-indicator row without requiring "添加" click
+          const sel = $("#newIndicatorSelect");
+          const pendingValue = $("#newIndicatorValue").value.trim();
+          if(sel.value && pendingValue){
+            const def = allowedDefMap.get(sel.value);
+            const pendingUnit = $("#newIndicatorUnit").value.trim() || (def?.unit_default || "");
+            indEditRows.push({
+              indicator_id: sel.value,
+              name: def?.name || sel.value,
+              value: pendingValue,
+              unit: pendingUnit
+            });
+            sel.value = "";
+            $("#newIndicatorValue").value = "";
+            $("#newIndicatorUnit").value = "";
+          }
+          const payload = indEditRows
+            .filter(r => String(r.value).trim())
+            .map(r => ({
+              indicator_id: r.indicator_id || "",
+              name: r.name,
+              value: r.value,
+              unit: r.unit,
+              keep: true
+            }));
+          try{
+            await loadApi(`/info-items/${encodeURIComponent(id)}/indicators`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ indicators: payload })
+            });
+            $("#indicatorEditModal").style.display = "none";
+            window.location.reload();
+          }catch(e){
+            alert(e?.message || "保存失败");
+          }
+        });
+
+      }catch(err){
+        $("#mainGrid").style.display = "none";
+        $("#errorBox").style.display = "";
+        $("#errorBox").innerHTML = `<div style="font-weight:700;margin-bottom:6px;">页面加载失败</div><div class="muted small">${escapeHtml(err.message || String(err))}</div>
+        <div class="muted small" style="margin-top:10px;">提示：请用本地服务器打开（不要直接双击文件），并确认 ./data 下的 JSON 文件存在。</div>`;
+      }
+    }
+
+    main();
+  </script>
+<script src="auth.js"></script>
+<script src="portal_shell.js"></script>
+</body>
+</html>

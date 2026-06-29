@@ -1,0 +1,527 @@
+[
+  {
+    "id": "IND_CCUS_CAPTURE_01",
+    "name": "企业/研究机构/高校",
+    "match_name": "企业/研究机构/高校",
+    "unit_default": "",
+    "data_type": "string",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE",
+      "DOM_CCUS_L2_TRANSPORT",
+      "DOM_CCUS_L2_UTILIZATION",
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_02",
+    "name": "产品/项目",
+    "match_name": "产品/项目",
+    "unit_default": "",
+    "data_type": "string",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE",
+      "DOM_CCUS_L2_TRANSPORT",
+      "DOM_CCUS_L2_UTILIZATION",
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_03",
+    "name": "活性成分",
+    "match_name": "活性成分",
+    "unit_default": "",
+    "data_type": "string",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE",
+      "DOM_CCUS_L2_UTILIZATION"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_04",
+    "name": "再生能耗 (GJ/tCO₂)",
+    "match_name": "再生能耗",
+    "unit_default": "GJ/tCO₂",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_05",
+    "name": "再生能耗 (kWh/tCO₂)",
+    "match_name": "再生能耗",
+    "unit_default": "kWh/tCO₂",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_06",
+    "name": "整体能耗 (kWh/tCO₂)",
+    "match_name": "整体能耗",
+    "unit_default": "kWh/tCO₂",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_07",
+    "name": "材料成本 (元/kg)",
+    "match_name": "材料成本",
+    "unit_default": "元/kg",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_08",
+    "name": "吸收速率 (gCO₂/g·h)",
+    "match_name": "吸收速率",
+    "unit_default": "gCO₂/g·h",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_09",
+    "name": "产能 (万吨/年)",
+    "match_name": "产能",
+    "unit_default": "万吨/年",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_10",
+    "name": "设备投资 (万元)",
+    "match_name": "设备投资",
+    "unit_default": "万元",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_11",
+    "name": "循环寿命 (圈)",
+    "match_name": "循环寿命",
+    "unit_default": "圈",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_12",
+    "name": "单圈吸收量 (gCO₂/g)",
+    "match_name": "单圈吸收量",
+    "unit_default": "gCO₂/g",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_13",
+    "name": "运行温度 (℃)",
+    "match_name": "运行温度",
+    "unit_default": "℃",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_14",
+    "name": "运行压力 (MPa)",
+    "match_name": "运行压力",
+    "unit_default": "MPa",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_15",
+    "name": "捕集率 (%)",
+    "match_name": "捕集率",
+    "unit_default": "%",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_16",
+    "name": "CO₂纯度 (%)",
+    "match_name": "CO₂纯度",
+    "unit_default": "%",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_CAPTURE_17",
+    "name": "综合捕集成本 (元/t)",
+    "match_name": "综合捕集成本",
+    "unit_default": "元/t",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_CAPTURE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_TRANSPORT_03",
+    "name": "固定投资（元/km）",
+    "match_name": "固定投资",
+    "unit_default": "元/km",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_TRANSPORT"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_TRANSPORT_04",
+    "name": "opex(元/t·km)",
+    "match_name": "opex",
+    "unit_default": "元/t·km",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_TRANSPORT"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_TRANSPORT_05",
+    "name": "储运压力(MPa)",
+    "match_name": "储运压力",
+    "unit_default": "MPa",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_TRANSPORT"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_TRANSPORT_06",
+    "name": "储运温度(℃)",
+    "match_name": "储运温度",
+    "unit_default": "℃",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_TRANSPORT"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_TRANSPORT_07",
+    "name": "CO2运输相态",
+    "match_name": "CO2运输相态",
+    "unit_default": "",
+    "data_type": "string",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_TRANSPORT"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_TRANSPORT_08",
+    "name": "运输距离（km）",
+    "match_name": "运输距离",
+    "unit_default": "km",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_TRANSPORT"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_TRANSPORT_09",
+    "name": "运输能力（Mt/年）",
+    "match_name": "运输能力",
+    "unit_default": "Mt/年",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_TRANSPORT"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_TRANSPORT_10",
+    "name": "能耗（kWh/t·km）",
+    "match_name": "能耗",
+    "unit_default": "kWh/t·km",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_TRANSPORT"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_TRANSPORT_11",
+    "name": "设备寿命（年）",
+    "match_name": "设备寿命",
+    "unit_default": "年",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_TRANSPORT"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_TRANSPORT_12",
+    "name": "泄露率（%/年）",
+    "match_name": "泄露率",
+    "unit_default": "%/年",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_TRANSPORT",
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_UTILIZATION_04",
+    "name": "产物成分",
+    "match_name": "产物成分",
+    "unit_default": "",
+    "data_type": "string",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_UTILIZATION"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_UTILIZATION_05",
+    "name": "产物单位成本（元/kg）",
+    "match_name": "产物单位成本",
+    "unit_default": "元/kg",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_UTILIZATION"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_UTILIZATION_06",
+    "name": "产物价格（元/kg）",
+    "match_name": "产物价格",
+    "unit_default": "元/kg",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_UTILIZATION"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_UTILIZATION_07",
+    "name": "产物附加值（元/kg）",
+    "match_name": "产物附加值",
+    "unit_default": "元/kg",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_UTILIZATION"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_UTILIZATION_08",
+    "name": "附加值（元/kg CO2）",
+    "match_name": "附加值",
+    "unit_default": "元/kg CO2",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_UTILIZATION"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_UTILIZATION_09",
+    "name": "国际年需求（万吨/年）",
+    "match_name": "国际年需求",
+    "unit_default": "万吨/年",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_UTILIZATION"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_UTILIZATION_10",
+    "name": "国内年需求（万吨/年）",
+    "match_name": "国内年需求",
+    "unit_default": "万吨/年",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_UTILIZATION"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_UTILIZATION_11",
+    "name": "国际市场规模（亿元/年）",
+    "match_name": "国际市场规模",
+    "unit_default": "亿元/年",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_UTILIZATION"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_UTILIZATION_12",
+    "name": "国内市场规模（亿元/年）",
+    "match_name": "国内市场规模",
+    "unit_default": "亿元/年",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_UTILIZATION"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_STORAGE_03",
+    "name": "地质类型",
+    "match_name": "地质类型",
+    "unit_default": "",
+    "data_type": "string",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_STORAGE_04",
+    "name": "封存总量（万吨）",
+    "match_name": "封存总量",
+    "unit_default": "万吨",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_STORAGE_05",
+    "name": "封存深度（m）",
+    "match_name": "封存深度",
+    "unit_default": "m",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_STORAGE_06",
+    "name": "封存年限（年）",
+    "match_name": "封存年限",
+    "unit_default": "年",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_STORAGE_07",
+    "name": "封存比例（%）",
+    "match_name": "封存比例",
+    "unit_default": "%",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_STORAGE_08",
+    "name": "注入速率（t/天）",
+    "match_name": "注入速率",
+    "unit_default": "t/天",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_STORAGE_10",
+    "name": "诱发地震/环境风险",
+    "match_name": "诱发地震/环境风险",
+    "unit_default": "",
+    "data_type": "string",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_STORAGE_11",
+    "name": "运行成本（元/tCO2）",
+    "match_name": "运行成本",
+    "unit_default": "元/tCO2",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_STORAGE_12",
+    "name": "附加值（元/tCO2）",
+    "match_name": "附加值",
+    "unit_default": "元/tCO2",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_STORAGE"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_SUPPORT_01",
+    "name": "功率（kW）",
+    "match_name": "功率",
+    "unit_default": "kW",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_SUPPORT"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "IND_CCUS_SUPPORT_02",
+    "name": "价格（RMB）",
+    "match_name": "价格",
+    "unit_default": "RMB",
+    "data_type": "number",
+    "allowed_domain_ids": [
+      "DOM_CCUS_L2_SUPPORT"
+    ],
+    "is_active": true
+  }
+]

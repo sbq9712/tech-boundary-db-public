@@ -1,0 +1,1229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>上传&复核（样机）</title>
+  <style>
+    :root{
+      --bg:#f8f9fc; --text:#1e293b; --muted:#64748b; --line:rgba(0,0,0,.08);
+      --r:14px; --shadow: 0 4px 16px rgba(0,0,0,.06);
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family:var(--sans); color:var(--text);
+      background: #f8f9fc;
+    }
+    a{ color:#2563eb; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    .topbar{
+      position:sticky; top:0; z-index:20;
+      backdrop-filter: blur(10px);
+      background: rgba(255,255,255,.92);
+      border-bottom:1px solid var(--line);
+    }
+    .topbar-inner{
+      max-width:1400px; margin:0 auto;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; gap:12px;
+    }
+    .brand{ font-weight:850; }
+    .nav{ display:flex; gap:10px; flex-wrap:wrap; }
+    .nav a{
+      padding:8px 10px; border-radius:10px;
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+      color:var(--text); font-size:14px;
+    }
+
+    .container{ max-width:1400px; margin:0 auto; padding:16px; }
+    .grid{ display:grid; grid-template-columns: 1fr 420px; gap:14px; }
+    @media (max-width: 1080px){ .grid{ grid-template-columns: 1fr; } }
+
+    .card{
+      background: #ffffff;
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .hd{ padding:12px 14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .bd{ padding:12px 14px; }
+    .muted{ color:var(--muted); }
+    .small{ font-size:12px; }
+    .mono{ font-family:var(--mono); }
+
+    label{ display:block; margin:10px 0 6px; color:var(--muted); font-size:12px; }
+    input, select, textarea{
+      width:100%;
+      background:#ffffff;
+      border:1px solid #d1d5db;
+      color:var(--text);
+      padding:10px;
+      border-radius:12px;
+      font-size:13px;
+      outline:none;
+    }
+    textarea{ min-height:180px; resize:vertical; }
+    input[type="date"]{ padding:9px 10px; }
+    .row{ display:flex; gap:10px; }
+    .row > *{ flex:1; }
+
+    .btn{
+      cursor:pointer;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #d1d5db;
+      background:#f1f5f9;
+      color:var(--text);
+      font-size:13px;
+      width:100%;
+    }
+    .btn:hover{ background:#e2e8f0; }
+    .btn.primary{ background:rgba(88,101,242,.25); border-color:rgba(88,101,242,.35); }
+    .btn.danger{ background:rgba(248,113,113,.15); border-color:rgba(248,113,113,.25); }
+    .btn:disabled{ opacity:.5; cursor:not-allowed; }
+
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .dot{ width:8px; height:8px; border-radius:999px; background:#aaa; }
+    .dot.yellow{ background:#facc15; }
+    .dot.orange{ background:#fb923c; }
+    .dot.red{ background:#f87171; }
+
+    .hint{ border:1px solid #e2e8f0; background:#f8fafc; padding:10px 12px; border-radius:12px; line-height:1.6; }
+    .warn{ border:1px solid rgba(248,113,113,.30); background:rgba(248,113,113,.08); padding:10px 12px; border-radius:12px; display:none; margin-bottom:12px; }
+    .debug{ border:1px solid rgba(96,165,250,.28); background:rgba(96,165,250,.08); padding:10px 12px; border-radius:12px; display:none; margin-bottom:12px; white-space:pre-wrap; word-break:break-all; font-size:12px; }
+
+    .chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .chip{ background:#f1f5f9; border:1px solid #e2e8f0; border-radius:999px; padding:6px 10px; font-size:12px; cursor:pointer; user-select:none; }
+    .chip.on{ background:rgba(37,99,235,.08); border-color:rgba(37,99,235,.25); }
+    .chip:hover{ background:#e2e8f0; }
+
+    table{ width:100%; border-collapse:separate; border-spacing:0; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; background:#f8fafc; }
+    th,td{ padding:10px; border-bottom:1px solid #e2e8f0; font-size:13px; vertical-align:top; }
+    th{ background:#f1f5f9; font-weight:650; white-space:nowrap; }
+    tr:last-child td{ border-bottom:none; }
+
+    .modal{ position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:50; padding:16px; }
+    .modal .box{ width:min(720px, 100%); background:#ffffff; border:1px solid #d1d5db; border-radius:16px; box-shadow: var(--shadow); overflow:hidden; }
+    .modal .box .hd{ border-bottom:1px solid #e2e8f0; }
+    .modal .box .bd{ padding:14px; }
+
+    .tree{ border:1px solid #e2e8f0; background:#f8fafc; border-radius:12px; padding:6px; max-height: 260px; overflow:auto; }
+    .tree-row{ display:flex; align-items:center; gap:4px; width: 100%; padding:4px 6px; border-radius:10px; }
+    .tree{ min-height: 160px;}
+    .tree-node{min-width: 0;   /* 防止被 flex 挤成 0 */}
+
+    .tree-row:hover{ background:#f1f5f9; }
+    .tree-toggle{ width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #d1d5db; border-radius:6px; background:#f1f5f9; cursor:pointer; user-select:none; font-family: var(--mono); font-size:11px; }
+    .tree-toggle.empty{ opacity:.25; cursor:default; }
+    .tree-node{ cursor:pointer; user-select:none; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tree-indent{ width: 12px; flex: 0 0 12px; }
+    .tree-row input[type="checkbox"]{ width:14px; height:14px; margin:0 2px 0 0; flex:0 0 14px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">前沿技术情报与预警平台（样机） <span class="muted small">/ 上传 & 复核</span></div>
+    <div class="nav">
+        <a href="index.html">核心门户</a>
+        <a href="info_table.html">情报总表</a>
+        <a href="industry_dashboards.html">行业仪表盘</a>
+        <a href="industry_map.html">行业图景</a>
+        <a href="sources.html">信息源</a>
+        <a href="upload_review.html?v=20260326d">上传&复核</a>
+        <a href="drafts.html">草稿管理</a>
+        <a href="excel_import.html">批量导入</a>
+        <button onclick="Auth.showChangePassword()" style="cursor:pointer;padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:14px;">修改密码</button>
+        <button onclick="Auth.logout()" style="cursor:pointer;padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:14px;">退出</button>
+      </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="grid">
+    <section class="card">
+      <div class="hd">
+        <div style="font-weight:850;">上传 / 编辑情报（草稿）</div>
+        <div class="pill">先填全字段 → 提交 → AI 推荐 → 人工修正 → 预览 → 发布</div>
+      </div>
+      <div class="bd">
+        <div id="warnBox" class="warn"></div>
+        <label>标题</label>
+        <input id="title" placeholder="填写情报标题" />
+
+        <div class="row">
+          <div>
+            <label>发布时间</label>
+            <input id="published_at" type="date" />
+          </div>
+          <div>
+            <label>重要度（1-5）</label>
+            <select id="importance_score">
+              <option value="5">5</option>
+              <option value="4" selected>4</option>
+              <option value="3">3</option>
+              <option value="2">2</option>
+              <option value="1">1</option>
+            </select>
+          </div>
+        </div>
+
+        <label>情报正文（放在 tags 上面）</label>
+        <textarea id="content" placeholder="正文内容"></textarea>
+
+        <label>来源链接</label>
+        <input id="source_url" placeholder="https://..." />
+
+        <label>情报来源（多选）</label>
+        <div class="chips" id="sourceChips"></div>
+
+        <label>情报类型（多选）</label>
+        <div class="chips" id="typeChips"></div>
+
+        <label>领域（多选）</label>
+        <div class="tree" id="domainTree"></div>
+
+        <label>标签 tags（逗号分隔）</label>
+        <input id="tags" placeholder="固体吸附, 低湿烟气" />
+
+        <label>情报 comment（上传前）</label>
+        <input id="comment" placeholder="上传者研判 / 备注" />
+
+        <label>密级（上传者可调整）</label>
+        <select id="classification">
+          <option value="公开">公开</option>
+          <option value="内部" selected>内部</option>
+          <option value="秘密">秘密</option>
+          <option value="机密">机密</option>
+        </select>
+
+        <label>是否新技术</label>
+        <select id="is_new_tech">
+          <option value="true">新技术（可能触发预警）</option>
+          <option value="false">已有技术</option>
+        </select>
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" id="btnSaveDraft">保存草稿</button>
+          <button class="btn primary" id="btnSubmit">提交并生成 AI 建议</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="hd">
+        <div style="font-weight:850;">上传说明</div>
+      </div>
+      <div class="bd">
+        <div class="hint">
+          ① 填写全部字段后才能触发 AI 推荐。<br/>
+          ② AI 仅提供指标候选与预警建议，最终以人工确认结果为准。<br/>
+          ③ 若预警为 active，必须补齐预警标题、内容、reviewer_comment、duration。
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <a class="btn" href="drafts.html">查看草稿管理</a>
+          <a class="btn" href="excel_import.html">批量导入</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" id="aiPanel" style="margin-top:14px;">
+    <div class="hd">
+      <div style="font-weight:850;">AI 推荐指标 & 预警建议</div>
+      <div class="muted small">指标候选可由 AI 补充，预警与发布也可直接人工填写</div>
+    </div>
+    <div class="bd">
+      <div class="row">
+        <div class="pill"><span class="dot orange"></span><span id="aiAlertText">AI 预警建议：-</span></div>
+        <div class="pill">建议原因：<span id="aiAlertReason">-</span></div>
+      </div>
+
+      <label style="margin-top:12px;">指标候选（可修改数值 / 单位）</label>
+      <table>
+        <thead>
+          <tr>
+            <th>指标</th>
+            <th>建议值</th>
+            <th>单位</th>
+            <th>保留</th>
+          </tr>
+        </thead>
+        <tbody id="indicatorBody"></tbody>
+      </table>
+
+      <div class="row" style="margin-top:10px;">
+        <button class="btn" id="btnAddIndicator">新增指标</button>
+        <button class="btn" id="btnToggleAlert">强制开启预警</button>
+      </div>
+
+      <label style="margin-top:14px;">预警信息（若触发必须补齐）</label>
+      <div class="row">
+        <div>
+          <label>预警标题 alert_title（必填）</label>
+          <input id="alert_title" placeholder="填写预警标题" />
+        </div>
+        <div>
+          <label>预警时效 duration</label>
+          <select id="duration">
+            <option value="week">一周</option>
+            <option value="month" selected>一月</option>
+            <option value="quarter">一季度</option>
+            <option value="custom">自定义日期</option>
+          </select>
+        </div>
+        <div>
+          <label>自定义到期日</label>
+          <input id="custom_expires_on" type="date" disabled />
+        </div>
+        <div>
+          <label>预警颜色</label>
+          <select id="alert_color">
+            <option value="yellow">黄色</option>
+            <option value="orange" selected>橙色</option>
+            <option value="red">红色</option>
+          </select>
+        </div>
+      </div>
+      <label>预警内容 alert_body（必填）</label>
+      <input id="alert_body" placeholder="填写预警内容" />
+      <label>reviewer_comment（必填）</label>
+      <input id="reviewer_comment" placeholder="复核意见" />
+
+      <div class="row" style="margin-top:12px;">
+        <button class="btn" id="btnPreview">预览</button>
+        <button class="btn primary" id="btnPublish">发布</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="previewModal">
+  <div class="box">
+    <div class="hd">
+      <div style="font-weight:750;">发布预览</div>
+      <button class="btn" id="btnClosePreview">关闭</button>
+    </div>
+    <div class="bd" id="previewBody"></div>
+  </div>
+</div>
+<script src="/auth.js"></script>
+<script type="module">
+  Auth.requireAuth();
+  import { extractIndicators } from "./lib/extractor.js";
+
+  const $ = s => document.querySelector(s);
+  const API_BASE = window.API_BASE || "/api";
+
+  const escapeHtml = str => str.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+
+  async function loadJson(p){
+    const r = await fetch(p, { cache: "no-store" });
+    return await r.json();
+  }
+  async function loadApi(path, options = {}){
+    const r = await Auth.authFetch(`${API_BASE}${path}`, {
+      cache: "no-store",
+      ...options
+    });
+    if(!r) return null;
+    if(!r.ok){
+      const text = await r.text();
+      throw new Error(`API请求失败 (${r.status}) ${text}`);
+    }
+    if(r.status === 204) return null;
+    return await r.json();
+  }
+
+  const state = {
+    indicatorDefs: [],
+    indicatorDefById: new Map(),
+    indicatorDefByNormName: new Map(),
+    domains: [],
+    domainById: new Map(),
+    indicators: [],
+    aiShouldAlert: false,
+    aiReasons: [],
+    manualAlert: false,
+    selectedDomainIds: new Set(),
+    currentDraftId: null,
+    revisionMode: false,
+    revisionOf: null
+  };
+
+  function normalizeIndicatorName(name){
+    return String(name || "")
+      .replace(/\s+/g, "")
+      .replace(/[()（）[\]【】]/g, "")
+      .replace(/₂/g, "2")
+      .toLowerCase();
+  }
+
+  function buildIndicatorNormNameMap(defs){
+    const map = new Map();
+    (defs || []).forEach(def => {
+      [def?.name, def?.match_name].forEach(rawName => {
+        const normalized = normalizeIndicatorName(rawName);
+        if(normalized && !map.has(normalized)){
+          map.set(normalized, def);
+        }
+      });
+    });
+    return map;
+  }
+
+  function getCcuseLevel2DomainIds(domainIds){
+    const result = new Set();
+    (domainIds || []).forEach(domainId => {
+      let current = state.domainById.get(domainId);
+      const visited = new Set();
+      while(current && !visited.has(current.id)){
+        visited.add(current.id);
+        if(String(current.id || "").startsWith("DOM_CCUS_L2_")){
+          result.add(current.id);
+          break;
+        }
+        current = current.parent_id ? state.domainById.get(current.parent_id) : null;
+      }
+    });
+    return Array.from(result);
+  }
+
+  function getAvailableIndicatorDefs(domainIds = getSelectedDomains()){
+    const ccusLevel2Ids = new Set(getCcuseLevel2DomainIds(domainIds));
+    if(!ccusLevel2Ids.size){
+      return state.indicatorDefs;
+    }
+    return state.indicatorDefs.filter(def => {
+      const allowed = Array.isArray(def.allowed_domain_ids) ? def.allowed_domain_ids : [];
+      if(!allowed.length) return true;
+      return allowed.some(id => ccusLevel2Ids.has(id));
+    });
+  }
+
+  function getAvailableIndicatorIdSet(domainIds = getSelectedDomains()){
+    return new Set(getAvailableIndicatorDefs(domainIds).map(def => def.id));
+  }
+
+  function enrichIndicator(ind){
+    const matchedByName = state.indicatorDefByNormName.get(normalizeIndicatorName(ind?.name));
+    const matchedById = ind?.indicator_id ? state.indicatorDefById.get(ind.indicator_id) : null;
+    const matched = matchedByName || matchedById || null;
+    if(!matched) return null;
+    return {
+      indicator_id: matched.id,
+      name: matched.name,
+      value: ind?.value ?? ind?.suggested_value ?? "",
+      unit: ind?.unit || ind?.unit_default || matched.unit_default || "",
+      keep: ind?.keep !== false
+    };
+  }
+
+  function syncIndicatorWithPreset(idx, { preferUnit = false } = {}){
+    const current = state.indicators[idx];
+    if(!current) return;
+    const normalizedCurrentName = normalizeIndicatorName(current.name);
+    const byName = state.indicatorDefByNormName.get(normalizedCurrentName);
+    const byId = current.indicator_id ? state.indicatorDefById.get(current.indicator_id) : null;
+    const matched = byName || byId || null;
+    if(!matched){
+      state.indicators[idx].indicator_id = "";
+      return;
+    }
+    state.indicators[idx].indicator_id = matched.id;
+    state.indicators[idx].name = matched.name;
+    if(preferUnit || !String(state.indicators[idx].unit || "").trim()){
+      state.indicators[idx].unit = matched.unit_default || state.indicators[idx].unit || "";
+    }
+  }
+
+  function getPersistedIndicators(){
+    const rows = Array.from(document.querySelectorAll("#indicatorBody tr"));
+    if(rows.length){
+      const fromDom = rows.map((row, idx) => {
+        const nameEl = row.querySelector('[data-field="name"]');
+        const valueEl = row.querySelector('[data-field="value"]');
+        const unitEl = row.querySelector('[data-field="unit"]');
+        const keepEl = row.querySelector('[data-field="keep"]');
+        if(!nameEl || !valueEl || !unitEl || !keepEl) return null;
+        const current = state.indicators[idx] || {};
+        return enrichIndicator({
+          indicator_id: current.indicator_id || "",
+          name: nameEl.value,
+          value: valueEl.value,
+          unit: unitEl.value,
+          keep: !!keepEl.checked
+        });
+      }).filter(Boolean);
+      if(fromDom.length){
+        state.indicators = fromDom;
+        return fromDom;
+      }
+    }
+    return state.indicators.map(ind => enrichIndicator(ind)).filter(Boolean);
+  }
+
+  function renderIndicatorOptions(selectedName){
+    const normalizedSelected = normalizeIndicatorName(selectedName);
+    const options = ['<option value="">请选择指标</option>'];
+    getAvailableIndicatorDefs().forEach(def => {
+      const selected = normalizeIndicatorName(def.name) === normalizedSelected;
+      options.push(
+        `<option value="${escapeHtml(def.name)}"${selected ? " selected" : ""}>${escapeHtml(def.name)}</option>`
+      );
+    });
+    return options.join("");
+  }
+
+  function showWarn(msg){
+    const box = $("#warnBox");
+    box.textContent = msg;
+    box.style.display = "block";
+  }
+
+  function clearWarn(){
+    const box = $("#warnBox");
+    box.textContent = "";
+    box.style.display = "none";
+  }
+
+  function createChips(containerId, values){
+    const box = document.getElementById(containerId);
+    box.innerHTML = "";
+    values.forEach(val => {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.dataset.value = val;
+      chip.textContent = val;
+      chip.addEventListener("click", () => chip.classList.toggle("on"));
+      box.appendChild(chip);
+    });
+  }
+
+  function collectChipValues(containerId){
+    return Array.from(document.querySelectorAll(`#${containerId} .chip.on`)).map(ch => ch.dataset.value);
+  }
+
+  function syncIndicatorsBySelectedDomains(){
+    const allowedIds = getAvailableIndicatorIdSet();
+    const persisted = getPersistedIndicators();
+    state.indicators = persisted.filter(ind => allowedIds.has(ind.indicator_id));
+    if($("#aiPanel").style.display !== "none"){
+      renderIndicators();
+    }
+  }
+
+  function buildTree(domains, container){
+    const map = Object.fromEntries(domains.map(d => [d.id, {...d, children: []}]));
+    const roots = [];
+    domains.forEach(d => {
+      if(d.parent_id && map[d.parent_id]){
+        map[d.parent_id].children.push(map[d.id]);
+      } else {
+        roots.push(map[d.id]);
+      }
+    });
+
+    const expanded = new Set();
+    const parentMap = new Map(domains.map(d => [d.id, d.parent_id || null]));
+    for(const selectedId of state.selectedDomainIds){
+      let cur = parentMap.get(selectedId);
+      while(cur){
+        expanded.add(cur);
+        cur = parentMap.get(cur);
+      }
+    }
+
+    function render(){
+      container.innerHTML = "";
+      const renderNode = (node, depth) => {
+        const row = document.createElement("div");
+        row.className = "tree-row";
+
+        for(let i=0;i<depth;i++){
+          const indent = document.createElement("div");
+          indent.className = "tree-indent";
+          row.appendChild(indent);
+        }
+
+        const toggle = document.createElement("div");
+        const expandable = node.children.length > 0;
+        toggle.className = "tree-toggle" + (expandable ? "" : " empty");
+        toggle.textContent = expandable ? (expanded.has(node.id) ? "−" : "+") : "·";
+        if(expandable){
+          toggle.addEventListener("click", (e)=>{
+            e.stopPropagation();
+            expanded.has(node.id) ? expanded.delete(node.id) : expanded.add(node.id);
+            render();
+          });
+        }
+        row.appendChild(toggle);
+
+        const isLeaf = node.children.length === 0;
+
+        // checkbox
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = node.id;
+
+        // 父节点禁用选择（也可以直接不渲染 checkbox，见下方可选方案）
+        if(!isLeaf){
+          checkbox.disabled = true;
+          checkbox.style.opacity = "0";        // 隐藏但占位，行对齐不乱
+          checkbox.style.pointerEvents = "none";
+        } else {
+          checkbox.disabled = false;
+          checkbox.checked = state.selectedDomainIds.has(node.id);
+          checkbox.addEventListener("change", () => {
+            if(checkbox.checked){
+              state.selectedDomainIds.add(node.id);
+            }else{
+              state.selectedDomainIds.delete(node.id);
+            }
+            syncIndicatorsBySelectedDomains();
+          });
+        }
+
+        row.appendChild(checkbox);
+
+        // label
+        const nodeLabel = document.createElement("div");
+        nodeLabel.className = "tree-node";
+        nodeLabel.textContent = node.name;
+
+        nodeLabel.addEventListener("click", () => {
+          if(isLeaf){
+            checkbox.checked = !checkbox.checked;   // 只有叶子节点才勾选
+            if(checkbox.checked){
+              state.selectedDomainIds.add(node.id);
+            }else{
+              state.selectedDomainIds.delete(node.id);
+            }
+            syncIndicatorsBySelectedDomains();
+          } else {
+            // 父节点点击 = 展开/收起（更符合直觉）
+            if(node.children.length > 0){
+              expanded.has(node.id) ? expanded.delete(node.id) : expanded.add(node.id);
+              render();
+            }
+          }
+        });
+
+        row.appendChild(nodeLabel);
+
+        container.appendChild(row);
+
+        if(expanded.has(node.id)){
+          node.children.forEach(child => renderNode(child, depth + 1));
+        }
+      };
+
+      roots.forEach(root => renderNode(root, 0));
+    }
+
+    render();
+  }
+
+  function getSelectedDomains(){
+    return Array.from(state.selectedDomainIds);
+  }
+
+  function getForm(){
+    return {
+      title: $("#title").value.trim(),
+      published_at: $("#published_at").value,
+      content: $("#content").value.trim(),
+      source_url: $("#source_url").value.trim(),
+      source_types: collectChipValues("sourceChips"),
+      info_types: collectChipValues("typeChips"),
+      domain_ids: getSelectedDomains(),
+      tags: $("#tags").value.split(/[,，]/).map(t => t.trim()).filter(Boolean),
+      comment: $("#comment").value.trim(),
+      classification: $("#classification").value,
+      is_new_tech: $("#is_new_tech").value === "true",
+      importance_score: Number($("#importance_score").value)
+    };
+  }
+
+  function validateBase(form){
+    if(!form.title) return "标题必填";
+    if(!form.published_at) return "发布时间必填";
+    if(!form.content) return "正文必填";
+    if(!form.source_url) return "来源链接必填";
+    if(form.source_types.length === 0) return "至少选择一个来源";
+    if(form.info_types.length === 0) return "至少选择一个情报类型";
+    if(form.domain_ids.length === 0) return "至少选择一个领域";
+    return "";
+  }
+
+  function validatePublishRequired(form){
+    if(!form.title) return "标题必填";
+    if(!form.content) return "正文必填";
+    if(form.domain_ids.length === 0) return "至少选择一个领域";
+    return "";
+  }
+
+  function validateIndicatorsSelection(){
+    const allowedIds = getAvailableIndicatorIdSet();
+    const rows = Array.from(document.querySelectorAll("#indicatorBody tr"));
+    for(const row of rows){
+      const nameEl = row.querySelector('[data-field="name"]');
+      if(nameEl && !String(nameEl.value || "").trim()){
+        return "指标名称必须从预设列表中选择";
+      }
+      if(nameEl){
+        const matched = state.indicatorDefByNormName.get(normalizeIndicatorName(nameEl.value));
+        if(!matched || !allowedIds.has(matched.id)){
+          return "当前领域下只能选择对应 CCUS 二级分类允许的指标";
+        }
+      }
+    }
+    return "";
+  }
+
+  function renderIndicators(){
+    const tbody = $("#indicatorBody");
+    tbody.innerHTML = "";
+    if(state.indicators.length === 0){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="4" class="muted">暂无候选指标，可手动新增</td>`;
+      tbody.appendChild(tr);
+      return;
+    }
+    state.indicators.forEach((ind, idx) => {
+      const tr = document.createElement("tr");
+      const matched = ind.indicator_id ? state.indicatorDefById.get(ind.indicator_id) : null;
+      tr.innerHTML = `
+        <td>
+          <select data-idx="${idx}" data-field="name">${renderIndicatorOptions(ind.name)}</select>
+          <div class="muted small" style="margin-top:4px;">${matched ? `指标ID：${escapeHtml(matched.id)}` : "请选择预设指标"}</div>
+        </td>
+        <td><input data-idx="${idx}" data-field="value" value="${ind.value}" /></td>
+        <td><input data-idx="${idx}" data-field="unit" value="${ind.unit}" /></td>
+        <td><input data-idx="${idx}" data-field="keep" type="checkbox" ${ind.keep ? "checked" : ""} /></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll("input, select").forEach(input => {
+      const handler = (e) => {
+        const idx = Number(e.target.dataset.idx);
+        const field = e.target.dataset.field;
+        if(field === "keep"){
+          state.indicators[idx].keep = e.target.checked;
+        } else if(field === "value"){
+          state.indicators[idx].value = e.target.value;
+        } else if(field === "unit"){
+          state.indicators[idx].unit = e.target.value;
+        } else if(field === "name"){
+          state.indicators[idx].name = e.target.value;
+          syncIndicatorWithPreset(idx, { preferUnit: true });
+          renderIndicators();
+        }
+      };
+      input.addEventListener("change", handler);
+      if(input.tagName === "INPUT" && input.dataset.field !== "keep"){
+        input.addEventListener("input", handler);
+      }
+    });
+  }
+
+  function updateAlertDisplay(){
+    const shouldAlert = state.aiShouldAlert;
+    const enabled = isAlertEnabled();
+    $("#aiAlertText").textContent = `${shouldAlert ? "AI 预警建议：是" : "AI 预警建议：否"}（当前：${enabled ? "已开启" : "未开启"}）`;
+    $("#aiAlertReason").textContent = state.aiReasons.join("、") || "-";
+    $("#btnToggleAlert").textContent = enabled ? "关闭预警" : "强制开启预警";
+  }
+
+  function runAiSuggestion(form){
+  const text = `${form.title} ${form.content}`;
+  const suggestions = extractIndicators(text, getAvailableIndicatorDefs(form.domain_ids));
+  const indicators = suggestions.map(x => enrichIndicator({
+    indicator_id: x.indicator_id || "",
+    name: x.name,
+    suggested_value: x.suggested_value,
+    unit_default: x.unit_default || "",
+    keep: true
+  })).filter(Boolean);
+  state.indicators = indicators;
+
+  // 3) 预警建议：仍沿用你原来的逻辑 + 给一段“原因评论”
+  state.aiShouldAlert = form.is_new_tech || form.importance_score >= 4;
+  state.aiReasons = [];
+  if(form.is_new_tech) state.aiReasons.push("新技术");
+  if(form.importance_score >= 4) state.aiReasons.push("重要度较高");
+  if(indicators.length) state.aiReasons.push("正文包含关键指标数值");
+
+  state.manualAlert = false;
+
+  updateAlertDisplay();
+  renderIndicators();
+
+  // 4) 如果建议预警，自动填一段原因（用户可改）
+  if(state.aiShouldAlert){
+    const kept = state.indicators.filter(i => i.keep).slice(0,3)
+      .map(i => `${i.name}=${i.value}${i.unit}`).join("；");
+
+    // 预警字段自动填充（不会锁死，用户可改）
+    $("#alert_title").value = $("#alert_title").value.trim() || `关注：${form.title.slice(0,18)}`;
+    $("#alert_body").value  = $("#alert_body").value.trim()  || `建议关注该情报的关键指标与落地进展（${kept || "正文提取到指标数值"}）。`;
+    $("#reviewer_comment").value = $("#reviewer_comment").value.trim() ||
+      `AI建议预警：${state.aiReasons.join("、")}。` +
+      (kept ? `已从正文抽取到指标：${kept}。` : `正文未匹配到指标，建议人工补充。`) +
+      `建议后续跟踪：指标口径一致性、样机/中试数据、成本与能耗、竞品对比与风险点。`;
+  }
+}
+
+  function isAlertEnabled(){
+    return state.manualAlert;
+  }
+
+  function pad2(n){
+    return String(n).padStart(2, "0");
+  }
+
+  function formatDateInputValue(date){
+    const y = date.getFullYear();
+    const m = pad2(date.getMonth() + 1);
+    const d = pad2(date.getDate());
+    return `${y}-${m}-${d}`;
+  }
+
+  function getTomorrowDateInputValue(){
+    const next = new Date();
+    next.setHours(0, 0, 0, 0);
+    next.setDate(next.getDate() + 1);
+    return formatDateInputValue(next);
+  }
+
+  function updateCustomExpiresInput(){
+    const input = $("#custom_expires_on");
+    const minDate = getTomorrowDateInputValue();
+    input.min = minDate;
+    if($("#duration").value === "custom"){
+      input.disabled = false;
+      if(!input.value || input.value <= minDate){
+        input.value = minDate;
+      }
+    }else{
+      input.disabled = true;
+    }
+  }
+
+  function customDateToExpiresAt(value){
+    if(!value) return null;
+    const date = new Date(`${value}T23:59:59`);
+    if(Number.isNaN(date.getTime())) return null;
+    return date.toISOString();
+  }
+
+  function validateAlert(){
+    if(!isAlertEnabled()) return "";
+    if(!$("#alert_title").value.trim()) return "预警标题必填";
+    if(!$("#alert_body").value.trim()) return "预警内容必填";
+    if(!$("#reviewer_comment").value.trim()) return "reviewer_comment 必填";
+    if($("#duration").value === "custom"){
+      const customDate = $("#custom_expires_on").value;
+      if(!customDate) return "请选择自定义预警到期日";
+      if(customDate <= formatDateInputValue(new Date())) return "自定义预警到期日必须晚于上传当天";
+    }
+    return "";
+  }
+
+  function getAlertForm(){
+    const duration = $("#duration").value;
+    return {
+      manual_alert: isAlertEnabled(),
+      alert_title: $("#alert_title").value.trim(),
+      alert_body: $("#alert_body").value.trim(),
+      reviewer_comment: $("#reviewer_comment").value.trim(),
+      alert_color: $("#alert_color").value,
+      duration,
+      custom_expires_on: duration === "custom" ? $("#custom_expires_on").value : ""
+    };
+  }
+
+  function durationToExpiresAt(duration, customExpiresOn = ""){
+    if(duration === "custom"){
+      return customDateToExpiresAt(customExpiresOn);
+    }
+    const now = new Date();
+    if(duration === "week"){
+      now.setDate(now.getDate() + 7);
+    }else if(duration === "month"){
+      now.setMonth(now.getMonth() + 1);
+    }else if(duration === "quarter"){
+      now.setMonth(now.getMonth() + 3);
+    }else{
+      return null;
+    }
+    return now.toISOString();
+  }
+
+  function inferDurationByExpiresAt(expiresAt){
+    if(!expiresAt) return "month";
+    const expires = new Date(expiresAt).getTime();
+    const now = Date.now();
+    if(!Number.isFinite(expires) || expires <= now) return "month";
+    const diffDays = (expires - now) / (1000 * 60 * 60 * 24);
+    if(diffDays <= 9) return "week";
+    if(diffDays <= 45) return "month";
+    if(diffDays <= 120) return "quarter";
+    return "custom";
+  }
+
+  function inferCustomExpiresOn(draftData, draft){
+    const explicit = draftData.custom_expires_on || "";
+    if(explicit) return explicit;
+    const inferredMode = draftData.duration || draft.duration || inferDurationByExpiresAt(draft.alert_expires_at);
+    if(inferredMode !== "custom") return "";
+    return (draft.alert_expires_at || "").slice(0, 10);
+  }
+
+  function validateAction(form, action){
+    if(action === "publish"){
+      return validatePublishRequired(form) || validateIndicatorsSelection() || validateAlert();
+    }
+    if(action === "preview"){
+      return validateBase(form) || validateIndicatorsSelection() || validateAlert();
+    }
+    if(action === "submit" || action === "save_draft"){
+      return validateBase(form) || validateIndicatorsSelection();
+    }
+    return "";
+  }
+
+  async function upsertDraft(status){
+    const form = getForm();
+    const alert = getAlertForm();
+    const indicators = getPersistedIndicators();
+    const payload = {
+      title: form.title,
+      content: form.content,
+      source_url: form.source_url || null,
+      published_at: form.published_at ? `${form.published_at}T00:00:00Z` : null,
+      importance_score: form.importance_score,
+      is_new_tech: form.is_new_tech,
+      comment: form.comment || null,
+      source_types: form.source_types,
+      info_types: form.info_types,
+      tags: form.tags,
+      domain_ids: form.domain_ids,
+      classification: form.classification || null,
+      status,
+      draft_data: {
+        indicators,
+        duration: alert.duration,
+        custom_expires_on: alert.custom_expires_on || null,
+        manual_alert: isAlertEnabled()
+      },
+      alert: isAlertEnabled() ? {
+        enabled: true,
+        alert_title: alert.alert_title,
+        alert_body: alert.alert_body,
+        reviewer_comment: alert.reviewer_comment,
+        alert_color: alert.alert_color,
+        expires_at: durationToExpiresAt(alert.duration, alert.custom_expires_on)
+      } : null
+    };
+    const saved = state.currentDraftId
+      ? await loadApi(`/info-items/${encodeURIComponent(state.currentDraftId)}/draft`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        })
+      : await loadApi("/info-items/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+    state.currentDraftId = saved.id;
+    state.indicators = indicators;
+    return saved;
+  }
+
+  function showPreview(){
+    const form = getForm();
+    const indicators = getPersistedIndicators().filter(i => i.keep);
+    const alertOn = isAlertEnabled();
+    const preview = `
+      <div style="font-weight:700; font-size:18px;">${escapeHtml(form.title || "-")}</div>
+      <div class="muted small" style="margin-top:6px;">发布时间：${form.published_at} / 重要度：${form.importance_score}</div>
+      <div style="margin-top:10px; white-space:pre-wrap;">${escapeHtml(form.content || "-")}</div>
+      <div style="margin-top:10px;">领域：${form.domain_ids.join("、") || "-"}</div>
+      <div style="margin-top:10px;">密级：${escapeHtml(form.classification || "-")}</div>
+      <div style="margin-top:10px;">comment：${escapeHtml(form.comment || "-")}</div>
+      <div style="margin-top:10px;">指标：${indicators.map(i => `${i.name} ${i.value}${i.unit}`).join("；") || "-"}</div>
+      <div style="margin-top:10px;">预警：${alertOn ? "是" : "否"}</div>
+    `;
+    $("#previewBody").innerHTML = preview;
+    $("#previewModal").style.display = "flex";
+  }
+
+  $("#btnClosePreview").addEventListener("click", () => {
+    $("#previewModal").style.display = "none";
+  });
+
+  $("#btnSaveDraft").addEventListener("click", async () => {
+    clearWarn();
+    const form = getForm();
+    const error = validateAction(form, "save_draft");
+    if(error){
+      showWarn(error);
+      return;
+    }
+    try{
+      await upsertDraft("draft");
+      alert("草稿已保存");
+    }catch(err){
+      showWarn(err?.message || "保存草稿失败");
+    }
+  });
+
+  $("#btnSubmit").addEventListener("click", async () => {
+    clearWarn();
+    const form = getForm();
+    const error = validateAction(form, "submit");
+    if(error){
+      showWarn(error);
+      return;
+    }
+    runAiSuggestion(form);
+    try{
+      await upsertDraft("ai_suggested");
+    }catch(err){
+      showWarn(err?.message || "提交失败");
+      return;
+    }
+    $("#aiPanel").style.display = "block";
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  });
+
+  $("#btnAddIndicator").addEventListener("click", () => {
+    const firstDef = getAvailableIndicatorDefs()[0];
+    if(!firstDef){
+      showWarn("当前领域下没有可用的预设指标");
+      return;
+    }
+    state.indicators.push({
+      indicator_id: firstDef.id,
+      name: firstDef.name,
+      value: "",
+      unit: firstDef.unit_default || "",
+      keep: true
+    });
+    renderIndicators();
+  });
+
+  $("#btnToggleAlert").addEventListener("click", () => {
+    state.manualAlert = !state.manualAlert;
+    updateAlertDisplay();
+  });
+
+  $("#btnPreview").addEventListener("click", () => {
+    clearWarn();
+    const form = getForm();
+    const error = validateAction(form, "preview");
+    if(error){
+      showWarn(error);
+      return;
+    }
+    showPreview();
+  });
+
+  $("#btnPublish").addEventListener("click", async () => {
+    clearWarn();
+    const form = getForm();
+    const error = validateAction(form, "publish");
+    if(error){
+      showWarn(error);
+      return;
+    }
+    let created = null;
+    let indicators = getPersistedIndicators();
+    let syncedDraft = null;
+    const alertForm = getAlertForm();
+    if(state.currentDraftId){
+      try{
+        syncedDraft = await upsertDraft("ai_suggested");
+        indicators = getPersistedIndicators();
+      }catch(err){
+        showWarn(err?.message || "发布前同步草稿失败");
+        return;
+      }
+    }
+    const draftIdForPublish = syncedDraft?.id || state.currentDraftId || null;
+    const publishPayload = {
+      title: form.title,
+      content: form.content,
+      source_url: form.source_url || null,
+      published_at: form.published_at ? `${form.published_at}T00:00:00Z` : null,
+      importance_score: form.importance_score,
+      is_new_tech: form.is_new_tech,
+      comment: form.comment || null,
+      source_types: form.source_types,
+      info_types: form.info_types,
+      tags: form.tags,
+      domain_ids: form.domain_ids,
+      classification: form.classification || null,
+      draft_id: draftIdForPublish,
+      revision_of: state.revisionOf || null,
+      draft_data: {
+        indicators,
+        duration: alertForm.duration,
+        custom_expires_on: alertForm.custom_expires_on || null,
+        manual_alert: isAlertEnabled()
+      },
+      alert: isAlertEnabled() ? {
+        enabled: true,
+        alert_title: alertForm.alert_title,
+        alert_body: alertForm.alert_body,
+        reviewer_comment: alertForm.reviewer_comment,
+        alert_color: alertForm.alert_color,
+        expires_at: durationToExpiresAt(alertForm.duration, alertForm.custom_expires_on)
+      } : null
+    };
+    try{
+      created = await loadApi("/info-items/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(publishPayload)
+      });
+    }catch(err){
+      const message = err?.message || "";
+      if(draftIdForPublish && message.includes("draft not found")){
+        try{
+          created = await loadApi("/info-items/publish", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...publishPayload, draft_id: null })
+          });
+        }catch(retryErr){
+          showWarn(retryErr?.message || "发布失败");
+          return;
+        }
+      }else{
+        showWarn(message || "发布失败");
+        return;
+      }
+    }
+
+    state.indicators = indicators;
+    window.alert("发布成功（已写入数据库）");
+    if(created?.id){
+      window.location.href = `info_detail.html?id=${encodeURIComponent(created.id)}`;
+    }
+  });
+
+  function hydrateDraft(draft){
+    state.revisionMode = !!draft.revision_mode;
+    state.revisionOf = state.revisionMode ? (draft.revision_of || null) : null;
+    state.currentDraftId = state.revisionMode ? null : (draft.id || null);
+    $("#title").value = draft.title || "";
+    $("#published_at").value = (draft.published_at || "").slice(0, 10) || $("#published_at").value;
+    $("#content").value = draft.content || "";
+    $("#source_url").value = draft.source_url || "";
+    $("#tags").value = (draft.tags || []).join(", ");
+    $("#comment").value = draft.comment || "";
+    $("#classification").value = draft.classification || "内部";
+    $("#is_new_tech").value = String(draft.is_new_tech ?? true);
+    $("#importance_score").value = String(draft.importance_score || 4);
+    document.querySelectorAll("#sourceChips .chip").forEach(ch => {
+      if((draft.source_types || []).includes(ch.dataset.value)) ch.classList.add("on");
+    });
+    document.querySelectorAll("#typeChips .chip").forEach(ch => {
+      if((draft.info_types || []).includes(ch.dataset.value)) ch.classList.add("on");
+    });
+    state.selectedDomainIds = new Set(draft.domain_ids || []);
+    buildTree(state.domains, $("#domainTree"));
+    const draftData = draft.draft_data || {};
+    state.manualAlert = !!(draftData.manual_alert || draft.manual_alert || draft.alert_status === "active");
+    $("#alert_title").value = draft.alert_title || "";
+    $("#alert_body").value = draft.alert_body || "";
+    $("#reviewer_comment").value = draft.reviewer_comment || draft.alert_reviewer_comment || "";
+    $("#alert_color").value = draft.alert_color || "orange";
+    $("#duration").value = draftData.duration || draft.duration || inferDurationByExpiresAt(draft.alert_expires_at);
+    $("#custom_expires_on").value = inferCustomExpiresOn(draftData, draft);
+    updateCustomExpiresInput();
+    if(Array.isArray(draftData.indicators)){
+      state.indicators = draftData.indicators.map(enrichIndicator).filter(Boolean);
+    }else if(Array.isArray(draft.indicators)){
+      state.indicators = draft.indicators.map(enrichIndicator).filter(Boolean);
+    }
+    syncIndicatorsBySelectedDomains();
+    if(state.indicators.length || state.manualAlert || draft.status === "ai_suggested"){
+      renderIndicators();
+    }
+    updateAlertDisplay();
+  }
+
+  async function main(){
+    const [domainTree, indicatorDefs] = await Promise.all([
+      loadApi("/domains/tree"),
+      loadJson("./data/indicator_defs.json")
+    ]);
+    const domains = [];
+    (function flatten(nodes){
+      (nodes || []).forEach(node => {
+        domains.push({ id: node.id, name: node.name, parent_id: node.parent_id ?? null, level: node.level ?? null });
+        flatten(node.children || []);
+      });
+    })(domainTree);
+
+    state.domains = domains;
+    state.domainById = new Map(domains.map(domain => [domain.id, domain]));
+    state.indicatorDefs = (indicatorDefs || []).filter(x => x.is_active);
+    state.indicatorDefById = new Map(state.indicatorDefs.map(def => [def.id, def]));
+    state.indicatorDefByNormName = buildIndicatorNormNameMap(state.indicatorDefs);
+
+    state.domains = domains;
+
+    createChips("sourceChips", ["产业新闻", "学术文献", "报告发布", "政策", "企业公告"]);
+    createChips("typeChips", ["技术", "市场", "政策", "项目", "投融资"]);
+    buildTree(domains, $("#domainTree"));
+    updateCustomExpiresInput();
+    $("#duration").addEventListener("change", updateCustomExpiresInput);
+
+    const today = new Date();
+    $("#published_at").value = today.toISOString().slice(0,10);
+
+    const qp = new URLSearchParams(location.search);
+    const draftId = qp.get("draft_id");
+    if(draftId){
+      const draft = await loadApi(`/info-items/${encodeURIComponent(draftId)}/draft`);
+      hydrateDraft(draft);
+      return;
+    }
+
+    const draftPayload = localStorage.getItem("currentDraft");
+    if(draftPayload){
+      const draft = JSON.parse(draftPayload);
+      localStorage.removeItem("currentDraft");
+      hydrateDraft(draft);
+    }
+  }
+
+  main().catch(err => {
+    console.error(err);
+    showWarn("加载失败：" + err.message);
+  });
+</script>
+<script src="auth.js"></script>
+<script src="portal_shell.js"></script>
+</body>
+</html>

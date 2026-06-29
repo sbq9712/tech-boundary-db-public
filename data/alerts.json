@@ -1,0 +1,19 @@
+[
+  {
+    "id": "ALERT_0001",
+    "info_item_id": "INFO_CCUS_0001",
+    "alert_title": "固体胺吸附路线在低湿/杂质烟气工况下出现潜在突破",
+    "alert_color": "orange",
+    "alert_body": "该情报被标记为“新技术”。若其在真实烟气与连续运行中保持容量与低降解，可能改变部分行业（钢铁/水泥）捕集路线选择与OPEX结构。",
+    "reviewer_comment": "建议跟踪三点：①真实烟气杂质（SOx/NOx/粉尘）下的寿命与再生性能；②规模化制备与床层工程化（压降/粉化/传热）数据；③与液胺路线的系统能耗与成本对标口径（含蒸汽/电力来源）。",
+    "is_new_tech": true,
+    "status": "active",
+    "duration_type": "month",
+    "expires_at": "2026-02-03",
+    "created_at": "2026-01-05T10:12:00Z",
+    "updated_at": "2026-01-05T10:12:00Z",
+    "created_by": "user_reviewer_01",
+    "reviewed_by": "user_reviewer_01",
+    "manual_dismiss_reason": null
+  }
+]

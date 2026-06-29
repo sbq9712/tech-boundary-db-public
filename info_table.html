@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>情报总表（样机）</title>
+  <style>
+    :root{
+      --bg:#f8f9fc; --text:#1e293b; --muted:#64748b; --line:rgba(0,0,0,.08);
+      --r:14px; --shadow: 0 4px 16px rgba(0,0,0,.06);
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family:var(--sans); color:var(--text);
+      background: #f8f9fc;
+    }
+    a{ color:#2563eb; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    .topbar{
+      position:sticky; top:0; z-index:20;
+      backdrop-filter: blur(10px);
+      background: rgba(255,255,255,.92);
+      border-bottom:1px solid var(--line);
+    }
+    .topbar-inner{
+      max-width:1400px; margin:0 auto;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; gap:12px;
+    }
+    .brand{ font-weight:850; }
+    .nav{ display:flex; gap:10px; flex-wrap:wrap; }
+    .nav a{
+      padding:8px 10px; border-radius:10px;
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+      color:var(--text); font-size:14px;
+    }
+
+    .container{ max-width:1400px; margin:0 auto; padding:16px; }
+    .layout{ display:grid; grid-template-columns: 320px 1fr; gap:14px; }
+    .layout.compact{ grid-template-columns: 1fr; }
+    @media (max-width: 1080px){ .layout{ grid-template-columns: 1fr; } }
+
+    .card{
+      background: #ffffff;
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .hd{ padding:12px 14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .bd{ padding:12px 14px; }
+    .muted{ color:var(--muted); }
+    .small{ font-size:12px; }
+
+    label{ display:block; margin:10px 0 6px; color:var(--muted); font-size:12px; }
+    input, select{
+      width:100%;
+      background:#ffffff;
+      border:1px solid #d1d5db;
+      color:var(--text);
+      padding:10px;
+      border-radius:12px;
+      font-size:13px;
+      outline:none;
+    }
+    input[type="date"]{ padding:9px 10px; }
+    .row{ display:flex; gap:10px; }
+    .row > *{ flex:1; }
+
+    .btn{
+      cursor:pointer;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #d1d5db;
+      background:#f1f5f9;
+      color:var(--text);
+      font-size:13px;
+    }
+    .btn:hover{ background:#e2e8f0; }
+    .btn.danger{ background:rgba(248,113,113,.15); border-color:rgba(248,113,113,.25); }
+
+    table{
+      width:100%; border-collapse:separate; border-spacing:0;
+      border:1px solid #e2e8f0;
+      border-radius:12px;
+      overflow:hidden;
+      background:#f8fafc;
+    }
+    th,td{ padding:10px; border-bottom:1px solid #e2e8f0; font-size:13px; vertical-align:top; }
+    th{ background:#f1f5f9; font-weight:650; white-space:nowrap; }
+    tr:last-child td{ border-bottom:none; }
+    tr:hover td{ background:#f8fafc; }
+
+    .badge{
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 8px;
+      border-radius:999px;
+      font-size:12px;
+      background:#f1f5f9;
+    }
+    .badge.yellow{ background:#facc15; color:#000; }
+    .badge.orange{ background:#fb923c; color:#000; }
+    .badge.red{ background:#f87171; color:#000; }
+
+    .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+    .chip{
+      background:#f1f5f9;
+      border:1px solid #e2e8f0;
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .chip.on{ background:rgba(37,99,235,.08); border-color:rgba(37,99,235,.25); }
+
+    .meta{ display:flex; flex-wrap:wrap; gap:8px; color:var(--muted); font-size:12px; }
+    .snippet{ color:#1e293b; line-height:1.5; }
+    .snippet mark{ background:rgba(250,204,21,.25); color:#fde68a; padding:0 2px; border-radius:4px; }
+    .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+    .indicator-list{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:8px;
+    }
+    .indicator-item{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      width:100%;
+      font-size:12px;
+      color:#1e293b;
+      line-height:1.5;
+    }
+    .indicator-item b{
+      font-family:var(--mono);
+      font-weight:650;
+      white-space:nowrap;
+    }
+
+    .empty{
+      padding:30px;
+      text-align:center;
+      color:#9aa6c7;
+    }
+    .pager{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:14px;
+    }
+    .pager-info{
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    .modal{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center; justify-content:center;
+      z-index:50;
+      padding:16px;
+    }
+    .modal .box{
+      width:min(720px, 100%);
+      background:#ffffff;
+      border:1px solid #d1d5db;
+      border-radius:16px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .modal .box .hd{ border-bottom:1px solid #e2e8f0; }
+    .modal .box .bd{ padding:14px; }
+
+    .toggle{
+      display:inline-flex; align-items:center; gap:8px;
+      border:1px solid #d1d5db;
+      background:#f1f5f9;
+      padding:6px 10px;
+      border-radius:999px;
+      cursor:pointer;
+      font-size:12px;
+    }
+    .bulkbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+      padding:10px 12px;
+      border:1px solid #e2e8f0;
+      border-radius:12px;
+      background:#f1f5f9;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">前沿技术情报与预警平台（样机） <span class="muted small">/ 情报总表</span></div>
+    <div class="nav">
+        <a href="index.html">核心门户</a>
+        <a href="info_table.html">情报总表</a>
+        <a href="industry_dashboards.html">行业仪表盘</a>
+        <a href="industry_map.html">行业图景</a>
+        <a href="sources.html">信息源</a>
+        <a href="upload_review.html?v=20260326d">上传&复核</a>
+        <a href="drafts.html">草稿管理</a>
+        <a href="excel_import.html">批量导入</a>
+        <button onclick="Auth.showChangePassword()" style="cursor:pointer;padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:14px;">修改密码</button>
+        <button onclick="Auth.logout()" style="cursor:pointer;padding:8px 10px;border-radius:10px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:14px;">退出</button>
+      </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="layout" id="layout">
+    <aside class="card" id="filterPanel">
+      <div class="hd">
+        <div style="font-weight:750;">筛选器</div>
+        <button class="btn" id="btnHideFilters" type="button">隐藏</button>
+      </div>
+      <div class="bd">
+        <label>时间范围</label>
+        <div class="row">
+          <input type="date" id="fromDate">
+          <input type="date" id="toDate">
+        </div>
+
+        <label style="margin-top:12px;">领域筛选（含子域）</label>
+        <select id="domainFilter">
+          <option value="">全部领域</option>
+        </select>
+
+        <label>新/旧技术</label>
+        <select id="newTechFilter">
+          <option value="">全部</option>
+          <option value="true">新技术</option>
+          <option value="false">已有技术</option>
+        </select>
+
+        <label>来源（多选）</label>
+        <div class="chips" id="sourceChips"></div>
+
+        <label>情报类型（多选）</label>
+        <div class="chips" id="typeChips"></div>
+
+        <label>重要度</label>
+        <div class="row">
+          <select id="importanceMin">
+            <option value="">最低</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+          <select id="importanceMax">
+            <option value="">最高</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </div>
+
+        <label>是否预警</label>
+        <select id="alertFilter">
+          <option value="">全部情报</option>
+          <option value="true">仅预警</option>
+          <option value="false">非预警</option>
+        </select>
+
+        <label>是否有 comment</label>
+        <select id="commentFilter">
+          <option value="">全部</option>
+          <option value="true">有 comment</option>
+          <option value="false">无 comment</option>
+        </select>
+
+        <label>指标筛选（仅数值类）</label>
+        <select id="indicatorFilter">
+          <option value="">不按指标筛选</option>
+        </select>
+        <select id="indicatorOrder" style="margin-top:8px;">
+          <option value="desc">按指标值从大到小</option>
+          <option value="asc">按指标值从小到大</option>
+        </select>
+        <div class="muted small" style="margin-top:6px;">选择指标后，仅显示包含该数值指标的情报，并按数值排序。</div>
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" id="btnReset" type="button">重置筛选</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="card">
+      <div class="hd">
+        <div style="font-weight:750;">情报列表</div>
+        <button class="btn" id="btnShowFilters" type="button" style="display:none;">显示筛选器</button>
+      </div>
+      <div class="bd">
+        <label>领域快速跳转（可选输入）</label>
+        <div class="row">
+          <input type="text" id="domainQuick" placeholder="输入领域名称，自动匹配">
+          <button class="btn" id="btnApplyQuick" type="button">跳转筛选</button>
+        </div>
+        <div class="muted small" style="margin-top:6px;">快速跳转会将左侧领域筛选定位到对应领域。</div>
+
+        <label style="margin-top:12px;">关键词搜索</label>
+        <input type="text" id="keyword" placeholder="标题 / 正文 / comment">
+
+        <div class="row" style="margin-top:12px;">
+          <select id="sortBy">
+            <option value="importance">按重要度</option>
+            <option value="time">按时间</option>
+          </select>
+          <select id="pageSize">
+            <option value="5">5条/页</option>
+            <option value="10" selected>10条/页</option>
+            <option value="20">20条/页</option>
+          </select>
+        </div>
+
+        <div class="bulkbar">
+          <div class="muted small" id="bulkSelectionText">未选择情报</div>
+          <div class="actions">
+            <button class="btn" id="btnClearSelection" type="button">清空选择</button>
+            <button class="btn danger" id="btnBulkDelete" type="button">批量删除</button>
+          </div>
+        </div>
+
+        <div style="overflow:auto; margin-top:14px;">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width:72px;">选择 <input id="selectAllPage" type="checkbox" /></th>
+                <th style="min-width:260px;">标题</th>
+                <th style="min-width:120px;">发布时间</th>
+                <th style="min-width:160px;">领域</th>
+                <th>重要度</th>
+                <th style="min-width:120px;">预警</th>
+                <th style="min-width:240px;">指标</th>
+                <th style="min-width:120px;">来源</th>
+                <th style="min-width:150px;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+
+        <div id="emptyBox" class="empty" style="display:none;">
+          无符合条件的情报
+        </div>
+        <div id="pager" class="pager" style="display:none;">
+          <span id="pagerInfo" class="pager-info">-</span>
+          <button class="btn" id="btnPrevPage" type="button">上一页</button>
+          <button class="btn" id="btnNextPage" type="button">下一页</button>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="modal" id="alertModal">
+  <div class="box">
+    <div class="hd">
+      <div style="font-weight:750;">人工预警</div>
+      <button class="btn" id="btnCloseModal" type="button">关闭</button>
+    </div>
+    <div class="bd">
+      <div class="muted small" id="modalTitle"></div>
+      <label style="margin-top:10px;">预警标题</label>
+      <input id="alertTitle" type="text" placeholder="填写预警标题">
+      <label>预警内容</label>
+      <input id="alertBody" type="text" placeholder="填写预警内容">
+      <label>预警颜色</label>
+      <select id="alertColor">
+        <option value="yellow">黄色</option>
+        <option value="orange" selected>橙色</option>
+        <option value="red">红色</option>
+      </select>
+      <label>预警到期时间</label>
+      <input id="alertExpiresAt" type="datetime-local" />
+      <label>解除预警（填写原因）</label>
+      <input id="dismissReason" type="text" placeholder="如需解除，填写原因">
+      <div class="row" style="margin-top:12px;">
+        <button class="btn" id="btnSaveAlert" type="button">保存</button>
+        <button class="btn" id="btnDismissAlert" type="button">解除预警</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/auth.js"></script>
+<script type="module">
+  Auth.requireAuth();
+  const $ = s => document.querySelector(s);
+  const escapeHtml = str => str.replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+  const API_BASE = window.API_BASE || "/api";
+
+  async function loadJson(path){
+    const r = await fetch(path, { cache: "no-store" });
+    if(!r.ok) throw new Error(`加载失败: ${path} (${r.status})`);
+    return await r.json();
+  }
+
+  function qp(name){
+    return new URLSearchParams(location.search).get(name);
+  }
+
+  function fmt(d){
+    if(!d) return "-";
+    return d.slice(0,10);
+  }
+
+  function normalizeIndicatorName(name){
+    return String(name || "")
+      .replace(/\s+/g, "")
+      .replace(/[()（）[\]【】]/g, "")
+      .replace(/CO₂/gi, "CO2")
+      .toLowerCase();
+  }
+
+  function stripIndicatorDisplayName(name){
+    return String(name || "").replace(/\s*[（(][^()（）]*[）)]\s*$/u, "").trim();
+  }
+
+  function hasIndicatorValue(value){
+    if(value === null || value === undefined) return false;
+    if(typeof value === "number") return Number.isFinite(value);
+    return String(value).trim() !== "";
+  }
+
+  function parseIndicatorNumber(value){
+    if(typeof value === "number") return Number.isFinite(value) ? value : null;
+    const raw = String(value || "").trim().replace(/,/g, "").replace(/，/g, "");
+    if(!raw) return null;
+    const match = raw.match(/[+-]?\d+(?:\.\d+)?/);
+    if(!match) return null;
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  async function loadApi(path, options = {}){
+    const r = await Auth.authFetch(`${API_BASE}${path}`, { cache: "no-store", ...options });
+    if(!r) return null;
+    if(!r.ok){
+      throw new Error(`API请求失败: ${path} (${r.status})`);
+    }
+    if(r.status === 204) return null;
+    return await r.json();
+  }
+
+  function toLocalDateTimeInput(iso){
+    if(!iso) return "";
+    const d = new Date(iso);
+    if(Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${y}-${m}-${day}T${hh}:${mm}`;
+  }
+
+  function toIsoFromLocalDateTimeInput(value){
+    if(!value) return null;
+    const d = new Date(value);
+    if(Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+
+  function inDateRange(date, from, to){
+    if(!date) return !(from || to); // 没日期时，只有在没筛选范围时才通过
+    const d = date.slice(0,10);
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  }
+
+  function collectChipValues(containerId){
+    return Array.from(document.querySelectorAll(`#${containerId} .chip.on`)).map(ch => ch.dataset.value);
+  }
+
+  function createChips(containerId, values, onChange){
+  const box = document.getElementById(containerId);
+  box.innerHTML = "";
+
+  values.forEach(val => {
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.dataset.value = val;
+    chip.textContent = val;
+    box.appendChild(chip);
+  });
+
+  // 事件委托：只绑一次
+  if(!box.dataset.bound){
+    box.dataset.bound = "1";
+    box.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if(!chip || !box.contains(chip)) return;
+      chip.classList.toggle("on");
+      if(typeof onChange === "function") onChange();
+    });
+  }
+
+  // 每次更新回调引用（避免闭包旧 render）
+  box.__onChange = onChange;
+}
+
+  function highlightSnippet(text, keyword, maxLen){
+    const safeText = escapeHtml(text || "");
+    if(!keyword){
+      const trimmed = safeText.slice(0, maxLen);
+      return trimmed + (safeText.length > maxLen ? "…" : "");
+    }
+    const lower = safeText.toLowerCase();
+    const idx = lower.indexOf(keyword.toLowerCase());
+    if(idx === -1){
+      const trimmed = safeText.slice(0, maxLen);
+      return trimmed + (safeText.length > maxLen ? "…" : "");
+    }
+    const start = Math.max(0, idx - 60);
+    const end = Math.min(safeText.length, idx + keyword.length + 60);
+    const before = safeText.slice(start, idx);
+    const match = safeText.slice(idx, idx + keyword.length);
+    const after = safeText.slice(idx + keyword.length, end);
+    const prefix = start > 0 ? "…" : "";
+    const suffix = end < safeText.length ? "…" : "";
+    return `${prefix}${before}<mark>${match}</mark>${after}${suffix}`;
+  }
+
+  function getDomainsForInfo(info){
+    if(Array.isArray(info.domain_ids) && info.domain_ids.length){
+      return info.domain_ids;
+    }
+    if(info.domain_id){
+      return [info.domain_id];
+    }
+    if(Array.isArray(info.domains) && info.domains.length){
+      return info.domains;
+    }
+    if(typeof info.domains === "string" && info.domains.trim()){
+      return info.domains.split(";").map(s => s.trim()).filter(Boolean);
+    }
+    return [];
+  }
+
+  function getInfoIndicators(info, defMap, defByNormName){
+    const rawIndicators = Array.isArray(info?.draft_data?.indicators) ? info.draft_data.indicators : [];
+    return rawIndicators
+      .filter(ind => ind && ind.keep !== false && hasIndicatorValue(ind.value))
+      .map(ind => {
+        const matchedDef = ind.indicator_id
+          ? defMap.get(ind.indicator_id)
+          : defByNormName.get(normalizeIndicatorName(ind.name));
+        const displayName = stripIndicatorDisplayName(matchedDef?.name || ind.name || "");
+        const unit = String(ind.unit || matchedDef?.unit_default || "").trim();
+        return {
+          indicator_id: matchedDef?.id || ind.indicator_id || "",
+          name: displayName || "未命名指标",
+          value: String(ind.value).trim(),
+          unit,
+          data_type: matchedDef?.data_type || "",
+          numeric_value: parseIndicatorNumber(ind.value)
+        };
+      })
+      .filter(ind => ind.name && ind.value);
+  }
+
+  async function main(){
+    let [infos, domainTree, indicatorDefs] = await Promise.all([
+      loadApi("/info-items?status=published"),
+      loadApi("/domains/tree"),
+      loadJson("./data/indicator_defs.json").catch(() => [])
+    ]);
+    const domains = [];
+    (function flatten(nodes){
+      (nodes || []).forEach(node => {
+        domains.push({ id: node.id, name: node.name, parent_id: node.parent_id ?? null });
+        flatten(node.children || []);
+      });
+    })(domainTree);
+
+    const domainMap = Object.fromEntries(domains.map(d=>[d.id,d]));
+    const activeIndicatorDefs = (indicatorDefs || []).filter(def => def && def.is_active !== false);
+    const indicatorDefMap = new Map(activeIndicatorDefs.map(def => [def.id, def]));
+    const indicatorDefByNormName = new Map();
+    activeIndicatorDefs.forEach(def => {
+      [def.name, def.match_name].forEach(rawName => {
+        const normalized = normalizeIndicatorName(rawName);
+        if(normalized && !indicatorDefByNormName.has(normalized)){
+          indicatorDefByNormName.set(normalized, def);
+        }
+      });
+    });
+    const numericIndicatorDefs = activeIndicatorDefs.filter(def => def.data_type === "number");
+
+
+
+    // 1) 构建 parent -> children 映射
+    const childrenMap = {};
+    domains.forEach(d => {
+      const p = d.parent_id || "__root__";
+      (childrenMap[p] ||= []).push(d.id);
+    });
+
+    // 2) 获取某个 domainId 的所有子孙（含自己）
+    function getDescendants(domainId){
+      const out = new Set();
+      const stack = [domainId];
+      while(stack.length){
+        const cur = stack.pop();
+        if(out.has(cur)) continue;
+        out.add(cur);
+        const kids = childrenMap[cur] || [];
+        kids.forEach(k => stack.push(k));
+      }
+      return out;
+    }
+
+    function domainPath(id){
+      const arr=[];
+      let cur=domainMap[id];
+      while(cur){
+        arr.push(cur.name);
+        cur = cur.parent_id ? domainMap[cur.parent_id] : null;
+      }
+      return arr.reverse().join(" / ");
+    }
+
+    function hasActiveAlert(info){
+      if(!info || info.alert_status !== "active") return null;
+      if(info.alert_expires_at){
+        const expires = new Date(info.alert_expires_at);
+        if(!Number.isNaN(expires.getTime()) && expires.getTime() < Date.now()){
+          return null;
+        }
+      }
+      return {
+        alert_title: info.alert_title,
+        alert_color: info.alert_color || "orange",
+        alert_expires_at: info.alert_expires_at
+      };
+    }
+
+    const uniqueSources = Array.from(new Set(infos.flatMap(i => i.source_types || [])));
+    const uniqueTypes = Array.from(new Set(infos.flatMap(i => i.info_types || [])));
+
+    createChips("sourceChips", uniqueSources, () => {
+      currentPage = 1;
+      render();
+    });
+    createChips("typeChips", uniqueTypes, () => {
+      currentPage = 1;
+      render();
+    });
+
+    const domainSelect = $("#domainFilter");
+    domains.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = domainPath(d.id);
+      domainSelect.appendChild(opt);
+    });
+
+    const indicatorSelect = $("#indicatorFilter");
+    numericIndicatorDefs.forEach(def => {
+      const opt = document.createElement("option");
+      opt.value = def.id;
+      opt.textContent = def.name || def.match_name || def.id;
+      indicatorSelect.appendChild(opt);
+    });
+
+    const domainQuick = $("#domainQuick");
+    domainQuick.setAttribute("list", "domainQuickList");
+    const datalist = document.createElement("datalist");
+    datalist.id = "domainQuickList";
+    domains.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = domainPath(d.id);
+      datalist.appendChild(opt);
+    });
+    document.body.appendChild(datalist);
+
+    function applyQuickJump(){
+      const input = domainQuick.value.trim();
+      if(!input){
+        domainSelect.value = "";
+        currentPage = 1;
+        render();
+        return;
+      }
+      const match = domains.find(d => domainPath(d.id) === input || d.name === input);
+      if(match){
+        domainSelect.value = match.id;
+        currentPage = 1;
+        render();
+      }
+    }
+
+    $("#btnApplyQuick").addEventListener("click", applyQuickJump);
+
+    $("#btnHideFilters").addEventListener("click", () => {
+      $("#filterPanel").style.display = "none";
+      $("#layout").classList.add("compact");
+      $("#btnShowFilters").style.display = "inline-flex";
+    });
+
+    $("#btnShowFilters").addEventListener("click", () => {
+      $("#filterPanel").style.display = "block";
+      $("#layout").classList.remove("compact");
+      $("#btnShowFilters").style.display = "none";
+    });
+
+    $("#btnReset").addEventListener("click", () => {
+      $("#fromDate").value = "";
+      $("#toDate").value = "";
+      $("#domainFilter").value = "";
+      $("#newTechFilter").value = "";
+      $("#alertFilter").value = "";
+      $("#commentFilter").value = "";
+      $("#indicatorFilter").value = "";
+      $("#indicatorOrder").value = "desc";
+      $("#importanceMin").value = "";
+      $("#importanceMax").value = "";
+      $("#keyword").value = "";
+      document.querySelectorAll(".chip.on").forEach(ch => ch.classList.remove("on"));
+      currentPage = 1;
+      render();
+    });
+
+    document.querySelectorAll("input, select").forEach(el => {
+      if(el.id !== "domainQuick" && el.id !== "selectAllPage"){
+        el.addEventListener("change", () => {
+          currentPage = 1;
+          render();
+        });
+        el.addEventListener("input", () => {
+          currentPage = 1;
+          render();
+        });
+      }
+    });
+
+    let currentInfoId = null;
+    let currentPage = 1;
+    const selectedIds = new Set();
+    let currentPageRows = [];
+
+    function updateBulkBar(){
+      const count = selectedIds.size;
+      $("#bulkSelectionText").textContent = count ? `已选择 ${count} 条情报` : "未选择情报";
+      $("#btnClearSelection").disabled = count === 0;
+      $("#btnBulkDelete").disabled = count === 0;
+      const pageIds = currentPageRows.map(info => info.id);
+      const selectedOnPage = pageIds.filter(id => selectedIds.has(id)).length;
+      $("#selectAllPage").checked = pageIds.length > 0 && selectedOnPage === pageIds.length;
+      $("#selectAllPage").indeterminate = selectedOnPage > 0 && selectedOnPage < pageIds.length;
+      $("#selectAllPage").disabled = pageIds.length === 0;
+    }
+
+    function openModal(info){
+      currentInfoId = info.id;
+      $("#modalTitle").textContent = info.title || info.id;
+      $("#alertTitle").value = info.alert_title || "";
+      $("#alertBody").value = info.alert_body || "";
+      $("#alertColor").value = info.alert_color || "orange";
+      $("#alertExpiresAt").value = toLocalDateTimeInput(info.alert_expires_at);
+      $("#dismissReason").value = "";
+      $("#alertModal").style.display = "flex";
+    }
+
+    $("#btnCloseModal").addEventListener("click", () => {
+      $("#alertModal").style.display = "none";
+    });
+
+    $("#btnSaveAlert").addEventListener("click", async () => {
+      if(!currentInfoId) return;
+      if(!$("#alertTitle").value.trim() || !$("#alertBody").value.trim()){
+        alert("请填写预警标题和预警内容");
+        return;
+      }
+      try{
+        const updated = await loadApi(`/info-items/${encodeURIComponent(currentInfoId)}/alert`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: true,
+            alert_title: $("#alertTitle").value.trim(),
+            alert_body: $("#alertBody").value.trim(),
+            reviewer_comment: "情报总表人工编辑",
+            alert_color: $("#alertColor").value,
+            expires_at: toIsoFromLocalDateTimeInput($("#alertExpiresAt").value)
+          })
+        });
+        infos = infos.map(item => item.id === updated.id ? updated : item);
+        $("#alertModal").style.display = "none";
+        render();
+      }catch(err){
+        alert(err?.message || "保存预警失败");
+      }
+    });
+
+    $("#btnDismissAlert").addEventListener("click", async () => {
+      if(!currentInfoId) return;
+      const reason = $("#dismissReason").value.trim();
+      if(!reason){
+        alert("请填写解除原因");
+        return;
+      }
+      try{
+        const updated = await loadApi(`/info-items/${encodeURIComponent(currentInfoId)}/alert`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: false,
+            dismiss_reason: reason
+          })
+        });
+        infos = infos.map(item => item.id === updated.id ? updated : item);
+        $("#alertModal").style.display = "none";
+        render();
+      }catch(err){
+        alert(err?.message || "解除预警失败");
+      }
+    });
+
+    async function deleteInfo(info){
+      if(!confirm(`确认删除情报「${info.title || info.id}」？`)) return;
+      try{
+        const r = await Auth.authFetch(`${API_BASE}/info-items/${encodeURIComponent(info.id)}`, { method: "DELETE" });
+        if(!r || (!r.ok && r.status !== 204)){
+          throw new Error(`删除失败 (${r?.status})`);
+        }
+        infos = infos.filter(item => item.id !== info.id);
+        currentPage = 1;
+        render();
+      }catch(err){
+        alert(err?.message || "删除失败");
+      }
+    }
+
+    async function deleteSelectedInfos(){
+      const targets = infos.filter(info => selectedIds.has(info.id));
+      if(!targets.length) return;
+      if(!confirm(`确认批量删除 ${targets.length} 条情报？`)) return;
+      try{
+        for(const info of targets){
+          const r = await Auth.authFetch(`${API_BASE}/info-items/${encodeURIComponent(info.id)}`, { method: "DELETE" });
+          if(!r || (!r.ok && r.status !== 204)){
+            throw new Error(`删除失败 (${r?.status})`);
+          }
+        }
+        targets.forEach(info => selectedIds.delete(info.id));
+        infos = infos.filter(info => !targets.some(target => target.id === info.id));
+        currentPage = 1;
+        render();
+      }catch(err){
+        alert(err?.message || "批量删除失败");
+      }
+    }
+
+    function render(){
+      const infosLive = (infos || []).filter(item => item && item.status === "published");
+      const from = $("#fromDate").value;
+      const to = $("#toDate").value;
+      const domainId = $("#domainFilter").value;
+      const newTech = $("#newTechFilter").value;
+      const alertFilter = $("#alertFilter").value;
+      const commentFilter = $("#commentFilter").value;
+      const keyword = $("#keyword").value.trim();
+      const sortBy = $("#sortBy").value;
+      const indicatorFilter = $("#indicatorFilter").value;
+      const indicatorOrder = $("#indicatorOrder").value;
+      const pageSize = parseInt($("#pageSize").value, 10);
+      const sources = collectChipValues("sourceChips");
+      const types = collectChipValues("typeChips");
+      const importanceMin = $("#importanceMin").value ? Number($("#importanceMin").value) : null;
+      const importanceMax = $("#importanceMax").value ? Number($("#importanceMax").value) : null;
+
+      const filtered = infosLive.filter(info => {
+        const indicators = getInfoIndicators(info, indicatorDefMap, indicatorDefByNormName);
+        info.__displayIndicators = indicators;
+        info.__filteredIndicator = indicatorFilter
+          ? indicators.find(ind => ind.indicator_id === indicatorFilter && ind.numeric_value !== null)
+          : null;
+
+        if(!inDateRange(info.published_at, from, to)) return false;
+        if(domainId){
+          const allowed = getDescendants(domainId); // 父域 + 所有子孙
+          const ids = getDomainsForInfo(info);
+          if(!ids.some(id => allowed.has(id))) return false;
+        }
+        if(newTech){
+          if(String(info.is_new_tech) !== newTech) return false;
+        }
+        if(importanceMin !== null && info.importance_score < importanceMin) return false;
+        if(importanceMax !== null && info.importance_score > importanceMax) return false;
+        if(sources.length && !(info.source_types || []).some(s => sources.includes(s))) return false;
+        if(types.length && !(info.info_types || []).some(t => types.includes(t))) return false;
+        const commentText = (info.comment || "").trim();
+        if(commentFilter === "true" && !commentText) return false;
+        if(commentFilter === "false" && commentText) return false;
+        const hasAlert = !!hasActiveAlert(info);
+        if(alertFilter === "true" && !hasAlert) return false;
+        if(alertFilter === "false" && hasAlert) return false;
+        if(keyword){
+          const lower = keyword.toLowerCase();
+          const target = `${info.title} ${info.content} ${info.comment || ""}`.toLowerCase();
+          if(!target.includes(lower)) return false;
+        }
+        if(indicatorFilter && !info.__filteredIndicator) return false;
+        return true;
+      });
+
+      filtered.sort((a,b)=>{
+        if(indicatorFilter){
+          const diff = (a.__filteredIndicator?.numeric_value ?? 0) - (b.__filteredIndicator?.numeric_value ?? 0);
+          if(diff !== 0){
+            return indicatorOrder === "asc" ? diff : -diff;
+          }
+          return (b.importance_score || 0) - (a.importance_score || 0) || String(b.published_at || "").localeCompare(String(a.published_at || ""));
+        }
+        if(sortBy === "time") return b.published_at.localeCompare(a.published_at);
+        return b.importance_score - a.importance_score;
+      });
+
+      // 保存当前过滤+排序后的全量 ID，供详情页上下条导航使用
+      sessionStorage.setItem("detailNavIds", JSON.stringify(filtered.map(i => String(i.id))));
+
+      const total = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      currentPage = Math.min(currentPage, totalPages);
+      const start = (currentPage - 1) * pageSize;
+      const rows = filtered.slice(start, start + pageSize);
+      currentPageRows = rows;
+      const tbody = $("#tableBody");
+      tbody.innerHTML = "";
+
+      if(rows.length === 0){
+        $("#emptyBox").style.display = "block";
+        $("#pager").style.display = "none";
+        updateBulkBar();
+        return;
+      }
+      $("#emptyBox").style.display = "none";
+      $("#pager").style.display = total > pageSize ? "flex" : "none";
+      $("#pagerInfo").textContent = `第 ${currentPage} / ${totalPages} 页，共 ${total} 条`;
+      $("#btnPrevPage").disabled = currentPage <= 1;
+      $("#btnNextPage").disabled = currentPage >= totalPages;
+
+      rows.forEach(info => {
+        const tr = document.createElement("tr");
+        const domainNames = getDomainsForInfo(info).map(id => domainPath(id)).join("; ") || "-";
+        const alert = hasActiveAlert(info);
+        const keywordVal = keyword;
+        const indicatorHtml = (info.__displayIndicators || []).length
+          ? `<div class="indicator-list">${info.__displayIndicators.map(ind => `<div class="indicator-item"><span>${escapeHtml(ind.name)}</span><b>${escapeHtml(ind.value)}${escapeHtml(ind.unit || "")}</b></div>`).join("")}</div>`
+          : `<div class="muted small">暂无指标</div>`;
+
+        tr.innerHTML = `
+          <td><input type="checkbox" data-select /></td>
+          <td>
+            <div style="font-weight:650;">${highlightSnippet(info.title || "", keywordVal, 120)}</div>
+            <div class="meta" style="margin-top:6px;">
+              <span>comment：${info.comment ? "有" : "无"}</span>
+              <span>类型：${(info.info_types || []).join("、") || "-"}</span>
+            </div>
+            <div class="actions" style="margin-top:8px;">
+              <a class="btn" href="info_detail.html?id=${info.id}&from=info_table">全文</a>
+            </div>
+          </td>
+          <td>${fmt(info.published_at)}</td>
+          <td>${domainNames}</td>
+          <td><span class="badge">${info.importance_score}</span></td>
+          <td>${alert ? `<span class="badge ${alert.alert_color || "orange"}">${alert.alert_title || "预警"}${alert.alert_expires_at ? ` · 至 ${fmt(alert.alert_expires_at)}` : ""}</span>` : "-"}</td>
+          <td>${indicatorHtml}</td>
+          <td>${(info.source_types || []).join("、") || "-"}</td>
+          <td>
+            <button class="btn" data-alert>${alert ? "编辑预警" : "新增预警"}</button>
+            <button class="btn" data-delete>删除情报</button>
+          </td>
+        `;
+
+        const selectEl = tr.querySelector("[data-select]");
+        selectEl.checked = selectedIds.has(info.id);
+        selectEl.addEventListener("change", () => {
+          if(selectEl.checked){
+            selectedIds.add(info.id);
+          }else{
+            selectedIds.delete(info.id);
+          }
+          updateBulkBar();
+        });
+        tr.querySelector("[data-alert]").addEventListener("click", () => openModal(info));
+        tr.querySelector("[data-delete]").addEventListener("click", () => deleteInfo(info));
+
+        tbody.appendChild(tr);
+      });
+      updateBulkBar();
+    }
+
+    $("#btnPrevPage").addEventListener("click", () => {
+      if(currentPage <= 1) return;
+      currentPage -= 1;
+      render();
+    });
+
+    $("#btnNextPage").addEventListener("click", () => {
+      currentPage += 1;
+      render();
+    });
+
+    $("#btnClearSelection").addEventListener("click", () => {
+      selectedIds.clear();
+      render();
+    });
+
+    $("#btnBulkDelete").addEventListener("click", deleteSelectedInfos);
+
+    $("#selectAllPage").addEventListener("change", () => {
+      currentPageRows.forEach(info => {
+        if($("#selectAllPage").checked){
+          selectedIds.add(info.id);
+        }else{
+          selectedIds.delete(info.id);
+        }
+      });
+      render();
+    });
+
+    $("#fromDate").value = qp("from") || "";
+    $("#toDate").value = qp("to") || "";
+
+    render();
+  }
+
+  main().catch(err => {
+    console.error(err);
+    document.body.innerHTML += `<div style="padding:16px; color:#fca5a5;">加载失败：${err}</div>`;
+  });
+</script>
+<script src="auth.js"></script>
+<script src="portal_shell.js"></script>
+</body>
+</html>
