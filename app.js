@@ -140,7 +140,7 @@ function view(route){return {home:homeView,intel:intelView,dashboard:dashboardVi
 function homeView(){return `<section class="panel conversation-panel"><div class="eyebrow">核心门户</div><h1 class="page-title">围绕技术边界提问、追踪证据、形成判断。</h1><div class="conversation-history" id="answer">${renderHomeMessages()}</div><div class="query-box"><input id="queryInput" class="query-input" autocomplete="off" name="tech-boundary-query" placeholder="例如：SOFC 作为数据中心电源的关键边界是什么？"/><button id="askBtn" class="primary-btn">发送</button></div></section><aside class="home-insights" id="homeInsights">${renderInsightPanels()}</aside>`;}
 function renderInsightPanels(){return insightCard('热点情报推送',assistantPanels.hot_intel,'暂无与本轮问题直接相关的热点情报');}
 function insightCard(title,items,emptyText){return `<section class="panel insight-card"><h2>${title}</h2>${items&&items.length?items.map(item=>`<article><b>${escapeHtml(item.title||item.name||'未命名')}</b><span>${escapeHtml(item.summary||item.value||item.description||'')}</span></article>`).join(''):`<div class="empty-slot">${emptyText}</div>`}</section>`;}
-function intelView(){return `<section class="panel content-panel"><div class="eyebrow">情报总表</div><h1 class="section-title">按关键词、领域、信息来源检索情报。</h1><form class="filter-bar" id="intelFilter"><input id="intelQ" name="q" placeholder="关键词搜索"/><select id="intelDomain"><option value="">全部领域</option></select><select id="intelSource"><option value="">全部信息来源</option></select><button class="secondary-btn" type="submit">检索</button></form><div id="intelTotalNote" style="font-size:12px;color:#667085;margin-bottom:8px"></div><div class="table-card"><table><thead><tr><th>标题</th><th>领域</th><th>信息来源</th><th>可信度</th><th>审核</th><th>关键指标</th></tr></thead><tbody id="intelRows"><tr><td colspan="6">正在加载情报…</td></tr></tbody></table></div></section>`;}
+function intelView(){return `<section class="panel content-panel"><div class="eyebrow">情报总表</div><h1 class="section-title">按关键词、领域、信息来源检索情报。</h1><form class="filter-bar" id="intelFilter"><input id="intelQ" name="q" placeholder="关键词搜索"/><select id="intelDomain"><option value="">全部细分领域</option></select><select id="intelSource"><option value="">全部信息来源</option></select><button class="secondary-btn" type="submit">检索</button></form><div id="intelTotalNote" style="font-size:12px;color:#667085;margin-bottom:8px"></div><div class="table-card"><table><thead><tr><th>标题</th><th>领域</th><th>信息来源</th><th>可信度</th><th>审核</th><th>关键指标</th></tr></thead><tbody id="intelRows"><tr><td colspan="6">正在加载情报…</td></tr></tbody></table></div></section>`;}
 function dashboardView(){return `<section class="panel content-panel"><div class="eyebrow">技术仪表盘总表</div><h1 class="section-title">检索技术对象，查看适用场景、核心指标和相关情报入口。</h1><form class="dashboard-search" id="dashboardFilter"><input id="dashboardQ" placeholder="搜索技术、行业或指标，例如 SOFC、寿命、LCOS"/><button class="secondary-btn" type="submit">检索</button></form><div class="dashboard-grid" id="dashboardRows"><div class="status-note">正在加载仪表盘…</div></div></section>`;}
 function sourcesView(){
   const state=parseHash();
@@ -175,22 +175,26 @@ function mapView(){const state=parseHash();const group=state.params.get('group')
 function knowledgeView(){return `<section class="panel content-panel"><div class="eyebrow">知识图谱</div><h1 class="section-title">知识图谱用于承载行业节点、情报、专刊、仪表盘和长期记忆之间的关系。当前先保留入口与结构接口。</h1><div class="knowledge-placeholder"><div class="status-note">知识图谱结构接口已预留，后续接入图谱数据后在这里呈现可交互关系网络。</div></div></section>`;}
 function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const intelFilter=document.getElementById("intelFilter");if(intelFilter)intelFilter.addEventListener("submit",e=>{e.preventDefault();const p=new URLSearchParams();const qv=document.getElementById('intelQ')?.value;const dv=document.getElementById('intelDomain')?.value;const sv=document.getElementById('intelSource')?.value;if(qv)p.set('q',qv);if(dv)p.set('domain',dv);if(sv)p.set('source_type',sv);setRoute('intel',p);});const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});document.querySelectorAll("[data-src-tab]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('srctab',btn.dataset.srcTab);setRoute('sources',p);}));}
 async function loadAssistantStatus(){const answer=document.getElementById("answer");if(!answer)return;try{const res=await apiFetch('/api/assistant/status');const data=await res.json();const files=(data.health||{}).markdown_files;if(data.status==='ok'){answer.insertAdjacentHTML('beforeend',`<div class="assistant-msg"><strong>只读知识库</strong><p>已连接知识库，共 ${Number.isFinite(files)?files:'若干'} 个 Markdown 文档可供检索。</p></div>`);}}catch(err){answer.insertAdjacentHTML('beforeend',`<div class="assistant-msg"><strong>只读知识库</strong><p>知识库状态检查失败，仍可提交问题。</p></div>`);}}
-function applyIntelParams(params){const map={q:'intelQ',domain:'intelDomain',source_type:'intelSource',leaf:'intelLeaf'};for(const [key,id] of Object.entries(map)){const el=document.getElementById(id);if(el&&params.has(key))el.value=params.get(key);}if(params.has('leaf')){const leafVal=params.get('leaf');window._intelLeafFilter=leafVal;}else{window._intelLeafFilter='';} }
+function applyIntelParams(params){const qEl=document.getElementById('intelQ');if(qEl&&params.has('q'))qEl.value=params.get('q');const domEl=document.getElementById('intelDomain');if(domEl&&params.has('leaf'))domEl.value=params.get('leaf');const srcEl=document.getElementById('intelSource');if(srcEl&&params.has('source_type'))srcEl.value=params.get('source_type');}
 async function loadIntelMeta(){
-  // Check DOM state, not a global flag — dropdowns are recreated on every render()
   const domainSel=document.getElementById('intelDomain');
   const sourceSel=document.getElementById('intelSource');
-  if(!domainSel||domainSel.options.length>1)return; // already populated
+  if(!domainSel||domainSel.options.length>1)return; // already populated this render cycle
   try{
-    const res=await apiFetch('/api/delivery-intel/meta');
+    const res=await fetch('/api/delivery-intel/meta',{headers:authHeaders()});
+    if(!res.ok)return;
     const meta=await res.json();
-    if(meta.domains){
-      meta.domains.forEach(d=>{
+    // leaf_titles — most frequent first
+    if(meta.leaf_titles){
+      meta.leaf_titles.forEach(d=>{
         const o=document.createElement('option');
-        o.value=d.key;o.textContent=d.label;domainSel.appendChild(o);
+        o.value=d.key;
+        o.textContent=`${d.label} (${d.count})`;
+        domainSel.appendChild(o);
       });
     }
     if(sourceSel&&meta.source_types){
+      sourceSel.innerHTML='<option value="">全部信息来源</option>';
       meta.source_types.forEach(s=>{
         const o=document.createElement('option');
         o.value=s.key;o.textContent=s.label;sourceSel.appendChild(o);
@@ -209,17 +213,16 @@ async function loadIntel(params=new URLSearchParams()){
   if(!tbody)return;
   tbody.innerHTML='<tr><td colspan="6">正在加载情报…</td></tr>';
   try{
-    const leaf=params.get('leaf')||'';
+    // leaf comes from URL param OR from the domain select (which now holds leaf_title values)
+    const leafFromUrl=params.get('leaf')||'';
+    const leafFromSelect=document.getElementById('intelDomain')?.value||'';
+    const leaf=leafFromUrl||leafFromSelect;
     const q=encodeURIComponent(document.getElementById('intelQ')?.value||params.get('q')||'');
-    const domain=encodeURIComponent(document.getElementById('intelDomain')?.value||params.get('domain')||'');
     const sourceType=encodeURIComponent(document.getElementById('intelSource')?.value||params.get('source_type')||'');
     const parts=['limit=200'];
     if(leaf)parts.push(`leaf=${encodeURIComponent(leaf)}`);
-    else{
-      if(q)parts.push(`q=${q}`);
-      if(domain)parts.push(`domain=${domain}`);
-      if(sourceType)parts.push(`source_type=${sourceType}`);
-    }
+    if(q)parts.push(`q=${q}`);
+    if(sourceType)parts.push(`source_type=${sourceType}`);
     const url=`/api/delivery-intel?${parts.join('&')}`;
     const res=await apiFetch(url);
     const data=await res.json();
