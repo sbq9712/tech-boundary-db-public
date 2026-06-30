@@ -140,7 +140,7 @@ function view(route){return {home:homeView,intel:intelView,dashboard:dashboardVi
 function homeView(){return `<section class="panel conversation-panel"><div class="eyebrow">核心门户</div><h1 class="page-title">围绕技术边界提问、追踪证据、形成判断。</h1><div class="conversation-history" id="answer">${renderHomeMessages()}</div><div class="query-box"><input id="queryInput" class="query-input" autocomplete="off" name="tech-boundary-query" placeholder="例如：SOFC 作为数据中心电源的关键边界是什么？"/><button id="askBtn" class="primary-btn">发送</button></div></section><aside class="home-insights" id="homeInsights">${renderInsightPanels()}</aside>`;}
 function renderInsightPanels(){return insightCard('热点情报推送',assistantPanels.hot_intel,'暂无与本轮问题直接相关的热点情报');}
 function insightCard(title,items,emptyText){return `<section class="panel insight-card"><h2>${title}</h2>${items&&items.length?items.map(item=>`<article><b>${escapeHtml(item.title||item.name||'未命名')}</b><span>${escapeHtml(item.summary||item.value||item.description||'')}</span></article>`).join(''):`<div class="empty-slot">${emptyText}</div>`}</section>`;}
-function intelView(){return `<section class="panel content-panel"><div class="eyebrow">情报总表</div><h1 class="section-title">按关键词、领域、来源、类型、重要度和预警状态检索情报。</h1><form class="filter-bar" id="intelFilter"><input id="intelQ" name="q" placeholder="关键词搜索"/><select id="intelDomain"><option value="">全部领域</option><option>SOFC</option><option>AIDC</option><option>CCUS</option></select><select id="intelSource"><option value="">全部来源</option><option>期刊</option><option>产业新闻</option><option>政策</option></select><select id="intelStatus"><option value="">全部状态</option><option value="alert">仅预警</option><option value="normal">非预警</option></select><button class="secondary-btn" type="submit">检索</button></form><div class="table-card"><table><thead><tr><th>标题</th><th>领域</th><th>类型</th><th>重要度</th><th>状态</th><th>关键指标</th></tr></thead><tbody id="intelRows"><tr><td colspan="6">正在加载情报…</td></tr></tbody></table></div></section>`;}
+function intelView(){return `<section class="panel content-panel"><div class="eyebrow">情报总表</div><h1 class="section-title">按关键词、领域、信息来源检索情报。</h1><form class="filter-bar" id="intelFilter"><input id="intelQ" name="q" placeholder="关键词搜索"/><select id="intelDomain"><option value="">全部领域</option></select><select id="intelSource"><option value="">全部信息来源</option></select><button class="secondary-btn" type="submit">检索</button></form><div id="intelTotalNote" style="font-size:12px;color:#667085;margin-bottom:8px"></div><div class="table-card"><table><thead><tr><th>标题</th><th>领域</th><th>信息来源</th><th>可信度</th><th>审核</th><th>关键指标</th></tr></thead><tbody id="intelRows"><tr><td colspan="6">正在加载情报…</td></tr></tbody></table></div></section>`;}
 function dashboardView(){return `<section class="panel content-panel"><div class="eyebrow">技术仪表盘总表</div><h1 class="section-title">检索技术对象，查看适用场景、核心指标和相关情报入口。</h1><form class="dashboard-search" id="dashboardFilter"><input id="dashboardQ" placeholder="搜索技术、行业或指标，例如 SOFC、寿命、LCOS"/><button class="secondary-btn" type="submit">检索</button></form><div class="dashboard-grid" id="dashboardRows"><div class="status-note">正在加载仪表盘…</div></div></section>`;}
 function sourcesView(){
   const state=parseHash();
@@ -175,8 +175,54 @@ function mapView(){const state=parseHash();const group=state.params.get('group')
 function knowledgeView(){return `<section class="panel content-panel"><div class="eyebrow">知识图谱</div><h1 class="section-title">知识图谱用于承载行业节点、情报、专刊、仪表盘和长期记忆之间的关系。当前先保留入口与结构接口。</h1><div class="knowledge-placeholder"><div class="status-note">知识图谱结构接口已预留，后续接入图谱数据后在这里呈现可交互关系网络。</div></div></section>`;}
 function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const intelFilter=document.getElementById("intelFilter");if(intelFilter)intelFilter.addEventListener("submit",e=>{e.preventDefault();const p=new URLSearchParams();['intelQ','intelDomain','intelSource','intelStatus'].forEach(id=>{const el=document.getElementById(id);if(el&&el.value)p.set(id.replace('intel','').toLowerCase(),el.value);});setRoute('intel',p);});const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});document.querySelectorAll("[data-src-tab]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('srctab',btn.dataset.srcTab);setRoute('sources',p);}));}
 async function loadAssistantStatus(){const answer=document.getElementById("answer");if(!answer)return;try{const res=await apiFetch('/api/assistant/status');const data=await res.json();const files=(data.health||{}).markdown_files;if(data.status==='ok'){answer.insertAdjacentHTML('beforeend',`<div class="assistant-msg"><strong>只读知识库</strong><p>已连接知识库，共 ${Number.isFinite(files)?files:'若干'} 个 Markdown 文档可供检索。</p></div>`);}}catch(err){answer.insertAdjacentHTML('beforeend',`<div class="assistant-msg"><strong>只读知识库</strong><p>知识库状态检查失败，仍可提交问题。</p></div>`);}}
-function applyIntelParams(params){const map={q:'intelQ',domain:'intelDomain',source:'intelSource',status:'intelStatus'};for(const [key,id] of Object.entries(map)){const el=document.getElementById(id);if(el&&params.has(key))el.value=params.get(key);} }
-async function loadIntel(params=new URLSearchParams()){applyIntelParams(params);const tbody=document.getElementById("intelRows");if(!tbody)return;tbody.innerHTML='<tr><td colspan="6">正在加载情报…</td></tr>';try{const q=encodeURIComponent(document.getElementById('intelQ')?.value||params.get('q')||'');const url=q?`/api/delivery-intel?q=${q}&limit=200`:'/api/delivery-intel?limit=200';const res=await apiFetch(url);const data=await res.json();const source=document.getElementById('intelSource')?.value||'';let rows=(data.items||[]).filter(item=>{if(source&&!(item.source_type||'').includes(source))return false;return true;}).slice(0,100);tbody.innerHTML=rows.length?rows.map(item=>`<tr class="intel-row" data-id="${escapeHtml(item.id)}" style="cursor:pointer"><td>${escapeHtml(item.title||'未命名情报')}</td><td>${escapeHtml(item.leaf_title||'未分类')}</td><td>${escapeHtml(item.source_type||'')}</td><td>${escapeHtml(item.confidence||'')}</td><td>${item.need_human_review?'待审':'OK'}</td><td>${escapeHtml(item.key_metric?`${item.key_metric}: ${item.value_raw}${item.unit}`:'—')}</td></tr>`).join(''):'<tr><td colspan="6">没有符合条件的情报</td></tr>';tbody.querySelectorAll('.intel-row').forEach(tr=>tr.addEventListener('click',()=>showIntelDetail(tr.dataset.id)));}catch(err){tbody.innerHTML='<tr><td colspan="6">情报加载失败，请稍后重试</td></tr>';}}
+function applyIntelParams(params){const map={q:'intelQ',domain:'intelDomain',source_type:'intelSource',leaf:'intelLeaf'};for(const [key,id] of Object.entries(map)){const el=document.getElementById(id);if(el&&params.has(key))el.value=params.get(key);}if(params.has('leaf')){const leafVal=params.get('leaf');window._intelLeafFilter=leafVal;}else{window._intelLeafFilter='';} }
+let _intelMetaLoaded=false;
+async function loadIntelMeta(){
+  if(_intelMetaLoaded)return;
+  try{
+    const res=await apiFetch('/api/delivery-intel/meta');
+    const meta=await res.json();
+    const domainSel=document.getElementById('intelDomain');
+    const sourceSel=document.getElementById('intelSource');
+    if(domainSel&&meta.domains){
+      meta.domains.forEach(d=>{
+        const o=document.createElement('option');
+        o.value=d.key;o.textContent=d.label;domainSel.appendChild(o);
+      });
+    }
+    if(sourceSel&&meta.source_types){
+      meta.source_types.forEach(s=>{
+        const o=document.createElement('option');
+        o.value=s.key;o.textContent=s.label;sourceSel.appendChild(o);
+      });
+    }
+    _intelMetaLoaded=true;
+  }catch(e){}
+}
+async function loadIntel(params=new URLSearchParams()){
+  applyIntelParams(params);
+  await loadIntelMeta();
+  const tbody=document.getElementById("intelRows");
+  const note=document.getElementById("intelTotalNote");
+  if(!tbody)return;
+  tbody.innerHTML='<tr><td colspan="6">正在加载情报…</td></tr>';
+  try{
+    const q=encodeURIComponent(document.getElementById('intelQ')?.value||params.get('q')||'');
+    const domain=encodeURIComponent(document.getElementById('intelDomain')?.value||params.get('domain')||'');
+    const sourceType=encodeURIComponent(document.getElementById('intelSource')?.value||params.get('source_type')||'');
+    const parts=[`limit=200`];
+    if(q)parts.push(`q=${q}`);
+    if(domain)parts.push(`domain=${domain}`);
+    if(sourceType)parts.push(`source_type=${sourceType}`);
+    const url=`/api/delivery-intel?${parts.join('&')}`;
+    const res=await apiFetch(url);
+    const data=await res.json();
+    const rows=data.items||[];
+    if(note)note.textContent=`共 ${data.total||rows.length} 条，显示前 ${rows.length} 条`;
+    tbody.innerHTML=rows.length?rows.map(item=>`<tr class="intel-row" data-id="${escapeHtml(item.id)}" style="cursor:pointer"><td>${escapeHtml(item.title||'未命名情报')}</td><td>${escapeHtml(item.domain_label||item.leaf_title||'未分类')}</td><td>${escapeHtml(item.source_type_label||item.source_type||'')}</td><td>${escapeHtml(item.confidence||'')}</td><td>${item.need_human_review?'待审':'OK'}</td><td>${escapeHtml(item.key_metric?`${item.key_metric}: ${item.value_raw}${item.unit}`:'—')}</td></tr>`).join(''):'<tr><td colspan="6">没有符合条件的情报</td></tr>';
+    tbody.querySelectorAll('.intel-row').forEach(tr=>tr.addEventListener('click',()=>showIntelDetail(tr.dataset.id)));
+  }catch(err){tbody.innerHTML='<tr><td colspan="6">情报加载失败，请稍后重试</td></tr>';}
+}
 async function loadDashboards(){const root=document.getElementById('dashboardRows');if(!root)return;root.innerHTML='<div class="status-note">正在加载仪表盘…</div>';const q=encodeURIComponent(document.getElementById('dashboardQ')?.value||parseHash().params.get('q')||'');try{const res=await apiFetch(`/api/dashboards${q?'?q='+q:''}`);const data=await res.json();root.innerHTML=data.items.length?data.items.map(item=>dashboardCard(item)).join(''):'<div class="status-note">没有符合条件的仪表盘</div>';}catch(err){root.innerHTML='<div class="status-note">仪表盘加载失败，请稍后重试</div>';}}
 function mapAssetText(value){return String(value||'').toLowerCase().replace(/\s+/g,'');}
 function mapNodeTerms(node){const roots=new Set(['零碳产业','AI与智能科技','通用技术']);return Array.from(new Set([node.title,...(node.path||[])].map(v=>String(v||'').trim()).filter(v=>v.length>=2&&!roots.has(v))));}
@@ -184,7 +230,7 @@ function infoMapText(item){return mapAssetText([item.title,item.leaf_title,item.
 function dashboardMapText(item){return mapAssetText([item.id,item.name,item.scope,item.query,item.domain,(item.metrics||[]).join(' ')].join(' '));}
 function mapMatchesNode(node, rows, textGetter){const terms=mapNodeTerms(node).map(mapAssetText).filter(Boolean);return rows.filter(row=>{const text=textGetter(row);return terms.some(term=>text.includes(term));});}
 async function loadMapAssets(){const [intelRes,dashboards]=await Promise.allSettled([apiFetch('/api/delivery-intel?limit=5000').then(r=>r.ok?r.json():{items:[]}),apiFetch('/api/dashboards').then(r=>r.ok?r.json():{items:[]})]);const intelItems=intelRes.status==='fulfilled'?(intelRes.value.items||[]):[]; return {infos:intelItems,dashboards:dashboards.status==='fulfilled'&&Array.isArray(dashboards.value.items)?dashboards.value.items:[]};}
-function decorateIndustryAssets(node,assets){const children=node.children||[];if(!children.length){const intel=mapMatchesNode(node,assets.infos,infoMapText);const dashboards=mapMatchesNode(node,assets.dashboards,dashboardMapText);const dashboardQuery=dashboards[0]?.query||dashboards[0]?.id||node.title;node.assets={intel:{active:intel.length>0,count:intel.length,href:`#intel?q=${encodeURIComponent(node.title)}&from_map=1`},special_issue:{active:false,count:0,href:''},dashboard:{active:dashboards.length>0,count:dashboards.length,href:`#dashboard?q=${encodeURIComponent(dashboardQuery)}`}};}children.forEach(child=>decorateIndustryAssets(child,assets));return node;}
+function decorateIndustryAssets(node,assets){const children=node.children||[];if(!children.length){const intel=mapMatchesNode(node,assets.infos,infoMapText);const dashboards=mapMatchesNode(node,assets.dashboards,dashboardMapText);const dashboardQuery=dashboards[0]?.query||dashboards[0]?.id||node.title;node.assets={intel:{active:intel.length>0,count:intel.length,href:`#intel?leaf=${encodeURIComponent(node.title)}&from_map=1`},special_issue:{active:false,count:0,href:''},dashboard:{active:dashboards.length>0,count:dashboards.length,href:`#dashboard?q=${encodeURIComponent(dashboardQuery)}`}};}children.forEach(child=>decorateIndustryAssets(child,assets));return node;}
 function countLeaves(node){const children=node.children||[];return children.length?children.reduce((sum,child)=>sum+countLeaves(child),0):1;}
 function leafDots(node){const assets=node.assets||{};const fallbackCoverage=node.coverage||{};const fallbackLinks=node.links||{};const items=[['intel','情','相关情报'],['special_issue','刊','相关专刊'],['dashboard','盘','相关行业仪表盘']];return `<div class="leaf-tags">${items.map(([key,label,title])=>{const asset=assets[key]||{active:!!fallbackCoverage[key],href:fallbackLinks[key]||'#',count:0};const active=!!asset.active;const href=asset.href||'#';const status=active?`${title}：${asset.count||1}项`:`${title}：暂无`;return active?`<a class="leaf-tag active" data-link-type="${key}" href="${href}" title="${status}"><span>${label}</span></a>`:`<span class="leaf-tag missing" data-link-type="${key}" title="${status}" style="background:#dc2626;border-color:#b91c1c;color:#fff;"><span>${label}</span></span>`;}).join('')}</div>`;}
 function mapNodeOwnMatch(node){const q=mapAssetText(mapSearchDraft);if(!q)return false;return mapAssetText([node.title,...(node.path||[])].join(' ')).includes(q);}
