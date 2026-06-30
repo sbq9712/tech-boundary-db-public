@@ -100,13 +100,26 @@ function initMapHorizontalScroll(){
 }
 window.addEventListener('resize',syncMapHorizontalBar);
 let homeMessages = loadHomeMessages();
+let activeSessionId = null;
 function emptyPanels(){return {hot_intel:[],parameter_boundaries:[],alert_intel:[],dashboard_links:[]};}
 function token(){return localStorage.getItem("auth_token")||localStorage.getItem("access_token")||"";}
 function authHeaders(){return {"Authorization":`Bearer ${token()}`};}
 function loadHomeMessages(){try{return JSON.parse(localStorage.getItem('home_messages')||'[]');}catch(_err){return []}}
 function saveHomeMessages(){localStorage.setItem('home_messages',JSON.stringify(homeMessages.slice(-40)));}
 function addHomeMessage(role,text,extra){homeMessages.push({role,text,extra:extra||null,ts:Date.now()});saveHomeMessages();}
-function renderHomeMessages(){const base='<div class="assistant-msg"><strong>系统</strong><p>请输入一个技术、行业或项目问题。回答会围绕情报、证据、参数和判断边界组织。</p></div>';if(!homeMessages.length)return base;return base+homeMessages.map(msg=>msg.role==='user'?`<div class="user-msg"><strong>你</strong><p>${escapeHtml(msg.text)}</p></div>`:`<div class="assistant-msg"><strong>系统</strong><p>${escapeHtml(msg.text)}</p>${renderInlineResources(msg.extra)}</div>`).join('');}
+function renderHomeMessages(){
+  // Fresh session: only show the system welcome message, don't load old history
+  const base='<div class="assistant-msg"><strong>系统</strong><p>请输入一个技术、行业或项目问题。回答会围绕情报、证据、参数和判断边界组织。</p></div>';
+  // If we have an active session loaded, show only that session's messages (stored in activeSessionMessages)
+  if(activeSessionMessages && activeSessionMessages.length){
+    return base + activeSessionMessages.map(msg=>msg.role==='user'
+      ?`<div class="user-msg"><strong>你</strong><p>${escapeHtml(msg.text)}</p></div>`
+      :`<div class="assistant-msg"><strong>系统</strong><p>${escapeHtml(msg.text)}</p>${renderInlineResources(msg.extra)}</div>`
+    ).join('');
+  }
+  return base;
+}
+let activeSessionMessages = [];
 function parseHash(){const raw=(location.hash||"#home").slice(1);const [routePart,queryPart=""]=raw.split("?");return {route:routes[routePart]?routePart:"home",params:new URLSearchParams(queryPart)};}
 function setRoute(route,params){const q=params?`?${params.toString()}`:"";location.hash=route+q;}
 function render(){if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home")loadAssistantStatus();if(state.route==="intel")loadIntel(state.params);if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();}
@@ -150,22 +163,28 @@ async function submitQuery(){
   const query=input.value.trim();
   if(!query){input.focus();return;}
 
-  // UI: user message + thinking container
-  addHomeMessage('user',query);
+  // Unique ID for this response, so multiple rounds don't overwrite each other
+  const respId="resp_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);
+
+  // Track in active session memory
+  activeSessionMessages.push({role:'user',text:query});
+  activeSessionMessages.push({role:'assistant',text:'',extra:null});
+
+  // UI: append user message + new streaming container (don't touch existing messages)
   answer.insertAdjacentHTML("beforeend",
     `<div class="user-msg"><strong>你</strong><p>${escapeHtml(query)}</p></div>`+
-    `<div class="assistant-msg streaming" id="streamingMsg">`+
-    `<div class="thinking-stages" id="thinkingStages"></div>`+
-    `<div class="response-text" id="responseText"></div>`+
-    `<div class="citations-area" id="citationsArea"></div>`+
+    `<div class="assistant-msg streaming" id="${respId}">`+
+    `<div class="thinking-stages" id="stages_${respId}"></div>`+
+    `<div class="response-text" id="text_${respId}"></div>`+
+    `<div class="citations-area" id="cit_${respId}"></div>`+
     `</div>`
   );
   input.value="";homeDraft="";localStorage.removeItem('home_query_draft');
   answer.scrollTop=answer.scrollHeight;
 
-  const stagesEl=document.getElementById("thinkingStages");
-  const respEl=document.getElementById("responseText");
-  const citEl=document.getElementById("citationsArea");
+  const stagesEl=document.getElementById("stages_"+respId);
+  const respEl=document.getElementById("text_"+respId);
+  const citEl=document.getElementById("cit_"+respId);
   let fullText="";
 
   try{
@@ -197,22 +216,18 @@ async function submitQuery(){
           try{data=JSON.parse(dataStr);}catch(_){continue;}
 
           if(currentEvent==="status"){
-            // Append thinking stage as a chip
             stagesEl.insertAdjacentHTML("beforeend",
               `<div class="stage-chip">${data.message}</div>`);
-            // Mark previous chips as done
             const chips=stagesEl.querySelectorAll(".stage-chip");
             chips.forEach((c,i)=>{if(i<chips.length-1)c.classList.add("done");});
             answer.scrollTop=answer.scrollHeight;
 
           }else if(currentEvent==="token"){
-            // Real-time typing: append raw content (no escape — it's markdown)
             respEl.innerHTML=renderMarkdown(fullText+data.content);
             fullText+=data.content;
             answer.scrollTop=answer.scrollHeight;
 
           }else if(currentEvent==="done"){
-            // Final: citations + retrieval stats
             const stats=data.retrieval_summary||{};
             citEl.innerHTML=renderCitations(data.citations||[],stats);
 
@@ -223,10 +238,11 @@ async function submitQuery(){
       }
     }
 
-    // Save to history
+    // Save to active session memory + persisted history
+    const lastMsg=activeSessionMessages[activeSessionMessages.length-1];
+    lastMsg.text=fullText;
     addHomeMessage('assistant',fullText);
-    // Remove streaming class
-    const sm=document.getElementById("streamingMsg");
+    const sm=document.getElementById(respId);
     if(sm)sm.classList.remove("streaming");
 
   }catch(err){
