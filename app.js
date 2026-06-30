@@ -173,18 +173,18 @@ function sourcesView(){
 }
 function mapView(){const state=parseHash();const group=state.params.get('group')||'zero-carbon';const tabs=[["zero-carbon","零碳产业"],["ai-intelligent","AI与智能科技"],["general-tech","通用技术"]];const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};return `<section class="panel content-panel map-content-panel"><div class="map-head"><div><div class="eyebrow">行业图景</div><h1 class="section-title">XMind 三页签行业树，叶子节点挂接情报 / 专刊 / 仪表盘。</h1></div><div class="map-tools"><input id="mapSearch" value="${escapeHtml(mapSearchDraft)}" placeholder="搜索节点"/><button class="secondary-btn" id="mapExpandAll" type="button">展开全部</button><button class="secondary-btn" id="mapCollapse" type="button">折叠到二级</button></div></div><div class="map-legend"><span><i class="legend-dot intel">情</i>相关情报</span><span><i class="legend-dot issue">刊</i>专刊</span><span><i class="legend-dot dashboard">盘</i>行业仪表盘</span><span><i class="legend-dot missing">!</i>缺失标红</span></div><div class="bookmark-tabs">${tabs.map(([key,label])=>`<button class="bookmark-tab ${group===key?'active':''}" data-map-group="${key}">${label}</button>`).join('')}</div><div class="map-shell"><header class="map-summary"><strong>${titleMap[group]||'零碳产业'}</strong><span id="industryMapMeta">正在加载图景…</span></header><div class="industry-tree" id="industryTree"><div class="status-note">正在加载图景…</div></div><div class="map-x-scroll" id="mapXScroll"><div class="map-x-thumb" id="mapXThumb"></div></div></div></section>`;}
 function knowledgeView(){return `<section class="panel content-panel"><div class="eyebrow">知识图谱</div><h1 class="section-title">知识图谱用于承载行业节点、情报、专刊、仪表盘和长期记忆之间的关系。当前先保留入口与结构接口。</h1><div class="knowledge-placeholder"><div class="status-note">知识图谱结构接口已预留，后续接入图谱数据后在这里呈现可交互关系网络。</div></div></section>`;}
-function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const intelFilter=document.getElementById("intelFilter");if(intelFilter)intelFilter.addEventListener("submit",e=>{e.preventDefault();const p=new URLSearchParams();['intelQ','intelDomain','intelSource','intelStatus'].forEach(id=>{const el=document.getElementById(id);if(el&&el.value)p.set(id.replace('intel','').toLowerCase(),el.value);});setRoute('intel',p);});const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});document.querySelectorAll("[data-src-tab]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('srctab',btn.dataset.srcTab);setRoute('sources',p);}));}
+function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const intelFilter=document.getElementById("intelFilter");if(intelFilter)intelFilter.addEventListener("submit",e=>{e.preventDefault();const p=new URLSearchParams();const qv=document.getElementById('intelQ')?.value;const dv=document.getElementById('intelDomain')?.value;const sv=document.getElementById('intelSource')?.value;if(qv)p.set('q',qv);if(dv)p.set('domain',dv);if(sv)p.set('source_type',sv);setRoute('intel',p);});const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});document.querySelectorAll("[data-src-tab]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('srctab',btn.dataset.srcTab);setRoute('sources',p);}));}
 async function loadAssistantStatus(){const answer=document.getElementById("answer");if(!answer)return;try{const res=await apiFetch('/api/assistant/status');const data=await res.json();const files=(data.health||{}).markdown_files;if(data.status==='ok'){answer.insertAdjacentHTML('beforeend',`<div class="assistant-msg"><strong>只读知识库</strong><p>已连接知识库，共 ${Number.isFinite(files)?files:'若干'} 个 Markdown 文档可供检索。</p></div>`);}}catch(err){answer.insertAdjacentHTML('beforeend',`<div class="assistant-msg"><strong>只读知识库</strong><p>知识库状态检查失败，仍可提交问题。</p></div>`);}}
 function applyIntelParams(params){const map={q:'intelQ',domain:'intelDomain',source_type:'intelSource',leaf:'intelLeaf'};for(const [key,id] of Object.entries(map)){const el=document.getElementById(id);if(el&&params.has(key))el.value=params.get(key);}if(params.has('leaf')){const leafVal=params.get('leaf');window._intelLeafFilter=leafVal;}else{window._intelLeafFilter='';} }
-let _intelMetaLoaded=false;
 async function loadIntelMeta(){
-  if(_intelMetaLoaded)return;
+  // Check DOM state, not a global flag — dropdowns are recreated on every render()
+  const domainSel=document.getElementById('intelDomain');
+  const sourceSel=document.getElementById('intelSource');
+  if(!domainSel||domainSel.options.length>1)return; // already populated
   try{
     const res=await apiFetch('/api/delivery-intel/meta');
     const meta=await res.json();
-    const domainSel=document.getElementById('intelDomain');
-    const sourceSel=document.getElementById('intelSource');
-    if(domainSel&&meta.domains){
+    if(meta.domains){
       meta.domains.forEach(d=>{
         const o=document.createElement('option');
         o.value=d.key;o.textContent=d.label;domainSel.appendChild(o);
@@ -196,29 +196,36 @@ async function loadIntelMeta(){
         o.value=s.key;o.textContent=s.label;sourceSel.appendChild(o);
       });
     }
-    _intelMetaLoaded=true;
   }catch(e){}
 }
 async function loadIntel(params=new URLSearchParams()){
-  applyIntelParams(params);
+  // Step 1: render skeleton first so DOM exists
+  // Step 2: populate dropdowns from meta (checks DOM state, re-runs if fresh)
   await loadIntelMeta();
+  // Step 3: restore selected values AFTER meta populated options
+  applyIntelParams(params);
   const tbody=document.getElementById("intelRows");
   const note=document.getElementById("intelTotalNote");
   if(!tbody)return;
   tbody.innerHTML='<tr><td colspan="6">正在加载情报…</td></tr>';
   try{
+    const leaf=params.get('leaf')||'';
     const q=encodeURIComponent(document.getElementById('intelQ')?.value||params.get('q')||'');
     const domain=encodeURIComponent(document.getElementById('intelDomain')?.value||params.get('domain')||'');
     const sourceType=encodeURIComponent(document.getElementById('intelSource')?.value||params.get('source_type')||'');
-    const parts=[`limit=200`];
-    if(q)parts.push(`q=${q}`);
-    if(domain)parts.push(`domain=${domain}`);
-    if(sourceType)parts.push(`source_type=${sourceType}`);
+    const parts=['limit=200'];
+    if(leaf)parts.push(`leaf=${encodeURIComponent(leaf)}`);
+    else{
+      if(q)parts.push(`q=${q}`);
+      if(domain)parts.push(`domain=${domain}`);
+      if(sourceType)parts.push(`source_type=${sourceType}`);
+    }
     const url=`/api/delivery-intel?${parts.join('&')}`;
     const res=await apiFetch(url);
     const data=await res.json();
     const rows=data.items||[];
-    if(note)note.textContent=`共 ${data.total||rows.length} 条，显示前 ${rows.length} 条`;
+    const filterDesc=leaf?`叶子节点：${leaf}`:(q||domain||sourceType)?'已筛选':'全部';
+    if(note)note.textContent=`共 ${data.total||rows.length} 条 · ${filterDesc} · 显示前 ${rows.length} 条`;
     tbody.innerHTML=rows.length?rows.map(item=>`<tr class="intel-row" data-id="${escapeHtml(item.id)}" style="cursor:pointer"><td>${escapeHtml(item.title||'未命名情报')}</td><td>${escapeHtml(item.domain_label||item.leaf_title||'未分类')}</td><td>${escapeHtml(item.source_type_label||item.source_type||'')}</td><td>${escapeHtml(item.confidence||'')}</td><td>${item.need_human_review?'待审':'OK'}</td><td>${escapeHtml(item.key_metric?`${item.key_metric}: ${item.value_raw}${item.unit}`:'—')}</td></tr>`).join(''):'<tr><td colspan="6">没有符合条件的情报</td></tr>';
     tbody.querySelectorAll('.intel-row').forEach(tr=>tr.addEventListener('click',()=>showIntelDetail(tr.dataset.id)));
   }catch(err){tbody.innerHTML='<tr><td colspan="6">情报加载失败，请稍后重试</td></tr>';}
