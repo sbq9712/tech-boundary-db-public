@@ -227,7 +227,7 @@ async function loadIntel(params=new URLSearchParams()){
     const res=await apiFetch(url);
     const data=await res.json();
     const rows=data.items||[];
-    const filterDesc=leaf?`叶子节点：${leaf}`:(q||domain||sourceType)?'已筛选':'全部';
+    const filterDesc=leaf?`叶子节点：${leaf}`:(q||sourceType)?'已筛选':'全部';
     if(note)note.textContent=`共 ${data.total||rows.length} 条 · ${filterDesc} · 显示前 ${rows.length} 条`;
     tbody.innerHTML=rows.length?rows.map(item=>`<tr class="intel-row" data-id="${escapeHtml(item.id)}" style="cursor:pointer"><td>${escapeHtml(item.title||'未命名情报')}</td><td title="${escapeHtml(item.taxonomy_path||'')}"><span style="font-size:11px;color:#94a3b8">${escapeHtml(item.domain_label||'')} › </span>${escapeHtml(item.leaf_title||'未分类')}</td><td>${escapeHtml(item.source_type_label||item.source_type||'')}</td><td>${escapeHtml(item.confidence||'')}</td><td>${item.need_human_review?'待审':'OK'}</td><td>${escapeHtml(item.key_metric?`${item.key_metric}: ${item.value_raw}${item.unit}`:'—')}</td></tr>`).join(''):'<tr><td colspan="6">没有符合条件的情报</td></tr>';
     tbody.querySelectorAll('.intel-row').forEach(tr=>tr.addEventListener('click',()=>showIntelDetail(tr.dataset.id)));
