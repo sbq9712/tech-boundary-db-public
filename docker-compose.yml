@@ -33,6 +33,7 @@ services:
       - ./data_sources:/app/data_sources:ro
       - ./backend/scripts:/app/scripts:ro
       - /mnt/d/##EDMUNDS/知识库:/knowledge-base:ro
+      - /mnt/d/##EDMUNDS/技术数据库/delivery_views:/app/delivery_views:ro
     depends_on:
       db:
         condition: service_healthy
