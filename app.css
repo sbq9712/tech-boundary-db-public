@@ -17,6 +17,13 @@
 .response-text h3,.response-text h4{margin:14px 0 6px;color:var(--ink)}
 .response-text code{background:#f1f5f9;padding:2px 5px;border-radius:4px;font-size:12px}
 .response-text ul{margin:6px 0;padding-left:20px}
+.response-text ol{margin:6px 0;padding-left:22px}
+.response-text p{margin:8px 0}
+.response-text li{margin:3px 0}
+.response-text blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:6px 14px;background:#f8fafc;border-radius:0 8px 8px 0;color:#475467}
+.response-text pre{background:#1e293b;color:#e2e8f0;border-radius:10px;padding:12px 14px;overflow:auto;margin:10px 0;font-size:12px;line-height:1.5}
+.response-text pre code{background:transparent;padding:0;color:inherit;font-size:12px}
+.response-text a{color:var(--accent);text-decoration:underline}
 .response-text .error{color:#dc2626}
 .citations-block{margin-top:14px;padding-top:10px;border-top:1px dashed var(--line)}
 .retrieval-stats{font-size:11px;color:var(--muted);margin-bottom:8px}

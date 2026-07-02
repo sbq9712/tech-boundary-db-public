@@ -32,23 +32,38 @@ AI_MODEL = os.getenv("TECHDB_AGENT_MODEL", "claude-opus-4-8")
 AI_TIMEOUT = int(os.getenv("TECHDB_AGENT_TIMEOUT_SECONDS", "120"))
 
 
+_CJK_STOPWORDS = set("的了是在为和与及或也都就还把被让使向从对由以至")
+
+
 def _normalize_query(query: str) -> list[str]:
-    """Extract search terms from query, splitting on ASCII↔CJK boundaries too."""
+    """Extract search terms from query, including CJK bigrams for Chinese text."""
     # Insert space between ASCII and CJK character transitions
     text = re.sub(r"([A-Za-z0-9])([^\x00-\x7F])", r"\1 \2", query)
     text = re.sub(r"([^\x00-\x7F])([A-Za-z0-9])", r"\1 \2", text)
     normalized = re.sub(r"[\s/，。；;:：、（）()\[\]{}%]+", " ", text.lower())
-    return [term for term in normalized.split() if len(term) >= 2]
+    terms = [term for term in normalized.split() if len(term) >= 2]
+
+    # Extract CJK bigrams — without this, a query like "作为数据中心电源"
+    # stays as one long string that never matches anything in the KB.
+    cjk_chars = re.findall(r"[\u4e00-\u9fff]", query)
+    for i in range(len(cjk_chars) - 1):
+        c1, c2 = cjk_chars[i], cjk_chars[i + 1]
+        if c1 not in _CJK_STOPWORDS and c2 not in _CJK_STOPWORDS:
+            bigram = c1 + c2
+            if bigram not in terms:
+                terms.append(bigram)
+
+    return terms
 
 
-def _search_knowledge_base(query: str, limit: int = 5) -> list[dict]:
+def _search_knowledge_base(query: str, limit: int = 8) -> list[dict]:
     """Full-text search in knowledge base markdown files."""
     if not KNOWLEDGE_BASE_PATH.exists():
         return []
-    
+
     terms = _normalize_query(query)
     results: list[tuple[int, Path, str]] = []
-    
+
     for path in KNOWLEDGE_BASE_PATH.rglob("*.md"):
         if not path.is_file():
             continue
@@ -56,14 +71,14 @@ def _search_knowledge_base(query: str, limit: int = 5) -> list[dict]:
             text = path.read_text(encoding="utf-8", errors="ignore")[:100000]
         except OSError:
             continue
-        
+
         haystack = f"{path.name}\n{text}".lower()
         score = sum(haystack.count(term) for term in terms)
         if score > 0:
             results.append((score, path, text))
-    
+
     results.sort(key=lambda x: x[0], reverse=True)
-    
+
     docs = []
     for score, path, text in results[:limit]:
         # Extract first heading as title
@@ -78,8 +93,8 @@ def _search_knowledge_base(query: str, limit: int = 5) -> list[dict]:
             if idx >= 0:
                 snippet_start = max(0, idx - 100)
                 break
-        snippet = text[snippet_start:snippet_start + 400].replace("\n", " ").strip()
-        
+        snippet = text[snippet_start:snippet_start + 600].replace("\n", " ").strip()
+
         docs.append({
             "type": "knowledge_base",
             "title": first_heading,
@@ -87,28 +102,30 @@ def _search_knowledge_base(query: str, limit: int = 5) -> list[dict]:
             "snippet": snippet,
             "score": score,
         })
-    
+
     return docs
 
 
 def _search_sources(db: Session, query: str, limit: int = 10) -> list[dict]:
-    """Full-text search in sources table (title only for now, can add FTS5 later)."""
+    """Full-text search across source title, source_name, and domain."""
     terms = _normalize_query(query)
-    
-    # Build ILIKE filters for each term
+
+    # Build ILIKE filters across multiple fields for each term
     filters = []
     for term in terms:
         filters.append(Source.title.ilike(f"%{term}%"))
-    
+        filters.append(Source.source_name.ilike(f"%{term}%"))
+        filters.append(Source.domain.ilike(f"%{term}%"))
+
     stmt = (
         select(Source)
         .where(or_(*filters))
         .order_by(Source.captured_at.desc())
         .limit(limit)
     )
-    
+
     rows = db.scalars(stmt).all()
-    
+
     return [
         {
             "type": "source",
@@ -181,7 +198,7 @@ def _build_prompt(query: str, retrieval_results: dict, history: list[dict]) -> l
         kb_docs = retrieval_results["knowledge_base"]
         context_parts.append(f"## 知识库文档（{len(kb_docs)} 篇）\n")
         for i, doc in enumerate(kb_docs, 1):
-            context_parts.append(f"{i}. **{doc['title']}** ({doc['path']})\n   摘要: {doc['snippet'][:200]}...\n")
+            context_parts.append(f"{i}. **{doc['title']}** ({doc['path']})\n   摘要: {doc['snippet'][:600]}...\n")
     
     if retrieval_results.get("sources"):
         srcs = retrieval_results["sources"]
@@ -238,12 +255,12 @@ async def stream_agent_response(
     # Stage 1: Retrieval
     yield f'event: status\ndata: {json.dumps({"stage": "retrieving", "message": "🔍 正在检索知识库..."}, ensure_ascii=False)}\n\n'
     
-    kb_results = _search_knowledge_base(query, limit=5)
-    
+    kb_results = _search_knowledge_base(query, limit=8)
+
     yield f'event: status\ndata: {json.dumps({"stage": "retrieving", "message": f"📊 找到 {len(kb_results)} 篇知识库文档"}, ensure_ascii=False)}\n\n'
-    
-    sources_results = _search_sources(db, query, limit=8)
-    params_results = _search_parameters(db, query, limit=8)
+
+    sources_results = _search_sources(db, query, limit=10)
+    params_results = _search_parameters(db, query, limit=10)
     
     yield f'event: status\ndata: {json.dumps({"stage": "retrieving", "message": f"📚 找到 {len(sources_results)} 条文献、{len(params_results)} 条参数"}, ensure_ascii=False)}\n\n'
     

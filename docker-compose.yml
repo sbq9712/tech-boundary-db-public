@@ -51,8 +51,8 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ./:/usr/share/nginx/html:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /mnt/d/##EDMUNDS/技术数据库/v260629.0:/usr/share/nginx/html:ro
+      - /mnt/d/##EDMUNDS/技术数据库/v260629.0/nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
   readonly-agent:
     build:
@@ -79,3 +79,5 @@ services:
 
 volumes:
   pg_data:
+    external: true
+    name: v2606290_pg_data

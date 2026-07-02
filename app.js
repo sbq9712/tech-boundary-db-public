@@ -126,7 +126,7 @@ function renderHomeMessages(){
   if(activeSessionMessages && activeSessionMessages.length){
     return base + activeSessionMessages.map(msg=>msg.role==='user'
       ?`<div class="user-msg"><strong>你</strong><p>${escapeHtml(msg.text)}</p></div>`
-      :`<div class="assistant-msg"><strong>系统</strong><p>${escapeHtml(msg.text)}</p>${renderInlineResources(msg.extra)}</div>`
+      :`<div class="assistant-msg"><strong>系统</strong><div class="response-text">${renderMarkdown(msg.text)}</div>${renderInlineResources(msg.extra)}</div>`
     ).join('');
   }
   return base;
@@ -252,7 +252,24 @@ function countNodes(node){return 1+((node.children||[]).reduce((sum,child)=>sum+
 function maxDepth(node){const children=node.children||[];return children.length?Math.max(...children.map(maxDepth)):Number(node.depth||0);}
 function indicatorText(item){const indicators=item.draft_data&&Array.isArray(item.draft_data.indicators)?item.draft_data.indicators:[];return indicators.length?escapeHtml(indicators.slice(0,3).map(x=>`${x.name||'指标'} ${x.value||''}${x.unit||''}`).join('；')):'—';}
 function updatePanels(extra){assistantPanels=(extra&&extra.panel_recommendations)||emptyPanels();const root=document.getElementById('homeInsights');if(root)root.innerHTML=renderInsightPanels();}
-function renderInlineResources(extra){const panels=(extra&&extra.panel_recommendations)||emptyPanels();const citations=(extra&&Array.isArray(extra.citations))?extra.citations:[];const sections=[];if(citations.length){sections.push(`<div class="inline-resource-group"><h4>相关文档</h4>${citations.slice(0,6).map(path=>`<a href="#sources" title="${escapeHtml(path)}">${escapeHtml(path)}</a>`).join('')}</div>`);}const boundaries=panels.parameter_boundaries||[];if(boundaries.length){sections.push(`<div class="inline-resource-group"><h4>参数边界</h4>${boundaries.slice(0,4).map(item=>`<span>${escapeHtml(item.title||item.name||item.value||'参数边界')}</span>`).join('')}</div>`);}const alerts=panels.alert_intel||[];if(alerts.length){sections.push(`<div class="inline-resource-group"><h4>预警情报</h4>${alerts.slice(0,4).map(item=>`<span>${escapeHtml(item.title||item.name||'预警情报')}</span>`).join('')}</div>`);}const dashboards=panels.dashboard_links||[];if(dashboards.length){sections.push(`<div class="inline-resource-group"><h4>相关仪表盘</h4>${dashboards.slice(0,4).map(item=>`<a href="#dashboard${item.id?`?q=${encodeURIComponent(item.id)}`:''}">${escapeHtml(item.name||item.title||'相关仪表盘')}</a>`).join('')}</div>`);}return sections.length?`<div class="inline-resources">${sections.join('')}</div>`:'';}
+function renderInlineResources(extra){
+  const panels=(extra&&extra.panel_recommendations)||emptyPanels();
+  const citations=(extra&&Array.isArray(extra.citations))?extra.citations:[];
+  const stats=(extra&&extra.retrieval_summary)||{};
+  const sections=[];
+  // Render citations using the same renderer as streaming, so route-switch
+  // produces identical output (citations are objects, not plain strings).
+  if(citations.length){
+    sections.push(renderCitations(citations,stats));
+  }
+  const boundaries=panels.parameter_boundaries||[];
+  if(boundaries.length){sections.push(`<div class="inline-resource-group"><h4>参数边界</h4>${boundaries.slice(0,4).map(item=>`<span>${escapeHtml(item.title||item.name||item.value||'参数边界')}</span>`).join('')}</div>`);}
+  const alerts=panels.alert_intel||[];
+  if(alerts.length){sections.push(`<div class="inline-resource-group"><h4>预警情报</h4>${alerts.slice(0,4).map(item=>`<span>${escapeHtml(item.title||item.name||'预警情报')}</span>`).join('')}</div>`);}
+  const dashboards=panels.dashboard_links||[];
+  if(dashboards.length){sections.push(`<div class="inline-resource-group"><h4>相关仪表盘</h4>${dashboards.slice(0,4).map(item=>`<a href="#dashboard${item.id?`?q=${encodeURIComponent(item.id)}`:''}">${escapeHtml(item.name||item.title||'相关仪表盘')}</a>`).join('')}</div>`);}
+  return sections.length?`<div class="inline-resources">${sections.join('')}</div>`:'';
+}
 async function submitQuery(){
   const input=document.getElementById("queryInput");
   const answer=document.getElementById("answer");
@@ -326,6 +343,16 @@ async function submitQuery(){
           }else if(currentEvent==="done"){
             const stats=data.retrieval_summary||{};
             citEl.innerHTML=renderCitations(data.citations||[],stats);
+            // Save citations + retrieval stats into session memory so they
+            // survive route switching (renderHomeMessages reads extra).
+            const lastMsg=activeSessionMessages[activeSessionMessages.length-1];
+            if(lastMsg&&lastMsg.role==='assistant'){
+              lastMsg.extra={
+                citations:data.citations||[],
+                retrieval_summary:stats,
+              };
+              saveHomeMessages();
+            }
 
           }else if(currentEvent==="error"){
             respEl.innerHTML=`<span class="error">⚠ ${escapeHtml(data.error||'LLM调用失败')}</span>`;
@@ -337,7 +364,7 @@ async function submitQuery(){
     // Save to active session memory + persisted history
     const lastMsg=activeSessionMessages[activeSessionMessages.length-1];
     lastMsg.text=fullText;
-    addHomeMessage('assistant',fullText);
+    addHomeMessage('assistant',fullText,lastMsg.extra);
     const sm=document.getElementById(respId);
     if(sm)sm.classList.remove("streaming");
 
@@ -347,16 +374,67 @@ async function submitQuery(){
 }
 
 function renderMarkdown(text){
-  // Minimal markdown: headers, bold, italic, code, line breaks, lists
-  let html=escapeHtml(text);
-  html=html.replace(/^### (.+)$/gm,'<h4>$1</h4>');
-  html=html.replace(/^## (.+)$/gm,'<h3>$1</h3>');
-  html=html.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-  html=html.replace(/`(.+?)`/g,'<code>$1</code>');
-  html=html.replace(/^\* (.+)$/gm,'<li>$1</li>');
-  html=html.replace(/(<li>.*<\/li>)/s,'<ul>$1</ul>');
-  html=html.replace(/\n/g,'<br>');
+  if(!text)return '';
+  // 1. Escape all HTML first
+  let t=escapeHtml(text);
+  // 2. Fenced code blocks ```...```
+  t=t.replace(/```([\s\S]*?)```/g,(m,p1)=>`<pre><code>${p1.replace(/^\n/,'')}</code></pre>`);
+  // 3. Protect code blocks from further processing
+  const codeBlocks=[];
+  t=t.replace(/<pre><code>[\s\S]*?<\/code><\/pre>/g,m=>{codeBlocks.push(m);return `\x00CB${codeBlocks.length-1}\x00`;});
+  // 4. Split into lines for block-level processing
+  const lines=t.split('\n');
+  let html='';
+  let inList=null; // 'ul' | 'ol' | null
+  let para=[];
+  const flushPara=()=>{if(para.length){html+=`<p>${para.join(' ')}</p>`;para=[];}};
+  const flushList=()=>{if(inList){html+=`</${inList}>`;inList=null;}};
+
+  for(const line of lines){
+    const trimmed=line.trim();
+    if(!trimmed){flushPara();flushList();continue;}
+    // Heading
+    let m;
+    if(m=trimmed.match(/^###\s+(.+)/)){flushPara();flushList();html+=`<h4>${inlineMd(m[1])}</h4>`;continue;}
+    if(m=trimmed.match(/^##\s+(.+)/)){flushPara();flushList();html+=`<h3>${inlineMd(m[1])}</h3>`;continue;}
+    if(m=trimmed.match(/^#\s+(.+)/)){flushPara();flushList();html+=`<h3>${inlineMd(m[1])}</h3>`;continue;}
+    // Unordered list
+    if(m=trimmed.match(/^[-*]\s+(.+)/)){
+      flushPara();
+      if(inList!=='ul'){flushList();html+='<ul>';inList='ul';}
+      html+=`<li>${inlineMd(m[1])}</li>`;
+      continue;
+    }
+    // Ordered list
+    if(m=trimmed.match(/^\d+[.)]\s+(.+)/)){
+      flushPara();
+      if(inList!=='ol'){flushList();html+='<ol>';inList='ol';}
+      html+=`<li>${inlineMd(m[1])}</li>`;
+      continue;
+    }
+    // Blockquote
+    if(m=trimmed.match(/^>\s*(.*)/)){
+      flushPara();flushList();
+      html+=`<blockquote>${inlineMd(m[1])}</blockquote>`;
+      continue;
+    }
+    // Regular text — collect into paragraph buffer
+    flushList();
+    para.push(inlineMd(trimmed));
+  }
+  flushPara();flushList();
+
+  // 5. Restore code blocks
+  html=html.replace(/\x00CB(\d+)\x00/g,(_,i)=>codeBlocks[parseInt(i)]);
   return html;
+
+  function inlineMd(s){
+    return s
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g,'<em>$1</em>')
+      .replace(/`(.+?)`/g,'<code>$1</code>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  }
 }
 
 function renderCitations(citations,stats){
