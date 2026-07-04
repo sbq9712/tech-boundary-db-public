@@ -107,5 +107,27 @@ def get_current_user(
                 detail="密码已修改，请重新登录",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+    # Reject disabled accounts even if the token is otherwise valid.
+    if user and not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账号已禁用",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return username
+
+
+def require_admin(
+    current_user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> str:
+    """Dependency that ensures the current user has the 'admin' role."""
+    from app.models.user import User
+    user = db.get(User, current_user)
+    if not user or user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限",
+        )
+    return current_user

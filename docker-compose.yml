@@ -25,15 +25,14 @@ services:
       HERMES_AGENT_CLI: ${HERMES_AGENT_CLI:-hermes}
       HERMES_AGENT_TIMEOUT_SECONDS: ${HERMES_AGENT_TIMEOUT_SECONDS:-120}
       HERMES_AGENT_TOOLSETS: ${HERMES_AGENT_TOOLSETS:-}
-      TECHDB_AGENT_API_KEY: ${TECHDB_AGENT_API_KEY:-}
-      TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://api.xiaowang886.xyz/v1}
-      TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-claude-opus-4-8}
+      TECHDB_AGENT_API_KEY: ${TECHDB_AGENT_API_KEY}
+      TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
+      TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-glm-5.2}
       TECHDB_KB_PATH: /knowledge-base
     volumes:
-      - ./data_sources:/app/data_sources:ro
       - ./backend/scripts:/app/scripts:ro
-      - /mnt/d/##EDMUNDS/知识库:/knowledge-base:ro
-      - /mnt/d/##EDMUNDS/技术数据库/delivery_views:/app/delivery_views:ro
+      - ${TECHDB_KB_PATH:-./external-data/knowledge-base}:/knowledge-base:ro
+      - ${TECHDB_DELIVERY_VIEWS_PATH:-./external-data/delivery-views}:/app/delivery_views:ro
     depends_on:
       db:
         condition: service_healthy
@@ -49,7 +48,7 @@ services:
     depends_on:
       - api
     ports:
-      - "8080:80"
+      - "${TECHDB_WEB_PORT:-8080}:80"
     volumes:
       - /mnt/d/##EDMUNDS/技术数据库/v260629.0:/usr/share/nginx/html:ro
       - /mnt/d/##EDMUNDS/技术数据库/v260629.0/nginx.conf:/etc/nginx/conf.d/default.conf:ro
@@ -64,13 +63,13 @@ services:
       DATA_DIR: /app/data
       TECHDB_KB_PATH: /knowledge-base
       TECHDB_CHATBOT_PACKAGE_PATH: /chatbot-integration-package
-      TECHDB_AGENT_API_KEY: ${TECHDB_AGENT_API_KEY:-}
-      TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://api.openai.com/v1}
-      TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-gpt-5.5}
+      TECHDB_AGENT_API_KEY: ${TECHDB_AGENT_API_KEY}
+      TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
+      TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-glm-5.2}
       TECHDB_AGENT_AI_TIMEOUT_SECONDS: ${TECHDB_AGENT_AI_TIMEOUT_SECONDS:-90}
     volumes:
-      - /mnt/d/##EDMUNDS/知识库:/knowledge-base:ro
-      - /mnt/d/##EDMUNDS/技术数据库/chatbot_integration_package:/chatbot-integration-package:ro
+      - ${TECHDB_KB_PATH:-./external-data/knowledge-base}:/knowledge-base:ro
+      - ${TECHDB_CHATBOT_PACKAGE_PATH:-./external-data/chatbot-package}:/chatbot-integration-package:ro
     depends_on:
       db:
         condition: service_healthy
@@ -80,4 +79,4 @@ services:
 volumes:
   pg_data:
     external: true
-    name: v2606290_pg_data
+    name: ${TECHDB_PG_VOLUME:-v2606290_pg_data}

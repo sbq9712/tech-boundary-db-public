@@ -4,9 +4,11 @@ const routes = {
   dashboard: { label: "技术仪表盘", title: "技术仪表盘总表" },
   map: { label: "行业图景", title: "行业图景" },
   knowledge: { label: "知识图谱", title: "知识图谱" },
-  sources: { label: "信源", title: "信源" }
+  sources: { label: "信源", title: "信源" },
+  users: { label: "用户管理", title: "用户管理" }
 };
-const navItems = [["home","HOME"],["intel","INT"],["dashboard","DASH"],["map","MAP"],["knowledge","KG"],["sources","SRC"]];
+const navItems = [["home","HOME"],["intel","INT"],["dashboard","DASH"],["map","MAP"],["knowledge","KG"],["sources","SRC"],["users","USR"]];
+let currentUser = null;  // {username, display_name, role} filled by loadCurrentUser()
 const sourceCards = [];
 const SOURCE_LIST = [["机器之心", "垂直媒体", "产业资讯", "https://www.jiqizhixin.com/"], ["能源学人", "学术论文", "学术科研", ""], ["战略前沿技术", "垂直媒体", "产业资讯", ""], ["核闻天下", "垂直媒体", "产业资讯", ""], ["先进能源科技战略情报研究中心", "咨询行研", "行业研究", ""], ["DeepTech深科技", "垂直媒体", "产业资讯", "https://www.mittrchina.com/"], ["环球零碳", "垂直媒体", "产业资讯", ""], ["南方能源观察", "垂直媒体", "产业资讯", ""], ["光子盒", "垂直媒体", "产业资讯", ""], ["矿业界", "垂直媒体", "产业资讯", ""], ["ESPLaza长时储能网", "垂直媒体", "产业资讯", ""], ["ESPLaza储热网", "垂直媒体", "产业资讯", ""], ["钙钛矿工厂", "垂直媒体", "产业资讯", ""], ["深远海风电", "垂直媒体", "产业资讯", ""], ["仁烁光能", "公司官媒", "产业资讯", ""], ["国际储能技术与产业联盟", "协会机构", "行业研究", "https://www.cnesa.org/"], ["绿金", "垂直媒体", "产业资讯", ""], ["中咨研究", "咨询行研", "行业研究", ""], ["新智元", "垂直媒体", "产业资讯", ""], ["氢能技术前沿", "垂直媒体", "产业资讯", ""], ["地学前沿观察", "垂直媒体", "产业资讯", ""], ["焦耳时代", "垂直媒体", "产业资讯", ""], ["IEEE电气电子工程学会", "学术论文", "学术科研", "https://www.ieee.org/"], ["储能科学与技术", "学术论文", "学术科研", "http://www.esst.org.cn/"], ["REAI Lab", "垂直媒体", "产业资讯", ""], ["机工文献", "学术论文", "学术科研", "https://www.cmechina.net/"], ["物理储能", "学术论文", "学术科研", ""], ["DT洞见可持续", "垂直媒体", "产业资讯", ""], ["环球科学", "学术论文", "学术科研", "https://www.huanqiukexue.com/"], ["腾讯研究院", "咨询行研", "行业研究", "https://tisi.org/"], ["能源技术情报", "垂直媒体", "产业资讯", ""], ["集邦固态电池", "垂直媒体", "产业资讯", ""], ["世界先进制造技术论坛", "垂直媒体", "产业资讯", ""], ["CCUS国家地方联合工程研究中心", "咨询行研", "行业研究", ""], ["新能源技术与装备", "垂直媒体", "产业资讯", ""], ["双碳情报", "垂直媒体", "产业资讯", ""], ["晚点LatePost", "垂直媒体", "产业资讯", "https://www.latepost.com/"], ["催化视界", "垂直媒体", "产业资讯", ""], ["中粉固态电池", "垂直媒体", "产业资讯", ""], ["能源环境经济文献精读", "学术论文", "学术科研", ""], ["可控核聚变", "垂直媒体", "产业资讯", ""], ["工业节能环保技术", "垂直媒体", "产业资讯", ""], ["国际能源小数据", "垂直媒体", "产业资讯", ""], ["现代情报", "垂直媒体", "产业资讯", ""], ["SOFC-SOEC-氢能技术", "垂直媒体", "产业资讯", ""], ["源网荷储创研新视界", "垂直媒体", "产业资讯", ""], ["新华国研经济学研究院", "咨询行研", "行业研究", ""], ["国际能源研究中心", "咨询行研", "行业研究", ""], ["视知产业研究院", "咨询行研", "行业研究", ""], ["热泵在线", "垂直媒体", "产业资讯", ""], ["麻省理工科技评论APP", "垂直媒体", "产业资讯", "https://www.mittrchina.com/"], ["Gartner公司", "公司官媒", "产业资讯", "https://www.gartner.com/"], ["新能源情报局", "垂直媒体", "产业资讯", ""], ["化工碳达峰碳中和", "垂直媒体", "产业资讯", ""], ["数据与情报科学英文刊", "学术论文", "学术科研", ""], ["昆山协鑫光电", "公司官媒", "产业资讯", ""], ["地热能在线", "垂直媒体", "产业资讯", ""], ["中国可再生能源学会地热能专委会", "协会机构", "行业研究", "http://www.cnrec.org.cn/"], ["中国科学技术发展战略研究院", "咨询行研", "行业研究", ""], ["氢能云互联", "垂直媒体", "产业资讯", ""], ["未来城市数智评论", "垂直媒体", "产业资讯", ""], ["星源PlanetaryEnergy", "垂直媒体", "产业资讯", ""], ["能源环境经济与政策研究", "垂直媒体", "产业资讯", ""], ["未来智库", "咨询行研", "行业研究", "https://www.vzkoo.com/"], ["国家新材料产业资源共享", "协会机构", "行业研究", "http://www.sinomaterials.org/"], ["氢创空间", "垂直媒体", "产业资讯", ""], ["社科院工业经济研究所", "协会机构", "行业研究", "http://ie.cass.cn/"], ["世界科技研究与发展", "垂直媒体", "产业资讯", ""], ["VPP前沿观察", "垂直媒体", "产业资讯", ""], ["低碳节能环保技术", "垂直媒体", "产业资讯", ""], ["中国国际可再生能源署合作办公室", "垂直媒体", "产业资讯", ""], ["数据小魔方", "垂直媒体", "产业资讯", ""], ["CSSD气候变化工作委员会", "协会机构", "行业研究", ""], ["Chemical Reviews (ACS ASAP)", "学术论文", "学术科研", "https://pubs.acs.org/journal/chreay"], ["Nature Nanotechnology", "学术论文", "学术科研", "https://www.nature.com/nnano/"], ["Nature Energy", "学术论文", "学术科研", "https://www.nature.com/nenergy/"], ["Nature Communications", "学术论文", "学术科研", "https://www.nature.com/ncomms/"], ["Nature Sustainability", "学术论文", "学术科研", "https://www.nature.com/natsustain/"], ["Advanced Materials", "学术论文", "学术科研", "https://onlinelibrary.wiley.com/journal/15214095"], ["Nature Materials", "学术论文", "学术科研", "https://www.nature.com/nmat/"], ["Nature Chemical Engineering", "学术论文", "学术科研", "https://www.nature.com/natchemeng/"], ["Materials Today", "学术论文", "学术科研", "https://www.materialstoday.com/"], ["Chemical Society Reviews (RSC)", "学术论文", "学术科研", "https://www.rsc.org/journals-books-databases/find-an-journal/chemical-society-reviews/"], ["ACS Energy Letters (ASAP)", "学术论文", "学术科研", "https://pubs.acs.org/journal/aelccp"], ["Chem (Cell Press)", "学术论文", "学术科研", "https://www.cell.com/chem/home"], ["Nature", "学术论文", "学术科研", "https://www.nature.com/"], ["Nature Reviews Materials", "学术论文", "学术科研", "https://www.nature.com/natrevmats/"], ["National Science Review Advance Access", "学术论文", "学术科研", "https://academic.oup.com/nsr"], ["Nature Chemistry", "学术论文", "学术科研", "https://www.nature.com/nchem/"], ["Energy & Environmental Science (RSC)", "学术论文", "学术科研", "https://www.rsc.org/journals-books-databases/find-an-journal/energy-environmental-science/"], ["Advanced Energy Materials", "学术论文", "学术科研", "https://onlinelibrary.wiley.com/journal/16146840"], ["Advanced Science", "学术论文", "学术科研", "https://onlinelibrary.wiley.com/journal/21983844"], ["PNAS", "学术论文", "学术科研", "https://www.pnas.org/"], ["Joule (Cell Press)", "学术论文", "学术科研", "https://www.cell.com/joule/home"], ["Science Advances", "学术论文", "学术科研", "https://www.science.org/journal/sciadv"], ["Science", "学术论文", "学术科研", "https://www.science.org/"], ["JACS ASAP", "学术论文", "学术科研", "https://pubs.acs.org/journal/jacsat"], ["Nature Electronics", "学术论文", "学术科研", "https://www.nature.com/natelectron/"], ["Nature Reviews Clean Technology", "学术论文", "学术科研", "https://www.nature.com/natrevcleantech/"], ["One Earth (Cell Press)", "学术论文", "学术科研", "https://www.cell.com/one-earth/home"], ["Matter (Cell Press)", "学术论文", "学术科研", "https://www.cell.com/matter/home"], ["Applied Energy", "学术论文", "学术科研", "https://www.sciencedirect.com/journal/applied-energy"], ["Energy Policy", "学术论文", "学术科研", "https://www.sciencedirect.com/journal/energy-policy"], ["起点钠电", "垂直媒体", "产业资讯", ""], ["钙钛矿学习交流平台", "垂直媒体", "产业资讯", ""], ["electrive", "垂直媒体", "产业资讯", "https://www.electrive.com/"], ["Batteries International", "垂直媒体", "产业资讯", "https://www.batteriesinternational.com/"], ["Volta Foundation", "协会机构", "行业研究", "https://voltafoundation.org/"], ["batteries news", "垂直媒体", "产业资讯", "https://www.batteriesnews.com/"], ["Battery Tech Online", "垂直媒体", "产业资讯", "https://www.batterytechonline.com/"], ["Supply Chain Digital", "垂直媒体", "产业资讯", "https://supplychaindigital.com/"], ["Battery Council International", "协会机构", "行业研究", "https://batterycouncil.org/"], ["Electrek", "垂直媒体", "产业资讯", "https://electrek.co/"], ["pv magazine", "垂直媒体", "产业资讯", "https://www.pv-magazine.com/"], ["interesting engineering", "垂直媒体", "产业资讯", "https://interestingengineering.com/"], ["scitechdaily", "垂直媒体", "产业资讯", "https://scitechdaily.com/"], ["perovskite-info", "垂直媒体", "产业资讯", "https://www.perovskite-info.com/"], ["索比光伏", "垂直媒体", "产业资讯", "https://www.solarbe.com/"], ["风电世界", "垂直媒体", "产业资讯", "https://windchinabbs.com/"], ["4C Offshore", "垂直媒体", "产业资讯", "https://www.4coffshore.com/"], ["全球风电网", "垂直媒体", "产业资讯", "http://www.windpower.org.cn/"], ["新能源网", "垂直媒体", "产业资讯", "http://www.china-nengyuan.com/"], ["the information", "垂直媒体", "产业资讯", "https://www.theinformation.com/"], ["MIT Technology Review", "垂直媒体", "产业资讯", "https://www.technologyreview.com/"], ["Informationsdienst Wissenschaft-idw", "垂直媒体", "产业资讯", "https://idw-online.de/"], ["ESS News", "垂直媒体", "产业资讯", "https://essnews.com/"], ["Batteries International News", "垂直媒体", "产业资讯", "https://www.batteriesinternational.com/"], ["pv magazine C&I PV", "垂直媒体", "产业资讯", "https://www.pv-magazine.com/"], ["Ammonia Energy Association", "协会机构", "行业研究", "https://www.ammoniaenergy.org/"], ["H2 View", "垂直媒体", "产业资讯", "https://www.h2-view.com/"], ["Hydrogen Tech World", "垂直媒体", "产业资讯", "https://hydrogentechworld.com/"], ["BloombergNEF Press", "咨询行研", "行业研究", "https://about.bnef.com/"], ["MIT Technology Review Climate", "垂直媒体", "产业资讯", "https://www.technologyreview.com/topic/climate-change/"], ["网易知光谷", "综合媒体", "产业资讯", "https://tech.163.com/"], ["中国核电信息网-国内", "垂直媒体", "产业资讯", "http://www.chinanuclear.cn/"], ["中国核电信息网-国际", "垂直媒体", "产业资讯", "http://www.chinanuclear.cn/"], ["中国电力新闻网-新能源", "综合媒体", "产业资讯", "http://www.cpnn.com.cn/"], ["中国电力新闻网-科技", "综合媒体", "产业资讯", "http://www.cpnn.com.cn/"], ["科学网新闻", "综合媒体", "产业资讯", "https://news.sciencenet.cn/"], ["新华网科技", "综合媒体", "产业资讯", "http://www.xinhuanet.com/tech/"], ["国际太阳能光伏网", "垂直媒体", "产业资讯", "https://www.solaris-china.com/"], ["Renewables Now", "垂直媒体", "产业资讯", "https://renewablesnow.com/"], ["索比光伏-综合新闻", "垂直媒体", "产业资讯", "https://www.solarbe.com/"], ["中国新能源网-新闻", "垂直媒体", "产业资讯", "http://www.china-nengyuan.com/"], ["IT之家", "综合媒体", "产业资讯", "https://www.ithome.com/"]];
 let assistantPanels = emptyPanels();
@@ -134,9 +136,19 @@ function renderHomeMessages(){
 let activeSessionMessages = [];
 function parseHash(){const raw=(location.hash||"#home").slice(1);const [routePart,queryPart=""]=raw.split("?");return {route:routes[routePart]?routePart:"home",params:new URLSearchParams(queryPart)};}
 function setRoute(route,params){const q=params?`?${params.toString()}`:"";location.hash=route+q;}
-function render(){if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home")loadAssistantStatus();if(state.route==="intel")loadIntel(state.params);if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();}
-function shell(state){const data=routes[state.route];return `<aside class="sidebar" aria-label="主导航"><div class="brand"><div class="brand-mark" aria-hidden="true"></div><div class="brand-copy"><div class="brand-title">技术边界数据库</div><div class="brand-sub">判断资产库</div></div></div><nav class="nav-section">${navItems.map(([key,code])=>`<button class="nav-item ${state.route===key?'active':''}" data-route="${key}" title="${routes[key].label}"><span class="nav-icon">${code}</span><span class="nav-text">${routes[key].label}</span></button>`).join("")}</nav><div class="account"><div class="account-row"><div class="avatar">E</div><div class="account-copy"><div class="account-name">admin1</div><div class="account-role">已登录</div></div></div><div class="account-actions"><button class="ghost-btn" id="changePwdBtn">修改密码</button><button class="ghost-btn" id="logoutBtn">退出</button></div></div></aside><section class="workspace"><header class="topbar"><div><div class="crumb">技术边界数据库 / ${data.label}</div><div class="top-title">${data.title}</div></div><div class="context-select">当前主题：由对话自动识别</div></header><main class="main ${state.route==='home'?'home-main':''}" id="main" tabindex="-1">${view(state.route)}</main></section>`;}
-function view(route){return {home:homeView,intel:intelView,dashboard:dashboardView,map:mapView,knowledge:knowledgeView,sources:sourcesView}[route]();}
+function render(){if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home")loadAssistantStatus();if(state.route==="intel")loadIntel(state.params);if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();}
+async function ensureCurrentUser(){if(!currentUser){await loadCurrentUser();}return currentUser;}
+function loadCurrentUser(){return apiFetch("/api/auth/me").then(r=>r.ok?r.json():null).then(d=>{if(d){currentUser=d;}}).catch(()=>{});}
+function isAdmin(){return currentUser&&currentUser.role==="admin";}
+function shell(state){
+  const data=routes[state.route];
+  const visibleNav=navItems.filter(([key])=>key!=='users'||isAdmin());
+  const accName=(currentUser&&(currentUser.display_name||currentUser.username))||'加载中…';
+  const accRole=currentUser?(currentUser.role==='admin'?'管理员':'普通用户'):'';
+  const avatarLetter=(accName||'?')[0].toUpperCase();
+  return `<aside class="sidebar" aria-label="主导航"><div class="brand"><div class="brand-mark" aria-hidden="true"></div><div class="brand-copy"><div class="brand-title">技术边界数据库</div><div class="brand-sub">判断资产库</div></div></div><nav class="nav-section">${visibleNav.map(([key,code])=>`<button class="nav-item ${state.route===key?'active':''}" data-route="${key}" title="${routes[key].label}"><span class="nav-icon">${code}</span><span class="nav-text">${routes[key].label}</span></button>`).join("")}</nav><div class="account"><div class="account-row"><div class="avatar">${escapeHtml(avatarLetter)}</div><div class="account-copy"><div class="account-name">${escapeHtml(accName)}</div><div class="account-role">${escapeHtml(accRole)}</div></div></div><div class="account-actions"><button class="ghost-btn" id="changePwdBtn">修改密码</button><button class="ghost-btn" id="logoutBtn">退出</button></div></div></aside><section class="workspace"><header class="topbar"><div><div class="crumb">技术边界数据库 / ${data.label}</div><div class="top-title">${data.title}</div></div><div class="context-select">当前主题：由对话自动识别</div></header><main class="main ${state.route==='home'?'home-main':''}" id="main" tabindex="-1">${view(state.route)}</main></section>`;
+}
+function view(route){const m={home:homeView,intel:intelView,dashboard:dashboardView,map:mapView,knowledge:knowledgeView,sources:sourcesView,users:usersView};return (m[route]||homeView)();}
 function homeView(){return `<section class="panel conversation-panel"><div class="eyebrow">核心门户</div><h1 class="page-title">围绕技术边界提问、追踪证据、形成判断。</h1><div class="conversation-history" id="answer">${renderHomeMessages()}</div><div class="query-box"><input id="queryInput" class="query-input" autocomplete="off" name="tech-boundary-query" placeholder="例如：SOFC 作为数据中心电源的关键边界是什么？"/><button id="askBtn" class="primary-btn">发送</button></div></section><aside class="home-insights" id="homeInsights">${renderInsightPanels()}</aside>`;}
 function renderInsightPanels(){return insightCard('热点情报推送',assistantPanels.hot_intel,'暂无与本轮问题直接相关的热点情报');}
 function insightCard(title,items,emptyText){return `<section class="panel insight-card"><h2>${title}</h2>${items&&items.length?items.map(item=>`<article><b>${escapeHtml(item.title||item.name||'未命名')}</b><span>${escapeHtml(item.summary||item.value||item.description||'')}</span></article>`).join(''):`<div class="empty-slot">${emptyText}</div>`}</section>`;}
@@ -173,7 +185,7 @@ function sourcesView(){
 }
 function mapView(){const state=parseHash();const group=state.params.get('group')||'zero-carbon';const tabs=[["zero-carbon","零碳产业"],["ai-intelligent","AI与智能科技"],["general-tech","通用技术"]];const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};return `<section class="panel content-panel map-content-panel"><div class="map-head"><div><div class="eyebrow">行业图景</div><h1 class="section-title">XMind 三页签行业树，叶子节点挂接情报 / 专刊 / 仪表盘。</h1></div><div class="map-tools"><input id="mapSearch" value="${escapeHtml(mapSearchDraft)}" placeholder="搜索节点"/><button class="secondary-btn" id="mapExpandAll" type="button">展开全部</button><button class="secondary-btn" id="mapCollapse" type="button">折叠到二级</button></div></div><div class="map-legend"><span><i class="legend-dot intel">情</i>相关情报</span><span><i class="legend-dot issue">刊</i>专刊</span><span><i class="legend-dot dashboard">盘</i>行业仪表盘</span><span><i class="legend-dot missing">!</i>缺失标红</span></div><div class="bookmark-tabs">${tabs.map(([key,label])=>`<button class="bookmark-tab ${group===key?'active':''}" data-map-group="${key}">${label}</button>`).join('')}</div><div class="map-shell"><header class="map-summary"><strong>${titleMap[group]||'零碳产业'}</strong><span id="industryMapMeta">正在加载图景…</span></header><div class="industry-tree" id="industryTree"><div class="status-note">正在加载图景…</div></div><div class="map-x-scroll" id="mapXScroll"><div class="map-x-thumb" id="mapXThumb"></div></div></div></section>`;}
 function knowledgeView(){return `<section class="panel content-panel"><div class="eyebrow">知识图谱</div><h1 class="section-title">知识图谱用于承载行业节点、情报、专刊、仪表盘和长期记忆之间的关系。当前先保留入口与结构接口。</h1><div class="knowledge-placeholder"><div class="status-note">知识图谱结构接口已预留，后续接入图谱数据后在这里呈现可交互关系网络。</div></div></section>`;}
-function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const intelFilter=document.getElementById("intelFilter");if(intelFilter)intelFilter.addEventListener("submit",e=>{e.preventDefault();const p=new URLSearchParams();const qv=document.getElementById('intelQ')?.value;const dv=document.getElementById('intelDomain')?.value;const sv=document.getElementById('intelSource')?.value;if(qv)p.set('q',qv);if(dv)p.set('domain',dv);if(sv)p.set('source_type',sv);setRoute('intel',p);});const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});document.querySelectorAll("[data-src-tab]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('srctab',btn.dataset.srcTab);setRoute('sources',p);}));}
+function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const intelFilter=document.getElementById("intelFilter");if(intelFilter)intelFilter.addEventListener("submit",e=>{e.preventDefault();const p=new URLSearchParams();const qv=document.getElementById('intelQ')?.value;const dv=document.getElementById('intelDomain')?.value;const sv=document.getElementById('intelSource')?.value;if(qv)p.set('q',qv);if(dv)p.set('domain',dv);if(sv)p.set('source_type',sv);setRoute('intel',p);});const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});document.querySelectorAll("[data-src-tab]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('srctab',btn.dataset.srcTab);setRoute('sources',p);}));const createUserBtn=document.getElementById("createUserBtn");if(createUserBtn)createUserBtn.addEventListener("click",showCreateUserModal);}
 async function loadAssistantStatus(){const answer=document.getElementById("answer");if(!answer)return;try{const res=await apiFetch('/api/assistant/status');const data=await res.json();const files=(data.health||{}).markdown_files;if(data.status==='ok'){answer.insertAdjacentHTML('beforeend',`<div class="assistant-msg"><strong>只读知识库</strong><p>已连接知识库，共 ${Number.isFinite(files)?files:'若干'} 个 Markdown 文档可供检索。</p></div>`);}}catch(err){answer.insertAdjacentHTML('beforeend',`<div class="assistant-msg"><strong>只读知识库</strong><p>知识库状态检查失败，仍可提交问题。</p></div>`);}}
 function applyIntelParams(params){const qEl=document.getElementById('intelQ');if(qEl&&params.has('q'))qEl.value=params.get('q');const domEl=document.getElementById('intelDomain');if(domEl&&params.has('leaf'))domEl.value=params.get('leaf');const srcEl=document.getElementById('intelSource');if(srcEl&&params.has('source_type'))srcEl.value=params.get('source_type');}
 async function loadIntelMeta(){
@@ -456,7 +468,192 @@ function renderCitations(citations,stats){
   html+='</div>';
   return html;
 }
-function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));}
+function escapeHtml(s){return String(s).replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));}
+
+// ═══════════════════════════════════════════════════════
+// USER MANAGEMENT
+// ═══════════════════════════════════════════════════════
+
+function usersView(){
+  return `<section class="panel content-panel">
+    <div class="eyebrow">用户管理</div>
+    <h1 class="section-title">管理系统用户账号、角色和启用状态。</h1>
+    <div style="margin-bottom:14px"><button class="primary-btn" id="createUserBtn">+ 创建用户</button></div>
+    <div class="table-card"><table>
+      <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>最后登录</th><th>操作</th></tr></thead>
+      <tbody id="usersTbody"><tr><td colspan="6" style="color:#667085;padding:20px">正在加载用户列表…</td></tr></tbody>
+    </table></div>
+  </section>`;
+}
+
+async function loadUsers(){
+  const tbody=document.getElementById('usersTbody');
+  if(!tbody)return;
+  try{
+    const res=await apiFetch('/api/users');
+    if(!res||!res.ok){tbody.innerHTML=`<tr><td colspan="6" style="color:#dc2626">加载失败</td></tr>`;return;}
+    const data=await res.json();
+    const users=data.users||[];
+    if(!users.length){tbody.innerHTML='<tr><td colspan="6">暂无用户</td></tr>';return;}
+    tbody.innerHTML=users.map(u=>{
+      const isMe=currentUser&&u.username===currentUser.username;
+      const roleLabel=u.role==='admin'?'<span style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:999px;padding:2px 8px;font-size:11px">管理员</span>':'<span style="background:#f1f5f9;color:#475467;border:1px solid #e2e8f0;border-radius:999px;padding:2px 8px;font-size:11px">普通用户</span>';
+      const statusLabel=u.is_active?'<span style="color:#16a34a">● 启用</span>':'<span style="color:#dc2626">● 禁用</span>';
+      const login=u.last_login_at?new Date(u.last_login_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+      const meTag=isMe?' <span style="color:#0e7490;font-weight:600">(我)</span>':'';
+      const delDisabled=isMe?'disabled style="opacity:.4;cursor:not-allowed"':'';
+      return `<tr>
+        <td><strong>${escapeHtml(u.username)}</strong>${meTag}</td>
+        <td>${escapeHtml(u.display_name||'—')}</td>
+        <td>${roleLabel}</td>
+        <td>${statusLabel}</td>
+        <td style="font-size:12px;color:#667085">${login}</td>
+        <td style="white-space:nowrap">
+          <button class="ghost-btn user-edit" data-u="${escapeHtml(u.username)}" style="font-size:12px">编辑</button>
+          <button class="ghost-btn user-reset" data-u="${escapeHtml(u.username)}" style="font-size:12px">重置密码</button>
+          <button class="ghost-btn user-delete" data-u="${escapeHtml(u.username)}" ${delDisabled} style="font-size:12px;color:#dc2626">删除</button>
+        </td>
+      </tr>`;
+    }).join('');
+    tbody.querySelectorAll('.user-edit').forEach(b=>b.addEventListener('click',()=>showEditUserModal(b.dataset.u)));
+    tbody.querySelectorAll('.user-reset').forEach(b=>b.addEventListener('click',()=>showResetPwdModal(b.dataset.u)));
+    tbody.querySelectorAll('.user-delete').forEach(b=>b.addEventListener('click',()=>confirmDeleteUser(b.dataset.u)));
+  }catch(e){tbody.innerHTML='<tr><td colspan="6" style="color:#dc2626">加载失败</td></tr>';}
+}
+
+function _userModal(html){
+  let m=document.getElementById('_userModal');
+  if(!m){m=document.createElement('div');m.id='_userModal';m.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)';document.body.appendChild(m);}
+  m.innerHTML=`<div style="background:#fff;border-radius:16px;padding:28px 30px;width:400px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.18)">${html}</div>`;
+  m.style.display='flex';
+  return m;
+}
+
+function showCreateUserModal(){
+  const m=_userModal(`
+    <div style="font-size:17px;font-weight:700;margin-bottom:20px">创建新用户</div>
+    <div style="display:grid;gap:12px">
+      <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">用户名 *</label><input id="_cuUsername" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box" /></div>
+      <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">密码 *</label><input id="_cuPassword" type="password" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box" /></div>
+      <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">显示名</label><input id="_cuDisplayName" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box" /></div>
+      <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">角色</label><select id="_cuRole" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box"><option value="user">普通用户</option><option value="admin">管理员</option></select></div>
+    </div>
+    <div id="_cuMsg" style="font-size:13px;min-height:18px;margin-top:12px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+      <button class="ghost-btn" id="_cuCancel">取消</button>
+      <button class="primary-btn" id="_cuSubmit">创建</button>
+    </div>`);
+  m.addEventListener('click',e=>{if(e.target===m)m.style.display='none';});
+  document.getElementById('_cuCancel').onclick=()=>{m.style.display='none';};
+  document.getElementById('_cuSubmit').onclick=async()=>{
+    const username=document.getElementById('_cuUsername').value.trim();
+    const password=document.getElementById('_cuPassword').value;
+    const display_name=document.getElementById('_cuDisplayName').value.trim();
+    const role=document.getElementById('_cuRole').value;
+    const msg=document.getElementById('_cuMsg');
+    msg.style.color='#dc2626';msg.textContent='';
+    if(!username||!password){msg.textContent='用户名和密码不能为空';return;}
+    if(password.length<6){msg.textContent='密码不能少于6位';return;}
+    const btn=document.getElementById('_cuSubmit');btn.disabled=true;btn.textContent='创建中…';
+    try{
+      const res=await apiFetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,display_name:display_name||undefined,role})});
+      if(!res){return;}
+      if(res.ok){m.style.display='none';loadUsers();}
+      else{const d=await res.json().catch(()=>({}));msg.textContent=d.detail||'创建失败';}
+    }catch(e){msg.textContent='网络错误';}
+    btn.disabled=false;btn.textContent='创建';
+  };
+  document.getElementById('_cuUsername').focus();
+}
+
+function showEditUserModal(username){
+  apiFetch('/api/users').then(r=>r.ok?r.json():null).then(data=>{
+    if(!data)return;
+    const u=data.users.find(x=>x.username===username);
+    if(!u)return;
+    const m=_userModal(`
+      <div style="font-size:17px;font-weight:700;margin-bottom:20px">编辑用户：${escapeHtml(username)}</div>
+      <div style="display:grid;gap:12px">
+        <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">显示名</label><input id="_euDisplayName" value="${escapeHtml(u.display_name||'')}" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box" /></div>
+        <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">角色</label><select id="_euRole" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box"><option value="user" ${u.role==='user'?'selected':''}>普通用户</option><option value="admin" ${u.role==='admin'?'selected':''}>管理员</option></select></div>
+        <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">账号状态</label><select id="_euActive" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box"><option value="true" ${u.is_active?'selected':''}>启用</option><option value="false" ${!u.is_active?'selected':''}>禁用</option></select></div>
+      </div>
+      <div id="_euMsg" style="font-size:13px;min-height:18px;margin-top:12px"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button class="ghost-btn" id="_euCancel">取消</button>
+        <button class="primary-btn" id="_euSubmit">保存</button>
+      </div>`);
+    m.addEventListener('click',e=>{if(e.target===m)m.style.display='none';});
+    document.getElementById('_euCancel').onclick=()=>{m.style.display='none';};
+    document.getElementById('_euSubmit').onclick=async()=>{
+      const body={
+        display_name:document.getElementById('_euDisplayName').value.trim()||null,
+        role:document.getElementById('_euRole').value,
+        is_active:document.getElementById('_euActive').value==='true',
+      };
+      const msg=document.getElementById('_euMsg');msg.style.color='#dc2626';msg.textContent='';
+      const btn=document.getElementById('_euSubmit');btn.disabled=true;btn.textContent='保存中…';
+      try{
+        const res=await apiFetch(`/api/users/${encodeURIComponent(username)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        if(!res)return;
+        if(res.ok){m.style.display='none';loadUsers();}
+        else{const d=await res.json().catch(()=>({}));msg.textContent=d.detail||'保存失败';}
+      }catch(e){msg.textContent='网络错误';}
+      btn.disabled=false;btn.textContent='保存';
+    };
+  });
+}
+
+function showResetPwdModal(username){
+  const m=_userModal(`
+    <div style="font-size:17px;font-weight:700;margin-bottom:20px">重置密码：${escapeHtml(username)}</div>
+    <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">新密码 *</label><input id="_rpPassword" type="password" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box" /></div>
+    <p style="font-size:12px;color:#667085;margin:8px 0 0">重置后该用户的所有已登录会话将失效，需要用新密码重新登录。</p>
+    <div id="_rpMsg" style="font-size:13px;min-height:18px;margin-top:12px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+      <button class="ghost-btn" id="_rpCancel">取消</button>
+      <button class="primary-btn" id="_rpSubmit">重置</button>
+    </div>`);
+  m.addEventListener('click',e=>{if(e.target===m)m.style.display='none';});
+  document.getElementById('_rpCancel').onclick=()=>{m.style.display='none';};
+  document.getElementById('_rpSubmit').onclick=async()=>{
+    const password=document.getElementById('_rpPassword').value;
+    const msg=document.getElementById('_rpMsg');msg.style.color='#dc2626';msg.textContent='';
+    if(password.length<6){msg.textContent='密码不能少于6位';return;}
+    const btn=document.getElementById('_rpSubmit');btn.disabled=true;btn.textContent='重置中…';
+    try{
+      const res=await apiFetch(`/api/users/${encodeURIComponent(username)}/reset-password`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_password:password})});
+      if(!res)return;
+      if(res.ok){m.style.display='none';loadUsers();}
+      else{const d=await res.json().catch(()=>({}));msg.textContent=d.detail||'重置失败';}
+    }catch(e){msg.textContent='网络错误';}
+    btn.disabled=false;btn.textContent='重置';
+  };
+  document.getElementById('_rpPassword').focus();
+}
+
+function confirmDeleteUser(username){
+  const m=_userModal(`
+    <div style="font-size:17px;font-weight:700;margin-bottom:12px;color:#dc2626">确认删除</div>
+    <p style="font-size:14px;color:#475467;line-height:1.6">确定要删除用户 <strong>${escapeHtml(username)}</strong> 吗？此操作不可撤销，该用户的所有数据将被永久移除。</p>
+    <div id="_dlMsg" style="font-size:13px;min-height:18px;margin-top:12px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="ghost-btn" id="_dlCancel">取消</button>
+      <button id="_dlConfirm" style="border:0;border-radius:11px;cursor:pointer;font-weight:650;background:#dc2626;color:#fff;padding:0 18px;height:38px">删除</button>
+    </div>`);
+  m.addEventListener('click',e=>{if(e.target===m)m.style.display='none';});
+  document.getElementById('_dlCancel').onclick=()=>{m.style.display='none';};
+  document.getElementById('_dlConfirm').onclick=async()=>{
+    const btn=document.getElementById('_dlConfirm');btn.disabled=true;btn.textContent='删除中…';
+    try{
+      const res=await apiFetch(`/api/users/${encodeURIComponent(username)}`,{method:'DELETE'});
+      if(!res)return;
+      if(res.status===204){m.style.display='none';loadUsers();}
+      else{const d=await res.json().catch(()=>({}));document.getElementById('_dlMsg').textContent=d.detail||'删除失败';}
+    }catch(e){document.getElementById('_dlMsg').textContent='网络错误';}
+    btn.disabled=false;btn.textContent='删除';
+  };
+}
 async function showIntelDetail(id){
   if(!id)return;
   // Inject modal overlay if not present
@@ -514,4 +711,5 @@ ${d.semantic_evidence?`
   }catch(e){body.innerHTML='<div style="color:#dc2626">加载失败，请稍后重试</div>';}
 }
 function closeIntelDetail(){const m=document.getElementById('intelModal');if(m)m.style.display='none';document.body.style.overflow='';}
-window.addEventListener("hashchange",render);window.addEventListener("DOMContentLoaded",render);
+window.addEventListener("hashchange",render);
+window.addEventListener("DOMContentLoaded",async()=>{await loadCurrentUser();render();});

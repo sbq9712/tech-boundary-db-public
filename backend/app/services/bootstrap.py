@@ -46,7 +46,14 @@ def seed_users_if_empty(db: Session) -> None:
     added = False
     for username, password in _INITIAL_USERS.items():
         if username not in existing_usernames:
-            db.add(User(username=username, password_hash=hash_password(password)))
+            db.add(
+                User(
+                    username=username,
+                    password_hash=hash_password(password),
+                    role="admin" if username == "admin1" else "user",
+                    is_active=True,
+                )
+            )
             added = True
     if added:
         db.commit()

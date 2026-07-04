@@ -68,6 +68,8 @@ class TokenOut(BaseModel):
 
 class MeOut(BaseModel):
     username: str
+    display_name: str | None = None
+    role: str = "user"
 
 
 class ChangePasswordIn(BaseModel):
@@ -87,12 +89,24 @@ def login(payload: LoginIn, request: Request, db: Session = Depends(get_db)) -> 
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
         )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账号已禁用",
+        )
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
     return TokenOut(access_token=create_token(payload.username))
 
 
 @router.get("/auth/me", response_model=MeOut)
-def me(current_user: str = Depends(get_current_user)) -> MeOut:
-    return MeOut(username=current_user)
+def me(current_user: str = Depends(get_current_user), db: Session = Depends(get_db)) -> MeOut:
+    user = db.get(User, current_user)
+    return MeOut(
+        username=current_user,
+        display_name=user.display_name if user else None,
+        role=user.role if user else "user",
+    )
 
 
 @router.patch("/auth/password")
