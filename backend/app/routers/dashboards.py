@@ -84,6 +84,22 @@ def _build_kb_dashboards(db: Session) -> list[dict]:
         # Derive dashboard id from stable_id
         dash_id = art.stable_id.replace("ART-20260709-", "").lower() if art.stable_id else str(art.id)[:8]
 
+        # Extract taxonomy_leaf from the KB document frontmatter
+        taxonomy_leaf = ""
+        try:
+            import re as _re
+            from pathlib import Path as _Path
+            kb_base = os.getenv("TECHDB_KB_PATH", "/knowledge-base")
+            for vp in [_Path(kb_base) / (art.vault_path or ""), _Path("/knowledge-base") / (art.vault_path or "")]:
+                if vp.exists():
+                    raw = vp.read_text(encoding="utf-8", errors="ignore")[:2000]
+                    m = _re.search(r'taxonomy_leaf:\s*(.+)', raw)
+                    if m:
+                        taxonomy_leaf = m.group(1).strip()
+                    break
+        except Exception:
+            pass
+
         dashboards.append({
             "id": dash_id,
             "name": art.title.replace("_技术边界", "").replace("_", " "),
@@ -100,6 +116,7 @@ def _build_kb_dashboards(db: Session) -> list[dict]:
             "version": art.version,
             "updated_at": art.updated_at.isoformat() if art.updated_at else None,
             "tech_node_ids": tech_node_ids,
+            "taxonomy_leaf": taxonomy_leaf,
         })
 
     return dashboards

@@ -347,10 +347,41 @@ async function loadDashboards(){const root=document.getElementById('dashboardRow
 function mapAssetText(value){return String(value||'').toLowerCase().replace(/\s+/g,'');}
 function mapNodeTerms(node){const roots=new Set(['零碳产业','AI与智能科技','通用技术']);return Array.from(new Set([node.title,...(node.path||[])].map(v=>String(v||'').trim()).filter(v=>v.length>=2&&!roots.has(v))));}
 function infoMapText(item){return mapAssetText([item.title,item.leaf_title,item.taxonomy_path,item.source_name,item.key_metric].join(' '));}
-function dashboardMapText(item){return mapAssetText([item.id,item.name,item.scope,item.query,item.domain,(item.metrics||[]).join(' ')].join(' '));}
-function mapMatchesNode(node, rows, textGetter){const terms=mapNodeTerms(node).map(mapAssetText).filter(Boolean);return rows.filter(row=>{const text=textGetter(row);return terms.some(term=>text.includes(term));});}
+function dashboardMapText(item){
+  // Extract only the leaf-level segment from taxonomy_leaf for precise matching
+  const leaf=item.taxonomy_leaf||'';
+  // Last 1-2 segments of the leaf path are the specific terms
+  const segments=leaf.split('/').filter(s=>s.length>=2);
+  const leafEnd=segments.slice(-2).join('');
+  return mapAssetText([leafEnd,item.id,item.name,item.scope,item.query,item.domain,(item.metrics||[]).join(' ')].join(' '));
+}
+// Explicit mapping for dashboard → industry map leaf node(s) where the
+// KB doc taxonomy_leaf doesn't exactly match a leaf in the current tree.
+// Key = dashboard id, Value = array of leaf node titles to match.
+const DASHBOARD_LEAF_MAP={
+  'rebco':['其它先进材料','超导材料'],  // REBCO maps to 其它先进材料 (超导 is under advanced materials)
+  'nh3':['氢基能源','合成氨和绿氨'],    // Green ammonia maps to 氢基能源 leaf
+};
+function mapMatchesNode(node, rows, textGetter){
+  const ownTerm=mapAssetText(node.title);
+  if(!ownTerm||ownTerm.length<2)return [];
+  return rows.filter(row=>{
+    const text=textGetter(row);
+    // Direct match: node title in dashboard text
+    if(text.includes(ownTerm))return true;
+    // Explicit leaf map override
+    const leafMap=DASHBOARD_LEAF_MAP[row.id];
+    if(leafMap&&leafMap.some(l=>ownTerm.includes(mapAssetText(l))||mapAssetText(l).includes(ownTerm)))return true;
+    return false;
+  });
+}
+function mapMatchesNodeFull(node, rows, textGetter){
+  // Use full path terms for intel/info matching (broader is ok for search)
+  const terms=mapNodeTerms(node).map(mapAssetText).filter(Boolean);
+  return rows.filter(row=>{const text=textGetter(row);return terms.some(term=>text.includes(term));});
+}
 async function loadMapAssets(){const [intelRes,dashboards]=await Promise.allSettled([apiFetch('/api/delivery-intel?limit=5000').then(r=>r.ok?r.json():{items:[]}),apiFetch('/api/dashboards').then(r=>r.ok?r.json():{items:[]})]);const intelItems=intelRes.status==='fulfilled'?(intelRes.value.items||[]):[]; return {infos:intelItems,dashboards:dashboards.status==='fulfilled'&&Array.isArray(dashboards.value.items)?dashboards.value.items:[]};}
-function decorateIndustryAssets(node,assets){const children=node.children||[];if(!children.length){const intel=mapMatchesNode(node,assets.infos,infoMapText);const dashboards=mapMatchesNode(node,assets.dashboards,dashboardMapText);const matchedDash=dashboards[0];const dashId=matchedDash?.id;node.assets={intel:{active:intel.length>0,count:intel.length,href:`#intel?leaf=${encodeURIComponent(node.title)}&from_map=1`},special_issue:{active:false,count:0,href:''},dashboard:{active:!!dashId,count:dashboards.length,dashId:dashId||null}};}children.forEach(child=>decorateIndustryAssets(child,assets));return node;}
+function decorateIndustryAssets(node,assets){const children=node.children||[];if(!children.length){const intel=mapMatchesNodeFull(node,assets.infos,infoMapText);const dashboards=mapMatchesNode(node,assets.dashboards,dashboardMapText);const matchedDash=dashboards[0];const dashId=matchedDash?.id;node.assets={intel:{active:intel.length>0,count:intel.length,href:`#intel?leaf=${encodeURIComponent(node.title)}&from_map=1`},special_issue:{active:false,count:0,href:''},dashboard:{active:!!dashId,count:dashboards.length,dashId:dashId||null}};}children.forEach(child=>decorateIndustryAssets(child,assets));return node;}
 function countLeaves(node){const children=node.children||[];return children.length?children.reduce((sum,child)=>sum+countLeaves(child),0):1;}
 function leafDots(node){const assets=node.assets||{};const fallbackCoverage=node.coverage||{};const fallbackLinks=node.links||{};const items=[['intel','情','相关情报'],['special_issue','刊','相关专刊'],['dashboard','盘','相关行业仪表盘']];return `<div class="leaf-tags">${items.map(([key,label,title])=>{const asset=assets[key]||{active:!!fallbackCoverage[key],href:fallbackLinks[key]||'#',count:0};const active=!!asset.active;const status=active?`${title}：${asset.count||1}项`:`${title}：暂无`;
   // Dashboard tag: open full-screen detail directly instead of navigating
