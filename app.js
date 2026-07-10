@@ -194,7 +194,7 @@ function homeView(){
 </div>`;
 }
 function renderInsightPanels(){return '';}
-function breadthView(){return `<section style="padding:0;overflow:hidden;height:100%;display:flex;flex-direction:column"><iframe src="https://sbq9712.github.io/tech-db/" style="width:100%;flex:1;border:none;display:block" title="广度追踪" allowfullscreen></iframe></section>`;}
+function breadthView(){return `<section style="padding:0;overflow:hidden;height:100%;display:flex;flex-direction:column"><div style="flex:1;overflow:hidden;margin-top:-62px;height:calc(100% + 62px)"><iframe src="https://sbq9712.github.io/tech-db/" style="width:100%;height:100%;border:none;display:block" title="广度追踪" allowfullscreen></iframe></div></section>`;}
 function dashboardView(){return `<section class="flat-content"><div class="eyebrow">深度调研</div><h1 class="section-title">基于知识库文档凝聚的技术边界判断，含核心指标、卡点分析和突破预警。</h1><form class="dashboard-search" id="dashboardFilter"><input id="dashboardQ" placeholder="搜索技术、行业或指标，例如 压缩空气、超导、钠电池"/><button class="secondary-btn" type="submit">检索</button></form><div class="dashboard-grid" id="dashboardRows"><div class="status-note">正在加载仪表盘…</div></div></section>`;}
 function sourcesView(){
   const state=parseHash();
@@ -378,27 +378,61 @@ function countNodes(node){return 1+((node.children||[]).reduce((sum,child)=>sum+
 function maxDepth(node){const children=node.children||[];return children.length?Math.max(...children.map(maxDepth)):Number(node.depth||0);}
 async function showDashboardDetail(dashId){
   if(!dashId)return;
-  let m=document.getElementById('dashDetailModal');
-  if(!m){m=document.createElement('div');m.id='dashDetailModal';m.className='modal-overlay';document.body.appendChild(m);}
-  m.innerHTML=`<div class="modal-box dash-detail"><div class="modal-loading">正在加载详细指标…</div></div>`;
-  m.style.display='flex';
-  m.onclick=(e)=>{if(e.target===m)m.style.display='none';};
+  const main=document.getElementById('main');
+  if(!main)return;
+
+  // Render full-screen dashboard view into main
+  main.innerHTML=`<div class="dash-fullview">
+    <div class="dash-fv-header">
+      <button class="ghost-btn" onclick="setRoute('dashboard')">← 返回仪表盘列表</button>
+      <span class="dash-fv-title" id="dashFvTitle">正在加载…</span>
+    </div>
+    <div class="dash-fv-loading" id="dashFvBody">正在加载行业仪表盘…</div>
+  </div>`;
+
   try{
-    const res=await apiFetch(`/api/dashboards/${encodeURIComponent(dashId)}`);
-    if(!res||!res.ok){m.querySelector('.modal-box').innerHTML='<div class="modal-error">加载失败</div>';return;}
-    const d=await res.json();
-    const indicators=d.detailed_indicators||[];
+    // Fetch both structured indicators and document content
+    const [detailRes, contentRes] = await Promise.all([
+      apiFetch(`/api/dashboards/${encodeURIComponent(dashId)}`),
+      apiFetch(`/api/dashboards/${encodeURIComponent(dashId)}/content`),
+    ]);
+    if(!detailRes||!detailRes.ok){document.getElementById('dashFvBody').innerHTML='<div class="status-note">加载失败</div>';return;}
+    const detail=await detailRes.json();
+    const content=contentRes&&contentRes.ok?await contentRes.json():{sections:[]};
+
+    document.getElementById('dashFvTitle').textContent=detail.name||dashId;
+
+    const indicators=detail.detailed_indicators||[];
     const techIndicators=indicators.filter(i=>i.type==='technical');
     const econIndicators=indicators.filter(i=>i.type==='economic');
-    const renderGroup=(title,list)=>list.length?`<div class="detail-group"><h4>${title}</h4><table class="detail-table"><tbody>${list.map(i=>{
+    const sections=content.sections||[];
+
+    // Build indicator summary cards
+    const indicatorCard=(title,list)=>list.length?`<div class="dash-fv-card"><h4>${title}</h4><div class="ind-grid">${list.map(i=>{
       const val=i.value_text||((i.value_min!==null&&i.value_max!==null)?(i.value_min===i.value_max?i.value_min:`${i.value_min}–${i.value_max}`):(i.value_min!==null?i.value_min:'—'));
       const unit=i.unit&&i.unit!=='—'?` ${escapeHtml(i.unit)}`:'';
-      const cond=i.condition?`<div class="detail-cond">${escapeHtml(i.condition)}</div>`:'';
-      const notes=i.notes?`<div class="detail-notes">${escapeHtml(i.notes)}</div>`:'';
-      return `<tr><td class="detail-name">${escapeHtml(i.name)}</td><td class="detail-val">${escapeHtml(String(val))}${unit} ${verificationBadge(i.verification)}</td><td class="detail-extra">${cond}${notes}</td></tr>`;
-    }).join('')}</tbody></table></div>`:'';
-    m.querySelector('.modal-box').innerHTML=`<div class="modal-header"><h3>${escapeHtml(d.name)}</h3><button class="modal-close" onclick="document.getElementById('dashDetailModal').style.display='none'">✕</button></div><div class="modal-body"><p class="modal-scope">${escapeHtml(d.scope||'')}</p>${renderGroup('技术指标',techIndicators)}${renderGroup('经济指标',econIndicators)}</div>${d.vault_path?`<div class="modal-footer"><span class="vault-path">📄 ${escapeHtml(d.vault_path)}</span></div>`:''}`;
-  }catch(err){m.querySelector('.modal-box').innerHTML='<div class="modal-error">加载失败，请稍后重试</div>';}
+      return `<div class="ind-tile"><div class="ind-tile-name">${escapeHtml(i.name)}</div><div class="ind-tile-val">${escapeHtml(String(val))}<span class="ind-tile-unit">${escapeHtml(unit)}</span></div>${i.notes?`<div class="ind-tile-note">${escapeHtml(i.notes)}</div>`:''}<div class="ind-tile-badge">${verificationBadge(i.verification)}</div></div>`;
+    }).join('')}</div></div>`:'';
+
+    // Build document sections
+    const sectionHtml=sections.map(s=>{
+      const sectionIcon={'§0 定位摘要':'📋','§0.5 应用场景与核心逻辑推理':'🎯','§1 技术路线图':'🗺️','§2 关键指标清单与边界':'📊','§3 卡脖子技术分析':'🔗','§4 共性技术分析':'🔄','§5 信息源与文献追踪':'📚','§6 待核实清单':'❓','§7 突破预警指标':'🚨'}[s.title]||'📄';
+      return `<div class="dash-fv-card"><h4>${sectionIcon} ${escapeHtml(s.title)}</h4><div class="dash-fv-md">${renderMarkdown(s.content)}</div></div>`;
+    }).join('');
+
+    // Alert indicators (§7) highlighting
+    const alertSection=sections.find(s=>s.title.includes('预警')||s.title.includes('§7'));
+
+    document.getElementById('dashFvBody').innerHTML=`
+      <div class="dash-fv-scope">${escapeHtml(detail.scope||'')}</div>
+      ${detail.vault_path?`<div class="dash-fv-vault">📄 ${escapeHtml(detail.vault_path)}</div>`:''}
+      ${indicatorCard('关键指标（技术）',techIndicators)}
+      ${indicatorCard('关键指标（经济）',econIndicators)}
+      ${sectionHtml}
+    `;
+  }catch(err){
+    document.getElementById('dashFvBody').innerHTML='<div class="status-note">加载失败，请稍后重试</div>';
+  }
 }
 function indicatorText(item){const indicators=item.draft_data&&Array.isArray(item.draft_data.indicators)?item.draft_data.indicators:[];return indicators.length?escapeHtml(indicators.slice(0,3).map(x=>`${x.name||'指标'} ${x.value||''}${x.unit||''}`).join('；')):'—';}
 function updatePanels(extra){assistantPanels=(extra&&extra.panel_recommendations)||emptyPanels();}

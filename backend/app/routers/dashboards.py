@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -196,3 +197,75 @@ def get_dashboard_detail(
     result = dict(dashboard)
     result["detailed_indicators"] = detailed_indicators
     return result
+
+
+@router.get("/dashboards/{dashboard_id}/content")
+def get_dashboard_content(
+    dashboard_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get the full parsed KB document content for a dashboard.
+
+    Parses the markdown into structured sections (§0-§7) for the frontend
+    to render as a complete industry dashboard view.
+    """
+    import re as _re
+    from pathlib import Path as _Path
+
+    all_dashboards = _build_kb_dashboards(db)
+    dashboard = next((d for d in all_dashboards if d["id"] == dashboard_id), None)
+    if not dashboard:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="dashboard_not_found")
+
+    vault_path = dashboard.get("vault_path")
+    if not vault_path:
+        return {"sections": [], "raw": ""}
+
+    # Try multiple path resolutions
+    kb_base_env = os.getenv("TECHDB_KB_PATH", "/knowledge-base")
+    candidates = [
+        _Path(kb_base_env) / vault_path,
+        _Path("/knowledge-base") / vault_path,
+        _Path(__file__).resolve().parents[3] / "external-data" / "knowledge-base" / vault_path,
+    ]
+    md_path = next((p for p in candidates if p.exists()), None)
+    if not md_path:
+        return {"sections": [], "raw": "", "error": "document_not_found"}
+
+    raw = md_path.read_text(encoding="utf-8", errors="ignore")
+
+    # Parse into sections by ## headers
+    sections: list[dict] = []
+    current_title = ""
+    current_lines: list[str] = []
+
+    for line in raw.split("\n"):
+        # Skip frontmatter
+        if line.strip() == "---" and not sections and not current_title:
+            continue
+
+        sec_match = _re.match(r"^##\s+(.+)$", line)
+        if sec_match:
+            if current_title:
+                sections.append({
+                    "title": current_title,
+                    "content": "\n".join(current_lines).strip(),
+                })
+            current_title = sec_match.group(1).strip()
+            current_lines = []
+        elif current_title:
+            current_lines.append(line)
+
+    if current_title:
+        sections.append({
+            "title": current_title,
+            "content": "\n".join(current_lines).strip(),
+        })
+
+    return {
+        "dashboard_id": dashboard_id,
+        "name": dashboard.get("name", ""),
+        "sections": sections,
+        "section_count": len(sections),
+    }
