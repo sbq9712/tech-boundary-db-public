@@ -464,6 +464,31 @@ async function showDashboardDetail(dashId){
       return `<div class="roadmap-item"><div class="roadmap-badge">${String.fromCharCode(65+i)}</div><div class="roadmap-content"><div class="roadmap-name">${escapeHtml(routeName)}</div><div class="roadmap-desc">${escapeHtml(principle)}</div><div class="roadmap-tags"><span class="tag-maturity">${escapeHtml(maturity)}</span>${rep?`<span class="tag-rep">${escapeHtml(rep)}</span>`:''}</div></div></div>`;
     }).join('')}</div></div></div>`:'';
 
+    // ─── Feasibility verification card (§2.5) ───
+    const feas=content.feasibility||[];
+    const feasibilityHtml=feas.length?`<div class="dash-card feas-card"><div class="dash-card-head"><h4>指标物理可达性验证</h4><span class="dash-card-sub">场景需求 vs 物理极限</span></div><div class="dash-card-body"><div class="feas-list">${feas.map(f=>{
+      const metric=f['关键指标']||'';
+      const demand=f['场景需求（倒推）']||'';
+      const actual=f['当前实测']||'';
+      const limit=f['物理理论极限']||'';
+      const gap=f['差距性质']||'';
+      const verdict=f['结论']||'';
+      // Color by verdict
+      let vColor='var(--text-tertiary)',vBg='var(--bg-surface)';
+      if(verdict.includes('✅')){vColor='var(--green)';vBg='var(--green-bg)';}
+      else if(verdict.includes('❌')){vColor='var(--red)';vBg='var(--red-bg)';}
+      else if(verdict.includes('⚠')){vColor='var(--amber)';vBg='var(--amber-bg)';}
+      else if(verdict.includes('❓')){vColor='var(--text-secondary)';vBg='var(--bg-surface)';}
+      // Detect physical limit in gap
+      let gapIcon='🔧';
+      if(gap.includes('物理'))gapIcon='⛔';
+      else if(gap.includes('经济'))gapIcon='💰';
+      else if(gap.includes('工程'))gapIcon='⚙️';
+      else if(gap.includes('AI'))gapIcon='🧠';
+      else if(gap.includes('已达标')||gap.includes('无差距'))gapIcon='✓';
+      return `<div class="feas-item"><div class="feas-head"><span class="feas-metric">${escapeHtml(metric)}</span><span class="feas-verdict" style="color:${vColor};background:${vBg}">${escapeHtml(verdict)}</span></div><div class="feas-grid"><div class="feas-cell"><span class="feas-label">场景需求</span><span class="feas-val">${escapeHtml(demand)}</span></div><div class="feas-cell"><span class="feas-label">当前实测</span><span class="feas-val">${escapeHtml(actual)}</span></div><div class="feas-cell"><span class="feas-label">物理极限</span><span class="feas-val feas-limit">${escapeHtml(limit)}</span></div><div class="feas-cell"><span class="feas-label">${gapIcon} 差距</span><span class="feas-val">${escapeHtml(gap)}</span></div></div></div>`;
+    }).join('')}</div></div></div>`:'';
+
     // ─── Bottlenecks card ───
     const bns=content.bottlenecks||[];
     const bottleneckHtml=bns.length?`<div class="dash-card"><div class="dash-card-head"><h4>卡脖子分析</h4><span class="dash-card-sub">${bns.length} 个卡点</span></div><div class="dash-card-body"><div class="bn-list">${bns.map(b=>{
@@ -488,6 +513,7 @@ async function showDashboardDetail(dashId){
       ${summaryHtml}
       ${indicatorGrid('关键指标（技术）',techInds)}
       ${indicatorGrid('关键指标（经济）',econInds)}
+      ${feasibilityHtml}
       ${roadmapHtml}
       ${anchorHtml}
       ${bottleneckHtml}

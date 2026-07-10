@@ -819,6 +819,22 @@ a:hover{color:var(--brand-lighter)}
 .alert-yellow td{color:var(--amber);font-weight:500}
 .alert-green td{color:var(--green)}
 
+/* Feasibility verification */
+.feas-card{border-color:var(--brand-border)}
+.feas-list{display:grid;gap:14px}
+.feas-item{
+  padding:14px 16px;background:var(--bg-panel);
+  border:1px solid var(--border-subtle);border-radius:var(--radius-md);
+}
+.feas-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.feas-metric{font-size:14px;font-weight:600;color:var(--text-primary)}
+.feas-verdict{font-size:11px;padding:3px 8px;border-radius:var(--radius-xs);font-weight:600;max-width:55%;text-align:right}
+.feas-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
+.feas-cell{display:flex;flex-direction:column;gap:2px}
+.feas-label{font-size:10px;color:var(--text-quaternary);font-weight:600;text-transform:uppercase;letter-spacing:.02em}
+.feas-val{font-size:12px;color:var(--text-secondary);line-height:1.5}
+.feas-limit{color:var(--brand);font-weight:500}
+
 /* ════════════════════════════════════════════
    Streaming Agent
    ════════════════════════════════════════════ */

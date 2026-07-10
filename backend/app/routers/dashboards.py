@@ -345,6 +345,11 @@ def get_dashboard_content(
 
     # Bottlenecks (§3): parse ### subsections
     bottlenecks_raw = find_section("§3")
+
+    # §2.5 feasibility verification table
+    feasibility_raw = find_section("§2.5") or find_section("指标物理可达性验证")
+    feasibility_rows = parse_table(feasibility_raw) if feasibility_raw else []
+
     bottlenecks = []
     if bottlenecks_raw:
         # Split by ### headers
@@ -395,6 +400,7 @@ def get_dashboard_content(
         "value_anchor": anchor_rows,
         "roadmap": roadmap_rows,
         "indicators": indicator_rows,
+        "feasibility": feasibility_rows,
         "bottlenecks": bottlenecks,
         "alerts": alert_rows,
     }
@@ -406,6 +412,7 @@ def _empty_dashboard() -> dict:
         "value_anchor": [],
         "roadmap": [],
         "indicators": [],
+        "feasibility": [],
         "bottlenecks": [],
         "alerts": [],
     }
