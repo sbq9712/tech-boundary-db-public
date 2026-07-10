@@ -418,54 +418,81 @@ async function showDashboardDetail(dashId){
   const main=document.getElementById('main');
   if(!main)return;
 
-  // Render full-screen dashboard view into main
   main.innerHTML=`<div class="dash-fullview">
     <div class="dash-fv-header">
-      <button class="ghost-btn" onclick="setRoute('dashboard')">← 返回仪表盘列表</button>
+      <button class="ghost-btn" onclick="setRoute('dashboard')">← 返回列表</button>
       <span class="dash-fv-title" id="dashFvTitle">正在加载…</span>
     </div>
     <div class="dash-fv-loading" id="dashFvBody">正在加载行业仪表盘…</div>
   </div>`;
 
   try{
-    // Fetch both structured indicators and document content
     const [detailRes, contentRes] = await Promise.all([
       apiFetch(`/api/dashboards/${encodeURIComponent(dashId)}`),
       apiFetch(`/api/dashboards/${encodeURIComponent(dashId)}/content`),
     ]);
     if(!detailRes||!detailRes.ok){document.getElementById('dashFvBody').innerHTML='<div class="status-note">加载失败</div>';return;}
     const detail=await detailRes.json();
-    const content=contentRes&&contentRes.ok?await contentRes.json():{sections:[]};
+    const content=contentRes&&contentRes.ok?await contentRes.json():{};
 
     document.getElementById('dashFvTitle').textContent=detail.name||dashId;
 
-    const indicators=detail.detailed_indicators||[];
-    const techIndicators=indicators.filter(i=>i.type==='technical');
-    const econIndicators=indicators.filter(i=>i.type==='economic');
-    const sections=content.sections||[];
+    // ─── Summary card ───
+    const summaryHtml=content.summary?`<div class="dash-card summary-card"><div class="dash-card-body"><p>${escapeHtml(content.summary)}</p></div></div>`:'';
 
-    // Build indicator summary cards
-    const indicatorCard=(title,list)=>list.length?`<div class="dash-fv-card"><h4>${title}</h4><div class="ind-grid">${list.map(i=>{
+    // ─── Value anchor card ───
+    const anchors=content.value_anchor||[];
+    const anchorHtml=anchors.length?`<div class="dash-card"><div class="dash-card-head"><h4>价值锚点收敛</h4></div><div class="dash-card-body"><table class="dash-table">${Object.keys(anchors[0]).map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</thead><tbody>${anchors.map(r=>`<tr>${Object.values(r).map(v=>`<td>${escapeHtml(String(v))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
+
+    // ─── Key indicators (from structured DB data) ───
+    const indicators=detail.detailed_indicators||[];
+    const techInds=indicators.filter(i=>i.type==='technical');
+    const econInds=indicators.filter(i=>i.type==='economic');
+    const indicatorGrid=(title,list)=>list.length?`<div class="dash-card"><div class="dash-card-head"><h4>${title}</h4><span class="dash-card-sub">${list.length} 项</span></div><div class="dash-card-body"><div class="ind-grid">${list.map(i=>{
       const val=i.value_text||((i.value_min!==null&&i.value_max!==null)?(i.value_min===i.value_max?i.value_min:`${i.value_min}–${i.value_max}`):(i.value_min!==null?i.value_min:'—'));
       const unit=i.unit&&i.unit!=='—'?` ${escapeHtml(i.unit)}`:'';
       return `<div class="ind-tile"><div class="ind-tile-name">${escapeHtml(i.name)}</div><div class="ind-tile-val">${escapeHtml(String(val))}<span class="ind-tile-unit">${escapeHtml(unit)}</span></div>${i.notes?`<div class="ind-tile-note">${escapeHtml(i.notes)}</div>`:''}<div class="ind-tile-badge">${verificationBadge(i.verification)}</div></div>`;
-    }).join('')}</div></div>`:'';
+    }).join('')}</div></div></div>`:'';
 
-    // Build document sections
-    const sectionHtml=sections.map(s=>{
-      const sectionIcon={'§0 定位摘要':'📋','§0.5 应用场景与核心逻辑推理':'🎯','§1 技术路线图':'🗺️','§2 关键指标清单与边界':'📊','§3 卡脖子技术分析':'🔗','§4 共性技术分析':'🔄','§5 信息源与文献追踪':'📚','§6 待核实清单':'❓','§7 突破预警指标':'🚨'}[s.title]||'📄';
-      return `<div class="dash-fv-card"><h4>${sectionIcon} ${escapeHtml(s.title)}</h4><div class="dash-fv-md">${renderMarkdown(s.content)}</div></div>`;
-    }).join('');
+    // ─── Roadmap card ───
+    const roads=content.roadmap||[];
+    const roadmapHtml=roads.length?`<div class="dash-card"><div class="dash-card-head"><h4>技术路线图</h4></div><div class="dash-card-body"><div class="roadmap-list">${roads.map((r,i)=>{
+      const routeName=r['路线']||r['Roadmap']||Object.values(r)[0]||'';
+      const principle=r['原理']||'';
+      const maturity=r['成熟度']||'';
+      const rep=r['代表项目']||r['代表团队/企业']||'';
+      return `<div class="roadmap-item"><div class="roadmap-badge">${String.fromCharCode(65+i)}</div><div class="roadmap-content"><div class="roadmap-name">${escapeHtml(routeName)}</div><div class="roadmap-desc">${escapeHtml(principle)}</div><div class="roadmap-tags"><span class="tag-maturity">${escapeHtml(maturity)}</span>${rep?`<span class="tag-rep">${escapeHtml(rep)}</span>`:''}</div></div></div>`;
+    }).join('')}</div></div></div>`:'';
 
-    // Alert indicators (§7) highlighting
-    const alertSection=sections.find(s=>s.title.includes('预警')||s.title.includes('§7'));
+    // ─── Bottlenecks card ───
+    const bns=content.bottlenecks||[];
+    const bottleneckHtml=bns.length?`<div class="dash-card"><div class="dash-card-head"><h4>卡脖子分析</h4><span class="dash-card-sub">${bns.length} 个卡点</span></div><div class="dash-card-body"><div class="bn-list">${bns.map(b=>{
+      // Determine nature color
+      let natureColor='var(--text-tertiary)';
+      let natureIcon='🔧';
+      if(b.nature.includes('物理')){natureColor='var(--red)';natureIcon='⛔';}
+      else if(b.nature.includes('经济')){natureColor='var(--amber)';natureIcon='💰';}
+      else if(b.nature.includes('工程')){natureColor='var(--brand)';natureIcon='⚙️';}
+      return `<div class="bn-item"><div class="bn-head"><span class="bn-icon">${natureIcon}</span><span class="bn-title">${escapeHtml(b.title)}</span></div>${b.blockage?`<div class="bn-row"><span class="bn-label">卡点</span><span class="bn-text">${escapeHtml(b.blockage)}</span></div>`:''}${b.nature?`<div class="bn-row"><span class="bn-label" style="color:${natureColor}">性质</span><span class="bn-text">${escapeHtml(b.nature)}</span></div>`:''}${b.signals?`<div class="bn-row"><span class="bn-label">突破信号</span><span class="bn-text bn-signal">${escapeHtml(b.signals)}</span></div>`:''}</div>`;
+    }).join('')}</div></div></div>`:'';
+
+    // ─── Alerts card ───
+    const alerts=content.alerts||[];
+    const alertHtml=alerts.length?`<div class="dash-card"><div class="dash-card-head"><h4>突破预警</h4></div><div class="dash-card-body"><table class="dash-table"><thead><tr>${Object.keys(alerts[0]).map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${alerts.map(r=>`<tr>${Object.values(r).map(v=>{const s=String(v);let cls='';if(s.includes('🔴'))cls='alert-red';else if(s.includes('🟡'))cls='alert-yellow';else if(s.includes('🟢'))cls='alert-green';return `<td class="${cls}">${escapeHtml(s)}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
+
+    // ─── Doc indicators from §2 table (if DB indicators are sparse) ───
+    const docIndicators=content.indicators||[];
+    const docIndHtml=docIndicators.length&&techInds.length<3?`<div class="dash-card"><div class="dash-card-head"><h4>关键指标清单</h4></div><div class="dash-card-body"><table class="dash-table"><thead><tr>${Object.keys(docIndicators[0]).map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${docIndicators.slice(0,8).map(r=>`<tr>${Object.values(r).map(v=>`<td>${escapeHtml(String(v))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`:'';
 
     document.getElementById('dashFvBody').innerHTML=`
-      <div class="dash-fv-scope">${escapeHtml(detail.scope||'')}</div>
-      ${detail.vault_path?`<div class="dash-fv-vault">📄 ${escapeHtml(detail.vault_path)}</div>`:''}
-      ${indicatorCard('关键指标（技术）',techIndicators)}
-      ${indicatorCard('关键指标（经济）',econIndicators)}
-      ${sectionHtml}
+      ${summaryHtml}
+      ${indicatorGrid('关键指标（技术）',techInds)}
+      ${indicatorGrid('关键指标（经济）',econInds)}
+      ${roadmapHtml}
+      ${anchorHtml}
+      ${bottleneckHtml}
+      ${docIndHtml}
+      ${alertHtml}
     `;
   }catch(err){
     document.getElementById('dashFvBody').innerHTML='<div class="status-note">加载失败，请稍后重试</div>';

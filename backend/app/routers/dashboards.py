@@ -221,10 +221,16 @@ def get_dashboard_content(
     dashboard_id: str,
     db: Session = Depends(get_db),
 ) -> dict:
-    """Get the full parsed KB document content for a dashboard.
+    """Get structured industry dashboard data parsed from the KB document.
 
-    Parses the markdown into structured sections (§0-§7) for the frontend
-    to render as a complete industry dashboard view.
+    Parses the markdown into structured JSON suitable for native frontend
+    rendering (not raw markdown):
+    - summary: §0 text
+    - value_anchor: §0.5 convergence table
+    - roadmap: §1 technology routes table
+    - indicators: §2 key metrics table
+    - bottlenecks: §3 bottleneck analysis
+    - alerts: §7 breakout watch
     """
     import re as _re
     from pathlib import Path as _Path
@@ -237,52 +243,169 @@ def get_dashboard_content(
 
     vault_path = dashboard.get("vault_path")
     if not vault_path:
-        return {"sections": [], "raw": ""}
+        return _empty_dashboard()
 
-    # Try multiple path resolutions
     kb_base_env = os.getenv("TECHDB_KB_PATH", "/knowledge-base")
     candidates = [
         _Path(kb_base_env) / vault_path,
         _Path("/knowledge-base") / vault_path,
-        _Path(__file__).resolve().parents[3] / "external-data" / "knowledge-base" / vault_path,
     ]
     md_path = next((p for p in candidates if p.exists()), None)
     if not md_path:
-        return {"sections": [], "raw": "", "error": "document_not_found"}
+        return _empty_dashboard()
 
     raw = md_path.read_text(encoding="utf-8", errors="ignore")
 
-    # Parse into sections by ## headers
-    sections: list[dict] = []
+    # Split into sections
+    sections: dict[str, str] = {}
     current_title = ""
     current_lines: list[str] = []
+    fm_count = 0  # Track frontmatter delimiters (first two --- only)
 
     for line in raw.split("\n"):
-        # Skip frontmatter
-        if line.strip() == "---" and not sections and not current_title:
+        if line.strip() == "---" and fm_count < 2:
+            fm_count += 1
             continue
+        if fm_count < 2:
+            continue  # still in frontmatter
 
         sec_match = _re.match(r"^##\s+(.+)$", line)
         if sec_match:
             if current_title:
-                sections.append({
-                    "title": current_title,
-                    "content": "\n".join(current_lines).strip(),
-                })
+                sections[current_title] = "\n".join(current_lines).strip()
             current_title = sec_match.group(1).strip()
             current_lines = []
         elif current_title:
             current_lines.append(line)
 
     if current_title:
-        sections.append({
-            "title": current_title,
-            "content": "\n".join(current_lines).strip(),
-        })
+        sections[current_title] = "\n".join(current_lines).strip()
+
+    # Helper: find section by partial key match (exact first, then partial)
+    def find_section(*keywords) -> str:
+        # Exact match first
+        for title, content in sections.items():
+            if all(kw == title for kw in keywords):
+                return content
+        # Partial match
+        for title, content in sections.items():
+            if all(kw in title for kw in keywords):
+                return content
+        return ""
+
+    # Parse markdown tables into rows
+    def parse_table(md: str) -> list[dict]:
+        if not md:
+            return []
+        lines = md.strip().split("\n")
+        table_lines = [l.strip() for l in lines if l.strip().startswith("|")]
+        if len(table_lines) < 2:
+            return []
+        # First line = headers
+        headers = [h.strip() for h in table_lines[0].split("|")][1:-1]
+        rows = []
+        for line in table_lines[2:]:  # skip separator line
+            cells = [c.strip() for c in line.split("|")][1:-1]
+            if len(cells) == len(headers):
+                row = {}
+                for i, h in enumerate(headers):
+                    # Clean markdown bold/italic from cell
+                    clean = _re.sub(r'\*\*(.+?)\*\*', r'\1', cells[i])
+                    clean = _re.sub(r'\*(.+?)\*', r'\1', clean)
+                    row[h] = clean
+                rows.append(row)
+        return rows
+
+    # Extract summary (§0 定位摘要): first paragraph
+    summary_raw = find_section("§0 定位摘要")
+    # Remove markdown formatting, keep as clean text
+    summary = _re.sub(r'^###.*$', '', summary_raw, flags=_re.MULTILINE).strip()
+    summary = _re.sub(r'\*\*(.+?)\*\*', r'\1', summary)
+    summary = _re.sub(r'\*(.+?)\*', r'\1', summary)
+    summary = summary[:600] if len(summary) > 600 else summary
+
+    # Value anchor table (§0.5 convergence)
+    anchor_raw = find_section("§0.5")
+    # Find the convergence table (contains 应用场景)
+    anchor_rows = []
+    if anchor_raw:
+        # Find table after 价值锚点收敛
+        conv_idx = anchor_raw.find("价值锚点收敛")
+        if conv_idx >= 0:
+            table_section = anchor_raw[conv_idx:]
+            anchor_rows = parse_table(table_section)
+
+    # Roadmap (§1): technology routes table
+    roadmap_raw = find_section("§1")
+    roadmap_rows = parse_table(roadmap_raw) if roadmap_raw else []
+
+    # Indicators (§2): key metrics tables
+    indicators_raw = find_section("§2")
+    indicator_rows = parse_table(indicators_raw) if indicators_raw else []
+
+    # Bottlenecks (§3): parse ### subsections
+    bottlenecks_raw = find_section("§3")
+    bottlenecks = []
+    if bottlenecks_raw:
+        # Split by ### headers
+        bn_parts = _re.split(r'^###\s+', bottlenecks_raw, flags=_re.MULTILINE)
+        for part in bn_parts[1:]:  # skip preamble
+            lines = part.strip().split("\n")
+            title = lines[0].strip()
+            # Extract 卡在哪里/为什么卡/谁在解/突破信号
+            content = "\n".join(lines[1:])
+            blockage = ""
+            nature = ""
+            solvers = ""
+            signals = ""
+
+            for line in lines[1:]:
+                line_clean = line.strip()
+                if line_clean.startswith("**卡在哪里**") or line_clean.startswith("卡在哪里"):
+                    blockage = _re.sub(r'\*\*.*?\*\*[：:]\s*', '', line_clean)
+                    blockage = _re.sub(r'^卡在哪里[：:]\s*', '', blockage)
+                elif line_clean.startswith("**为什么卡**") or line_clean.startswith("为什么卡"):
+                    nature = _re.sub(r'\*\*.*?\*\*[：:]\s*', '', line_clean)
+                    nature = _re.sub(r'^为什么卡[：:]\s*', '', nature)
+                elif line_clean.startswith("**谁在解**") or line_clean.startswith("谁在解"):
+                    solvers = _re.sub(r'\*\*.*?\*\*[：:]\s*', '', line_clean)
+                    solvers = _re.sub(r'^谁在解[：:]\s*', '', solvers)
+                elif line_clean.startswith("**突破信号**") or line_clean.startswith("突破信号"):
+                    signals = _re.sub(r'\*\*.*?\*\*[：:]\s*', '', line_clean)
+                    signals = _re.sub(r'^突破信号[：:]\s*', '', signals)
+
+            bottlenecks.append({
+                "title": title,
+                "blockage": blockage.strip(),
+                "nature": nature.strip(),
+                "solvers": solvers.strip(),
+                "signals": signals.strip(),
+            })
+
+    # Alerts (§7): breakout watch table
+    alerts_raw = find_section("§7") or find_section("预警")
+    alert_rows = parse_table(alerts_raw) if alerts_raw else []
 
     return {
         "dashboard_id": dashboard_id,
         "name": dashboard.get("name", ""),
-        "sections": sections,
-        "section_count": len(sections),
+        "scope": dashboard.get("scope", ""),
+        "vault_path": vault_path,
+        "summary": summary,
+        "value_anchor": anchor_rows,
+        "roadmap": roadmap_rows,
+        "indicators": indicator_rows,
+        "bottlenecks": bottlenecks,
+        "alerts": alert_rows,
+    }
+
+
+def _empty_dashboard() -> dict:
+    return {
+        "summary": "",
+        "value_anchor": [],
+        "roadmap": [],
+        "indicators": [],
+        "bottlenecks": [],
+        "alerts": [],
     }
