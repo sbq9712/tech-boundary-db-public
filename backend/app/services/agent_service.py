@@ -10,7 +10,9 @@ Core flow:
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -22,14 +24,47 @@ from sqlalchemy.orm import Session
 
 from app.models.source import Source
 from app.models.parameter_observation import ParameterObservation
+from app.models.knowledge_artifact import KnowledgeArtifact
 from app.models.conversation import ConversationSession, ConversationMessage
 
 
-KNOWLEDGE_BASE_PATH = Path(os.getenv("TECHDB_KB_PATH", "/mnt/d/##EDMUNDS/知识库"))
+KNOWLEDGE_BASE_PATH = Path(os.getenv("TECHDB_KB_PATH", "/knowledge-base"))
 AI_API_KEY = os.getenv("TECHDB_AGENT_API_KEY", os.getenv("CUSTOM_OPENAI_API_KEY", "")).strip()
 AI_BASE_URL = os.getenv("TECHDB_AGENT_BASE_URL", "https://api.xiaowang886.xyz/v1").rstrip("/")
 AI_MODEL = os.getenv("TECHDB_AGENT_MODEL", "claude-opus-4-8")
 AI_TIMEOUT = int(os.getenv("TECHDB_AGENT_TIMEOUT_SECONDS", "120"))
+AI_MAX_RETRIES = int(os.getenv("TECHDB_AGENT_MAX_RETRIES", "2"))
+AI_RETRY_BASE_DELAY_SECONDS = float(os.getenv("TECHDB_AGENT_RETRY_BASE_DELAY_SECONDS", "2"))
+
+
+def _parse_allowed_models() -> list[str]:
+    """Return the model choices exposed to the portal UI."""
+    raw = os.getenv("TECHDB_AGENT_ALLOWED_MODELS", "")
+    configured = [item.strip() for item in raw.split(",") if item.strip()]
+    defaults = [AI_MODEL, "glm-4.5-flash"]
+    models: list[str] = []
+    for model in configured + defaults:
+        if model and model not in models:
+            models.append(model)
+    return models
+
+
+AI_ALLOWED_MODELS = _parse_allowed_models()
+
+
+def get_available_models() -> dict:
+    """Expose model choices without leaking credentials or provider details."""
+    return {"default_model": AI_MODEL, "models": AI_ALLOWED_MODELS}
+
+
+def resolve_model(selected_model: str | None) -> str:
+    """Validate a user-selected model and fall back to the configured default."""
+    model = (selected_model or AI_MODEL).strip()
+    if model not in AI_ALLOWED_MODELS:
+        raise ValueError(f"Unsupported model: {model}")
+    return model
+
+logger = logging.getLogger(__name__)
 
 
 _CJK_STOPWORDS = set("的了是在为和与及或也都就还把被让使向从对由以至")
@@ -238,10 +273,57 @@ def _build_prompt(query: str, retrieval_results: dict, history: list[dict]) -> l
     return messages
 
 
+def _match_dashboards(db: Session, query: str, limit: int = 3) -> list[dict]:
+    """Match deep-research dashboards to the query by keyword overlap.
+
+    Scores each knowledge_artifact by how many query keywords appear in its
+    title, tech_node aliases, and related parameter names.
+    """
+    artifacts = db.query(KnowledgeArtifact).filter(
+        KnowledgeArtifact.artifact_type == "deep_research_note",
+        KnowledgeArtifact.status == "active",
+    ).all()
+
+    if not artifacts:
+        return []
+
+    # Normalize query into keywords (CJK chars + latin words)
+    query_lower = query.lower()
+    # Extract meaningful keywords (length >= 2 for CJK, >= 3 for latin)
+    cjk_chars = set(c for c in query if '\u4e00' <= c <= '\u9fff')
+    latin_words = set(w for w in re.split(r'[\s,，。、；;？?！!()（）]+', query_lower) if len(w) >= 3)
+    keywords = cjk_chars | latin_words
+
+    if not keywords:
+        return []
+
+    scored = []
+    for art in artifacts:
+        # Build searchable text from title + tech node aliases
+        title_lower = (art.title or "").lower()
+        # We don't have direct access to tech node aliases without a join,
+        # but the title + vault_path contains the key terms
+        search_text = f"{title_lower} {(art.vault_path or '').lower()}"
+
+        score = sum(1 for kw in keywords if kw in search_text)
+        if score > 0:
+            dash_id = (art.stable_id or "").replace("ART-20260709-", "").lower()
+            scored.append((score, {
+                "id": dash_id,
+                "name": (art.title or "").replace("_技术边界", "").replace("_", " "),
+                "stable_id": art.stable_id,
+                "vault_path": art.vault_path,
+            }))
+
+    scored.sort(key=lambda x: -x[0])
+    return [item for _, item in scored[:limit]]
+
+
 async def stream_agent_response(
     query: str,
     session_id: str | None,
     db: Session,
+    selected_model: str | None = None,
 ) -> AsyncIterator[str]:
     """
     Stream agent response with SSE format.
@@ -293,49 +375,94 @@ async def stream_agent_response(
     
     full_response = ""
     
+    request_model = resolve_model(selected_model)
+    request_payload = {
+        "model": request_model,
+        "messages": messages,
+        "stream": True,
+        "temperature": 0.3,
+    }
+    prompt_chars = sum(len(str(message.get("content", ""))) for message in messages)
+    prompt_rough_tokens = max(1, prompt_chars // 4)
+
     try:
         async with httpx.AsyncClient(timeout=AI_TIMEOUT) as client:
-            async with client.stream(
-                "POST",
-                f"{AI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {AI_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": AI_MODEL,
-                    "messages": messages,
-                    "stream": True,
-                    "temperature": 0.3,
-                },
-            ) as response:
-                if response.status_code == 429:
-                    yield f'event: error\ndata: {json.dumps({"error": "LLM API rate limit exceeded, please retry later"}, ensure_ascii=False)}\n\n'
+            for attempt in range(AI_MAX_RETRIES + 1):
+                try:
+                    async with client.stream(
+                        "POST",
+                        f"{AI_BASE_URL}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {AI_API_KEY}",
+                            "Content-Type": "application/json",
+                        },
+                        json=request_payload,
+                    ) as response:
+                        if response.status_code == 429:
+                            body = (await response.aread()).decode("utf-8", errors="replace")[:1000]
+                            logger.warning(
+                                "LLM 429 from upstream: attempt=%s/%s model=%s base_url=%s "
+                                "messages=%s prompt_chars=%s prompt_rough_tokens=%s body=%s",
+                                attempt + 1,
+                                AI_MAX_RETRIES + 1,
+                                request_model,
+                                AI_BASE_URL,
+                                len(messages),
+                                prompt_chars,
+                                prompt_rough_tokens,
+                                body,
+                            )
+                            if attempt < AI_MAX_RETRIES:
+                                delay = AI_RETRY_BASE_DELAY_SECONDS * (attempt + 1)
+                                yield f'event: status\ndata: {json.dumps({"stage": "retrying", "message": f"模型服务繁忙，{delay:g} 秒后重试..."}, ensure_ascii=False)}\n\n'
+                                await asyncio.sleep(delay)
+                                continue
+                            yield f'event: error\ndata: {json.dumps({"error": "LLM API rate limit exceeded, please retry later"}, ensure_ascii=False)}\n\n'
+                            return
+
+                        response.raise_for_status()
+
+                        async for line in response.aiter_lines():
+                            if not line.strip() or line.strip() == "data: [DONE]":
+                                continue
+
+                            if line.startswith("data: "):
+                                try:
+                                    chunk_data = json.loads(line[6:])
+                                    delta = chunk_data.get("choices", [{}])[0].get("delta", {})
+                                    content = delta.get("content", "")
+
+                                    if content:
+                                        full_response += content
+                                        yield f'event: token\ndata: {json.dumps({"content": content}, ensure_ascii=False)}\n\n'
+
+                                except json.JSONDecodeError:
+                                    continue
+                        break
+                except httpx.HTTPStatusError as e:
+                    body = e.response.text[:1000]
+                    logger.warning(
+                        "LLM HTTP error from upstream: status=%s model=%s base_url=%s "
+                        "messages=%s prompt_chars=%s prompt_rough_tokens=%s body=%s",
+                        e.response.status_code,
+                        request_model,
+                        AI_BASE_URL,
+                        len(messages),
+                        prompt_chars,
+                        prompt_rough_tokens,
+                        body,
+                    )
+                    yield f'event: error\ndata: {json.dumps({"error": f"LLM API error: {e.response.status_code}"}, ensure_ascii=False)}\n\n'
                     return
-                
-                response.raise_for_status()
-                
-                async for line in response.aiter_lines():
-                    if not line.strip() or line.strip() == "data: [DONE]":
-                        continue
-                    
-                    if line.startswith("data: "):
-                        try:
-                            chunk_data = json.loads(line[6:])
-                            delta = chunk_data.get("choices", [{}])[0].get("delta", {})
-                            content = delta.get("content", "")
-                            
-                            if content:
-                                full_response += content
-                                yield f'event: token\ndata: {json.dumps({"content": content}, ensure_ascii=False)}\n\n'
-                        
-                        except json.JSONDecodeError:
-                            continue
-    
-    except httpx.HTTPStatusError as e:
-        yield f'event: error\ndata: {json.dumps({"error": f"LLM API error: {e.response.status_code}"}, ensure_ascii=False)}\n\n'
-        return
     except Exception as e:
+        logger.exception(
+            "LLM call failed: model=%s base_url=%s messages=%s prompt_chars=%s prompt_rough_tokens=%s",
+            request_model,
+            AI_BASE_URL,
+            len(messages),
+            prompt_chars,
+            prompt_rough_tokens,
+        )
         yield f'event: error\ndata: {json.dumps({"error": f"LLM call failed: {str(e)}"}, ensure_ascii=False)}\n\n'
         return
     
@@ -367,15 +494,26 @@ async def stream_agent_response(
             "value_range": param["value_range"],
             "verification_status": param["verification_status"],
         })
+
+    # Match deep-research dashboards for panel recommendations
+    dashboard_recs = _match_dashboards(db, query, limit=3)
+    hot_intel = sources_results[:3] if sources_results else []
     
     done_data = {
         "response": full_response,
         "citations": citations,
         "session_id": session_id,
+        "model": request_model,
         "retrieval_summary": {
             "knowledge_base": len(kb_results),
             "sources": len(sources_results),
             "parameters": len(params_results),
+        },
+        "panel_recommendations": {
+            "hot_intel": hot_intel,
+            "parameter_boundaries": params_results[:4],
+            "alert_intel": [],
+            "dashboard_links": dashboard_recs,
         }
     }
     

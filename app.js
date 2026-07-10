@@ -417,7 +417,7 @@ function renderInlineResources(extra){
   const alerts=panels.alert_intel||[];
   if(alerts.length){sections.push(`<div class="inline-resource-group"><h4>预警情报</h4>${alerts.slice(0,4).map(item=>`<span>${escapeHtml(item.title||item.name||'预警情报')}</span>`).join('')}</div>`);}
   const dashboards=panels.dashboard_links||[];
-  if(dashboards.length){sections.push(`<div class="inline-resource-group"><h4>相关仪表盘</h4>${dashboards.slice(0,4).map(item=>`<a href="#dashboard${item.id?`?q=${encodeURIComponent(item.id)}`:''}">${escapeHtml(item.name||item.title||'相关仪表盘')}</a>`).join('')}</div>`);}
+  if(dashboards.length){sections.push(`<div class="inline-resource-group"><h4>相关仪表盘</h4>${dashboards.slice(0,4).map(item=>`<a href="#dashboard" onclick="event.preventDefault();setRoute('dashboard');setTimeout(()=>showDashboardDetail('${escapeHtml(item.id)}'),100)">${escapeHtml(item.name||item.title||'相关仪表盘')}</a>`).join('')}</div>`);}
   return sections.length?`<div class="inline-resources">${sections.join('')}</div>`:'';
 }
 async function submitQuery(){
