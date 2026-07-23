@@ -14,13 +14,13 @@ services:
     networks:
       - technet
     environment:
-      POSTGRES_DB: tech_intel
-      POSTGRES_USER: tech
-      POSTGRES_PASSWORD: tech
+      POSTGRES_DB: ${POSTGRES_DB:-tech_intel}
+      POSTGRES_USER: ${POSTGRES_USER:-techdb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tech -d tech_intel"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -32,7 +32,11 @@ services:
     networks:
       - technet
     environment:
-      DATABASE_URL: postgresql+psycopg2://tech:tech@db:5432/tech_intel
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-techdb}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/${POSTGRES_DB:-tech_intel}
+      TECHDB_ENV: ${TECHDB_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
+      TECHDB_INITIAL_ADMIN_USERNAME: ${TECHDB_INITIAL_ADMIN_USERNAME:-admin}
+      TECHDB_INITIAL_ADMIN_PASSWORD: ${TECHDB_INITIAL_ADMIN_PASSWORD:?TECHDB_INITIAL_ADMIN_PASSWORD must be set in .env}
       DATA_DIR: /app/data
       HERMES_AGENT_MODE: ${HERMES_AGENT_MODE:-http}
       HERMES_AGENT_HTTP_URL: ${HERMES_AGENT_HTTP_URL:-http://readonly-agent:8765/query}
@@ -63,7 +67,7 @@ services:
       readonly-agent:
         condition: service_started
     ports:
-      - "8000:8000"
+      - "${TECHDB_API_BIND:-127.0.0.1}:8000:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -76,8 +80,8 @@ services:
     ports:
       - "${TECHDB_WEB_PORT:-8080}:80"
     volumes:
-      - /mnt/d/##EDMUNDS/技术数据库/v260629.0:/usr/share/nginx/html:ro
-      - /mnt/d/##EDMUNDS/技术数据库/v260629.0/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
   readonly-agent:
     build:
@@ -87,7 +91,11 @@ services:
       - technet
     command: uvicorn app.readonly_agent:app --host 0.0.0.0 --port 8765
     environment:
-      DATABASE_URL: postgresql+psycopg2://tech:tech@db:5432/tech_intel
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-techdb}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/${POSTGRES_DB:-tech_intel}
+      TECHDB_ENV: ${TECHDB_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
+      TECHDB_INITIAL_ADMIN_USERNAME: ${TECHDB_INITIAL_ADMIN_USERNAME:-admin}
+      TECHDB_INITIAL_ADMIN_PASSWORD: ${TECHDB_INITIAL_ADMIN_PASSWORD:?TECHDB_INITIAL_ADMIN_PASSWORD must be set in .env}
       DATA_DIR: /app/data
       TECHDB_KB_PATH: /knowledge-base
       TECHDB_CHATBOT_PACKAGE_PATH: /chatbot-integration-package
@@ -103,7 +111,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8765:8765"
+      - "${TECHDB_AGENT_BIND:-127.0.0.1}:8765:8765"
 
 volumes:
   pg_data:

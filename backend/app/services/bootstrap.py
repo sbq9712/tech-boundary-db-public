@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,9 +9,6 @@ from app.core.security import hash_password
 from app.models.domain import Domain
 from app.models.user import User
 from app.services.data_loader import load_json
-
-# 初始账号列表：用户名 → 初始密码
-_INITIAL_USERS = {f"admin{i}": f"ATSC123{i}" for i in range(1, 21)}
 
 
 def seed_domains_if_empty(db: Session) -> None:
@@ -42,18 +41,19 @@ def seed_domains_if_empty(db: Session) -> None:
 
 
 def seed_users_if_empty(db: Session) -> None:
-    existing_usernames = set(db.scalars(select(User.username)).all())
-    added = False
-    for username, password in _INITIAL_USERS.items():
-        if username not in existing_usernames:
-            db.add(
-                User(
-                    username=username,
-                    password_hash=hash_password(password),
-                    role="admin" if username == "admin1" else "user",
-                    is_active=True,
-                )
-            )
-            added = True
-    if added:
-        db.commit()
+    """Create one explicit bootstrap administrator, never predictable bulk accounts."""
+    username = os.getenv("TECHDB_INITIAL_ADMIN_USERNAME", "").strip()
+    password = os.getenv("TECHDB_INITIAL_ADMIN_PASSWORD", "")
+    if not username or not password:
+        return
+    if db.scalar(select(User.username).where(User.username == username)):
+        return
+    db.add(
+        User(
+            username=username,
+            password_hash=hash_password(password),
+            role="admin",
+            is_active=True,
+        )
+    )
+    db.commit()
