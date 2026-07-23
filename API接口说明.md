@@ -1,18 +1,23 @@
-# 前沿技术情报与预警平台 API 接口说明
-
-> 更新时间：2026-05-14  
-> 依据代码：`backend/app/routers/*.py`、`backend/app/schemas/*.py`
-
 ## 1. 接口总览
 
-当前后端统一以 `/api` 作为前缀，按功能分为：
+当前后端注册了以下路由模块（均挂在 /api 前缀下）：
 
-| 模块 | 说明 |
-|---|---|
-| `health` | 健康检查 |
-| `auth` | 登录、当前用户、修改密码 |
-| `domains` | 领域树 |
-| `info-items` | 草稿、发布、详情、指标、预警 |
+| 模块 | 路由文件 | 主要端点 |
+|------|----------|----------|
+| 认证 | auth.py | POST /auth/login, GET /auth/me, PATCH /auth/password |
+| 健康检查 | health.py | GET /health |
+| 领域 | domains.py | GET /domains |
+| 情报条目 | info_items.py | GET /info-items, GET /info-items/alerts, 草稿/发布/预警 |
+| Intake | intake.py | GET /intake/status |
+| 参数观测 | parameter_observations.py | GET /parameter-observations |
+| 仪表盘 | dashboards.py | GET /dashboards, GET /dashboards/{id}/content |
+| 行业图景 | industry_map.py | GET /industry-map |
+| 交付情报 | delivery_intel.py | GET /delivery-intel, GET /delivery-intel/meta |
+| 对话 | assistant_stream.py | GET/POST /assistant/stream, GET /assistant/models |
+| 对话管理 | conversations.py | GET/POST /conversations |
+| 用户管理 | users.py | GET/POST/PATCH/DELETE /users |
+
+除 GET /health 外，所有接口要求 Bearer Token。
 
 ## 2. 基本约定
 
@@ -786,7 +791,7 @@ GET /api/info-items?status=draft,ai_suggested
 }
 ```
 
-## 15. 状态流转说明
+## 17. 状态流转说明
 
 当前情报主状态流转如下：
 
@@ -803,7 +808,7 @@ GET /api/info-items?status=draft,ai_suggested
 无预警 -> active -> dismissed
 ```
 
-## 16. 联调建议
+## 18. 联调建议
 
 如果要做前后端联调，建议按以下顺序验证：
 
@@ -819,4 +824,3 @@ GET /api/info-items?status=draft,ai_suggested
 10. `PATCH /api/info-items/{id}/details`
 11. `PATCH /api/info-items/{id}/indicators`
 12. `DELETE /api/info-items/{id}`
-

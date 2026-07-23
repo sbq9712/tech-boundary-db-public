@@ -2,10 +2,10 @@
 # 技术边界数据库 — PostgreSQL 定时备份脚本
 #
 # 用法（crontab 每天凌晨 3 点跑一次）:
-#   0 3 * * * /path/to/v260629.0/scripts/db_backup.sh >> /var/log/techdb-backup.log 2>&1
+#   0 3 * * * /path/to/v260723/scripts/db_backup.sh >> /var/log/techdb-backup.log 2>&1
 #
 # 或手动执行：
-#   cd /path/to/v260629.0 && ./scripts/db_backup.sh
+#   cd /path/to/v260723 && ./scripts/db_backup.sh
 #
 # 备份文件：backup/techdb_YYYYMMDD_HHMMSS.sql.gz
 # 保留最近 30 份，超出的自动删除。

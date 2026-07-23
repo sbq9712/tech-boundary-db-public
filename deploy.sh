@@ -88,7 +88,7 @@ echo "✓ Docker Compose V2"
 echo ""
 
 # 创建 PostgreSQL 数据卷
-PG_VOLUME="${TECHDB_PG_VOLUME:-v2606290_pg_data}"
+PG_VOLUME="${TECHDB_PG_VOLUME:-v260723_pg_data}"
 echo "📦 准备数据卷..."
 if docker volume inspect "$PG_VOLUME" >/dev/null 2>&1; then
     echo "  ✓ 数据卷 $PG_VOLUME 已存在（复用已有数据）"

@@ -116,4 +116,4 @@ services:
 volumes:
   pg_data:
     external: true
-    name: ${TECHDB_PG_VOLUME:-v2606290_pg_data}
+    name: ${TECHDB_PG_VOLUME:-v260723_pg_data}
