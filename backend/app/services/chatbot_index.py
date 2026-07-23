@@ -15,7 +15,7 @@ DEFAULT_PACKAGE_PATH = Path(
         "TECHDB_CHATBOT_PACKAGE_PATH",
         os.getenv(
             "TECHDB_CHATBOT_PACKAGE",
-            "D:/##EDMUNDS/技术数据库/chatbot_integration_package",
+            "/chatbot-integration-package",
         ),
     )
 )

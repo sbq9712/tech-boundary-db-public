@@ -12,8 +12,8 @@
 
 ```bash
 # 1. 解压
-tar -xzf techdb-v260629.0.tar.gz
-cd v260629.0
+tar -xzf techdb-v260723.tar.gz
+cd v260723
 
 # 2. 配置 API Key（唯一必填项）
 cp .env.example .env
@@ -52,13 +52,13 @@ nano .env   # 或 vim .env，填入 TECHDB_AGENT_API_KEY
 
 ## 数据目录
 
-部署包内置了 `external-data/` 目录，包含三个子目录：
+部署包不含知识库数据，需另行获取，包含三个子目录：
 
 | 目录 | 内容 | 大小 |
 |------|------|------|
-| `knowledge-base/` | Obsidian 知识库全文 | ~380MB |
-| `delivery-views/` | 交付视图与知识文档 | ~96MB |
-| `chatbot-package/` | 索引、RAG、质检报告 | ~825MB |
+| `knowledge-base/` | Obsidian 知识库全文 | 另行获取 |
+| `delivery-views/` | 交付视图与知识文档 | 另行获取 |
+| `chatbot-package/` | 索引、RAG、质检报告 | 另行获取 |
 
 如果数据放在其他位置，在 `.env` 中指定绝对路径覆盖默认值。
 

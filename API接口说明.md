@@ -74,8 +74,8 @@ Authorization: Bearer <access_token>
 
 ```json
 {
-  "username": "admin1",
-  "password": "ATSC1231"
+  "username": "admin",
+  "password": "your_password"
 }
 ```
 
@@ -117,7 +117,7 @@ Authorization: Bearer <access_token>
 
 ```json
 {
-  "username": "admin1"
+  "username": "admin"
 }
 ```
 
@@ -129,7 +129,7 @@ Authorization: Bearer <access_token>
 
 ```json
 {
-  "current_password": "ATSC1231",
+  "current_password": "your_password",
   "new_password": "NewPass999"
 }
 ```

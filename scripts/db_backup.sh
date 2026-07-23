@@ -28,8 +28,8 @@ if [ -f "${PROJECT_DIR}/.env" ]; then
 fi
 
 PG_DB="${POSTGRES_DB:-tech_intel}"
-PG_USER="${POSTGRES_USER:-tech}"
-PG_CONTAINER="${TECHDB_DB_CONTAINER:-v2606290-db-1}"
+PG_USER="${POSTGRES_USER:-techdb}"
+PG_CONTAINER="${TECHDB_DB_CONTAINER:-v260723-db-1}"
 
 echo "[$(date)] 开始备份 ${PG_DB} ..."
 

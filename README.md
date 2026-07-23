@@ -1,12 +1,12 @@
-# 技术边界数据库 v260629.0
+# 技术边界数据库 v260723
 
 技术情报收集、知识管理与 AI 问答平台。
 
 ## 快速部署
 
 ```bash
-tar -xzf techdb-v260629.0.tar.gz
-cd v260629.0
+tar -xzf techdb-v260723.tar.gz
+cd v260723
 cp .env.example .env
 # 编辑 .env，填入 TECHDB_AGENT_API_KEY
 ./deploy.sh
