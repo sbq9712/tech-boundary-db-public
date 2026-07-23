@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,6 +30,7 @@ class MessageIn(BaseModel):
     content: str
     citations_json: list = []
     panel_recommendations_json: dict = {}
+    retrieval_summary_json: dict = {}
 
 
 class MemoryIn(BaseModel):
@@ -71,25 +72,39 @@ def create_session(
 
 # ── Messages ──────────────────────────────────────────────
 
+
+def _message_retrieval_summary(message: ConversationMessage) -> dict:
+    if message.retrieval_summary_json:
+        return message.retrieval_summary_json
+    citations = message.citations_json or []
+    return {
+        "knowledge_base": sum(1 for item in citations if item.get("type") == "knowledge_base"),
+        "sources": sum(1 for item in citations if item.get("type") == "source"),
+        "parameters": sum(1 for item in citations if item.get("type") == "parameter"),
+        "derived_from_citations": True,
+    }
+
 @router.get("/conversations/{session_id}/messages")
 def get_messages(
     session_id: UUID,
-    limit: int = 40,
+    limit: int = Query(default=40, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ) -> dict:
     s = db.get(ConversationSession, session_id)
     if not s or s.user_id != current_user:
         raise HTTPException(404, "session not found")
-    msgs = db.scalars(
+    newest_first = db.scalars(
         select(ConversationMessage)
         .where(ConversationMessage.session_id == session_id)
-        .order_by(ConversationMessage.created_at.asc())
+        .order_by(ConversationMessage.created_at.desc())
         .limit(limit)
     ).all()
+    msgs = list(reversed(newest_first))
     return {"session_id": str(session_id), "messages": [
         {"id": str(m.id), "role": m.role, "content": m.content,
          "citations": m.citations_json, "panel_recommendations": m.panel_recommendations_json,
+         "retrieval_summary": _message_retrieval_summary(m),
          "created_at": m.created_at.isoformat()} for m in msgs
     ]}
 

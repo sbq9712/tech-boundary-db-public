@@ -32,9 +32,26 @@ class ConversationMessage(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     citations_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     panel_recommendations_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    retrieval_summary_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     session: Mapped["ConversationSession"] = relationship("ConversationSession", back_populates="messages")
+
+
+class ConversationAgentRun(Base):
+    __tablename__ = "conversation_agent_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("conversation_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.username", ondelete="CASCADE"), nullable=False, index=True)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retrieval_summary: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class UserResearchProfile(Base):

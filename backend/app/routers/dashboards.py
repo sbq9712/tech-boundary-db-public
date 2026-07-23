@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -10,6 +11,53 @@ from app.models.knowledge_artifact import KnowledgeArtifact
 from app.models.parameter_observation import ParameterObservation
 
 router = APIRouter(tags=["dashboards"], dependencies=[Depends(get_current_user)])
+
+_NON_BOUNDARY_ECONOMIC_TERMS = (
+    "市场规模", "行业规模", "融资", "订单", "营收", "估值", "出货", "装机量", "产能",
+)
+_DECISION_ECONOMIC_TERMS = (
+    "成本", "CAPEX", "OPEX", "价格", "电价", "LCOE", "LCOA", "LCOH", "投资回收",
+)
+
+
+def _is_boundary_parameter(param: ParameterObservation) -> bool:
+    """Keep engineering boundaries and only decision-causal economics."""
+    name = param.parameter_name or ""
+    if any(term in name for term in _NON_BOUNDARY_ECONOMIC_TERMS):
+        return False
+    if param.parameter_type == "technical":
+        return True
+    if param.parameter_type == "economic":
+        return any(term.lower() in name.lower() for term in _DECISION_ECONOMIC_TERMS)
+    return False
+
+
+def _parameter_value(param: ParameterObservation) -> str:
+    if param.value_text:
+        return param.value_text
+    if param.value_min is not None and param.value_max is not None:
+        return f"{param.value_min}-{param.value_max}" if param.value_min != param.value_max else str(param.value_min)
+    if param.value_min is not None:
+        return str(param.value_min)
+    return "-"
+
+
+def _parameter_payload(
+    param: ParameterObservation,
+    commercial_statuses: dict[str, str] | None = None,
+    commercial_status_reasons: dict[str, str] | None = None,
+) -> dict:
+    commercial_statuses = commercial_statuses or {}
+    commercial_status_reasons = commercial_status_reasons or {}
+    return {
+        "name": param.parameter_name,
+        "value": _parameter_value(param),
+        "unit": param.unit or "",
+        "type": param.parameter_type,
+        "verification": param.verification_status,
+        "commercial_status": commercial_statuses.get(param.parameter_name, ""),
+        "commercial_status_reason": commercial_status_reasons.get(param.parameter_name, ""),
+    }
 
 # Legacy dashboards kept for backward compatibility (until KB artifacts fully cover them)
 _LEGACY_DASHBOARDS = [
@@ -40,6 +88,9 @@ def _build_kb_dashboards(db: Session) -> list[dict]:
     Each deep_research_note artifact becomes a dashboard card. Key parameters
     are aggregated as metric highlights.
     """
+    if not hasattr(db, "query"):
+        return []
+
     artifacts = db.query(KnowledgeArtifact).filter(
         KnowledgeArtifact.artifact_type == "deep_research_note",
         KnowledgeArtifact.status == "active",
@@ -49,56 +100,90 @@ def _build_kb_dashboards(db: Session) -> list[dict]:
     for art in artifacts:
         tech_node_ids = art.related_tech_node_ids or []
 
-        # Pull key parameters for this artifact's tech nodes
-        params_q = db.query(ParameterObservation).filter(
-            ParameterObservation.technology_node_id.in_(tech_node_ids)
-        ) if tech_node_ids else []
-
         metrics: list[str] = []
         key_indicators: list[dict] = []
+        params: list[ParameterObservation] = []
         if tech_node_ids:
             params = db.query(ParameterObservation).filter(
                 ParameterObservation.technology_node_id.in_(tech_node_ids)
-            ).limit(6).all()
-            for p in params:
-                # Build display value
-                if p.value_text:
-                    val = p.value_text
-                elif p.value_min is not None and p.value_max is not None:
-                    val = f"{p.value_min}–{p.value_max}" if p.value_min != p.value_max else str(p.value_min)
-                elif p.value_min is not None:
-                    val = str(p.value_min)
-                else:
-                    val = "—"
-
-                unit = f" {p.unit}" if p.unit and p.unit != "—" else ""
-                metrics.append(f"{p.parameter_name}: {val}{unit}")
-                key_indicators.append({
-                    "name": p.parameter_name,
-                    "value": val,
-                    "unit": p.unit or "",
-                    "type": p.parameter_type,
-                    "verification": p.verification_status,
-                })
+            ).all()
+            params = [param for param in params if _is_boundary_parameter(param)]
 
         # Derive dashboard id from stable_id
-        dash_id = art.stable_id.replace("ART-20260709-", "").lower() if art.stable_id else str(art.id)[:8]
+        raw_sid = art.stable_id or str(art.id)[:8]
+        for _prefix in ("ART-20260709-", "ART-20260712-"):
+            if raw_sid.startswith(_prefix):
+                raw_sid = raw_sid[len(_prefix):]
+                break
+        dash_id = raw_sid.lower()
 
-        # Extract taxonomy_leaf from the KB document frontmatter
+        # Extract decision metadata from the KB document frontmatter.  These
+        # fields let the UI distinguish reviewed reports from imported notes.
         taxonomy_leaf = ""
+        decision_question = ""
+        verdict = ""
+        confidence = ""
+        review_status = ""
+        metric_review_status = ""
+        homepage_indicator_names: list[str] = []
+        commercial_statuses: dict[str, str] = {}
+        commercial_status_reasons: dict[str, str] = {}
+        featured = False
+        cross_ref = ""
         try:
             import re as _re
             from pathlib import Path as _Path
             kb_base = os.getenv("TECHDB_KB_PATH", "/knowledge-base")
             for vp in [_Path(kb_base) / (art.vault_path or ""), _Path("/knowledge-base") / (art.vault_path or "")]:
                 if vp.exists():
-                    raw = vp.read_text(encoding="utf-8", errors="ignore")[:2000]
+                    raw = vp.read_text(encoding="utf-8", errors="ignore")[:6000]
                     m = _re.search(r'taxonomy_leaf:\s*(.+)', raw)
                     if m:
                         taxonomy_leaf = m.group(1).strip()
+                    def _fm_value(key: str) -> str:
+                        match = _re.search(rf'^{key}:\s*(.+)$', raw, _re.MULTILINE)
+                        return match.group(1).strip() if match else ""
+                    decision_question = _fm_value("decision_question")
+                    verdict = _fm_value("verdict")
+                    confidence = _fm_value("confidence")
+                    review_status = _fm_value("review_status")
+                    metric_review_status = _fm_value("metric_review_status")
+                    homepage_indicator_names = [name.strip() for name in _fm_value("homepage_indicators").split("|") if name.strip()]
+                    for key, target in (
+                        ("commercial_statuses", commercial_statuses),
+                        ("commercial_status_reasons", commercial_status_reasons),
+                    ):
+                        value = _fm_value(key)
+                        if value:
+                            parsed = json.loads(value)
+                            if isinstance(parsed, dict):
+                                target.update({str(name): str(status) for name, status in parsed.items()})
+                    cross_ref = _fm_value("cross_ref")
+                    featured = _fm_value("featured").lower() in {"true", "yes", "1"}
                     break
         except Exception:
             pass
+
+        # Homepage indicators are editorial decisions, not arbitrary database
+        # row order. A reviewed allow-list wins; otherwise technical parameters
+        # are stable and appear before economic or commercial context.
+        if homepage_indicator_names:
+            by_name = {param.parameter_name: param for param in params}
+            selected_params = [by_name[name] for name in homepage_indicator_names if name in by_name]
+        else:
+            selected_params = sorted(
+                params,
+                key=lambda param: (
+                    param.parameter_type != "technical",
+                    param.parameter_type or "",
+                    param.parameter_name,
+                ),
+            )[:6]
+        for param in selected_params:
+            payload = _parameter_payload(param, commercial_statuses, commercial_status_reasons)
+            unit = f" {payload['unit']}" if payload["unit"] and payload["unit"] != "-" else ""
+            metrics.append(f"{payload['name']}: {payload['value']}{unit}")
+            key_indicators.append(payload)
 
         dashboards.append({
             "id": dash_id,
@@ -117,8 +202,19 @@ def _build_kb_dashboards(db: Session) -> list[dict]:
             "updated_at": art.updated_at.isoformat() if art.updated_at else None,
             "tech_node_ids": tech_node_ids,
             "taxonomy_leaf": taxonomy_leaf,
+            "cross_ref": cross_ref,
+            "decision_question": decision_question,
+            "verdict": verdict,
+            "confidence": confidence,
+            "review_status": review_status,
+            "metric_review_status": metric_review_status,
+            "homepage_indicators": homepage_indicator_names,
+            "commercial_statuses": commercial_statuses,
+            "commercial_status_reasons": commercial_status_reasons,
+            "featured": featured,
         })
 
+    dashboards.sort(key=lambda item: (not item.get("featured", False), item.get("name", "")))
     return dashboards
 
 
@@ -189,14 +285,9 @@ def get_dashboard_detail(
             ParameterObservation.technology_node_id.in_(tech_node_ids)
         ).all()
         for p in params:
-            if p.value_text:
-                val = p.value_text
-            elif p.value_min is not None and p.value_max is not None:
-                val = f"{p.value_min}–{p.value_max}" if p.value_min != p.value_max else str(p.value_min)
-            elif p.value_min is not None:
-                val = str(p.value_min)
-            else:
-                val = "—"
+            if not _is_boundary_parameter(p):
+                continue
+            val = _parameter_value(p)
 
             detailed_indicators.append({
                 "name": p.parameter_name,
@@ -208,6 +299,8 @@ def get_dashboard_detail(
                 "type": p.parameter_type,
                 "condition": p.condition_text or "",
                 "verification": p.verification_status,
+                "commercial_status": dashboard.get("commercial_statuses", {}).get(p.parameter_name, ""),
+                "commercial_status_reason": dashboard.get("commercial_status_reasons", {}).get(p.parameter_name, ""),
                 "notes": p.notes or "",
             })
 
@@ -256,7 +349,7 @@ def get_dashboard_content(
 
     raw = md_path.read_text(encoding="utf-8", errors="ignore")
 
-    # Split into sections
+    # Split into sections (## headers), keeping ### subsections as content
     sections: dict[str, str] = {}
     current_title = ""
     current_lines: list[str] = []
@@ -280,6 +373,16 @@ def get_dashboard_content(
 
     if current_title:
         sections[current_title] = "\n".join(current_lines).strip()
+
+    # Also index ### subsections so find_section can match "§2.5" etc.
+    sub_sections: dict[str, str] = {}
+    for title, body in sections.items():
+        sub_parts = _re.split(r'^(###\s+.+)$', body, flags=_re.MULTILINE)
+        for i in range(1, len(sub_parts), 2):
+            sub_header = _re.sub(r'^###\s+', '', sub_parts[i]).strip()
+            sub_body = sub_parts[i + 1].strip() if i + 1 < len(sub_parts) else ""
+            sub_sections[sub_header] = sub_body
+    sections.update(sub_sections)
 
     # Helper: find section by partial key match (exact first, then partial)
     def find_section(*keywords) -> str:
@@ -322,7 +425,7 @@ def get_dashboard_content(
     summary = _re.sub(r'^###.*$', '', summary_raw, flags=_re.MULTILINE).strip()
     summary = _re.sub(r'\*\*(.+?)\*\*', r'\1', summary)
     summary = _re.sub(r'\*(.+?)\*', r'\1', summary)
-    summary = summary[:600] if len(summary) > 600 else summary
+    summary = summary[:2000] if len(summary) > 2000 else summary
 
     # Value anchor table (§0.5 convergence)
     anchor_raw = find_section("§0.5")
@@ -347,7 +450,7 @@ def get_dashboard_content(
     bottlenecks_raw = find_section("§3")
 
     # §2.5 feasibility verification table
-    feasibility_raw = find_section("§2.5") or find_section("指标物理可达性验证")
+    feasibility_raw = find_section("§2.5") or find_section("物理可达性") or find_section("可达性验证")
     feasibility_rows = parse_table(feasibility_raw) if feasibility_raw else []
 
     bottlenecks = []
@@ -379,6 +482,31 @@ def get_dashboard_content(
                     signals = _re.sub(r'\*\*.*?\*\*[：:]\s*', '', line_clean)
                     signals = _re.sub(r'^突破信号[：:]\s*', '', signals)
 
+            # Fallback: if nature is empty, look for "**物理限制**" / "**工程" / "**经济" sub-bullets
+            if not nature.strip():
+                nature_parts = []
+                for line in lines[1:]:
+                    lc = line.strip()
+                    for kw in ["物理限制", "工程问题", "工程突破", "经济问题", "物理化学"]:
+                        if f"**{kw}**" in lc or lc.startswith(f"- **{kw}**"):
+                            # Extract text after the bold label
+                            text = _re.sub(r'^-?\s*\*\*.*?\*\*[（(]?[^）)：:]*[）)：:]\s*', '', lc)
+                            text = _re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+                            if text.strip():
+                                nature_parts.append(text.strip()[:150])
+                            break
+                # Also check for "> **限制性质**" blockquote summary
+                for line in lines[1:]:
+                    lc = line.strip()
+                    if lc.startswith("> **限制性质**") or lc.startswith(">**限制性质**"):
+                        text = _re.sub(r'^>\s*\*\*限制性质\*\*[：:]\s*', '', lc)
+                        text = _re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+                        if text.strip() and not nature_parts:
+                            nature_parts.append(text.strip()[:200])
+                        break
+                if nature_parts:
+                    nature = "；".join(nature_parts)
+
             bottlenecks.append({
                 "title": title,
                 "blockage": blockage.strip(),
@@ -391,18 +519,83 @@ def get_dashboard_content(
     alerts_raw = find_section("§7") or find_section("预警")
     alert_rows = parse_table(alerts_raw) if alerts_raw else []
 
+    # §4: Common technology analysis — extract bullets, bold paragraphs, or table rows
+    common_raw = find_section("§4")
+    common_items: list[str] = []
+    if common_raw:
+        # Try bullet points first
+        for line in common_raw.splitlines():
+            line = line.strip()
+            if line.startswith("- ") or line.startswith("• "):
+                item = _re.sub(r'^[-•]\s*', '', line)
+                item = _re.sub(r'\*\*(.+?)\*\*', r'\1', item)
+                common_items.append(item.strip())
+        # If no bullets, try bold paragraphs: "**与XX的交叉**：..."
+        if not common_items:
+            for m in _re.finditer(r'\*\*(.+?)\*\*[：:](.+?)(?=\n\*\*|\n\n|\Z)', common_raw, _re.S):
+                title_part = m.group(1).strip()
+                body_part = m.group(2).strip().replace('\n', ' ')
+                body_part = _re.sub(r'\*\*(.+?)\*\*', r'\1', body_part)
+                common_items.append(f"{title_part}：{body_part[:200]}")
+        # If still nothing, try table format
+        if not common_items:
+            common_rows = parse_table(common_raw)
+            for row in common_rows:
+                parts = [str(row.get(k, "")).strip() for k in row]
+                item = " | ".join(p for p in parts if p)
+                if item.strip():
+                    common_items.append(item)
+
+    # §6: To-verify checklist — extract bullet points or table rows
+    verify_raw = find_section("§6")
+    verify_items: list[str] = []
+    if verify_raw:
+        # Try bullet points first
+        for line in verify_raw.splitlines():
+            line = line.strip()
+            if line.startswith("- ") or line.startswith("• "):
+                item = _re.sub(r'^[-•]\s*', '', line)
+                item = _re.sub(r'\*\*(.+?)\*\*', r'\1', item)
+                verify_items.append(item.strip())
+        # If no bullets found, try table format
+        if not verify_items:
+            verify_rows = parse_table(verify_raw)
+            for row in verify_rows:
+                parts = [str(row.get(k, "")).strip() for k in row]
+                item = " | ".join(p for p in parts if p)
+                if item.strip():
+                    verify_items.append(item)
+
+    # Build raw_sections: full markdown text for each ## section
+    raw_sections: dict[str, str] = {}
+    for title, body in sections.items():
+        # Skip ### subsections (they're included in their parent ## section)
+        if title in sub_sections:
+            continue
+        raw_sections[title] = body
+
     return {
         "dashboard_id": dashboard_id,
         "name": dashboard.get("name", ""),
         "scope": dashboard.get("scope", ""),
         "vault_path": vault_path,
+        "taxonomy_leaf": dashboard.get("taxonomy_leaf", ""),
+        "cross_ref": dashboard.get("cross_ref", ""),
+        "decision_question": dashboard.get("decision_question", ""),
+        "verdict": dashboard.get("verdict", ""),
+        "confidence": dashboard.get("confidence", ""),
+        "review_status": dashboard.get("review_status", ""),
+        "featured": dashboard.get("featured", False),
         "summary": summary,
         "value_anchor": anchor_rows,
         "roadmap": roadmap_rows,
         "indicators": indicator_rows,
         "feasibility": feasibility_rows,
         "bottlenecks": bottlenecks,
+        "common_tech": common_items,
+        "to_verify": verify_items,
         "alerts": alert_rows,
+        "raw_sections": raw_sections,
     }
 
 
@@ -414,5 +607,7 @@ def _empty_dashboard() -> dict:
         "indicators": [],
         "feasibility": [],
         "bottlenecks": [],
+        "common_tech": [],
+        "to_verify": [],
         "alerts": [],
     }

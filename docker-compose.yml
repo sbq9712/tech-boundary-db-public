@@ -1,6 +1,18 @@
+networks:
+  technet:
+    driver: bridge
+    # WSL host eth0 MTU is 1410, but Docker default bridge is 1500.
+    # Oversized TLS ClientHello packets get silently dropped at the WSL NAT,
+    # causing SSL UNEXPECTED_EOF errors to external APIs (e.g. api.z.ai).
+    # Match the network MTU to the host to fix this.
+    driver_opts:
+      com.docker.network.driver.mtu: ${TECHDB_DOCKER_MTU:-1410}
+
 services:
   db:
     image: postgres:16
+    networks:
+      - technet
     environment:
       POSTGRES_DB: tech_intel
       POSTGRES_USER: tech
@@ -17,6 +29,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    networks:
+      - technet
     environment:
       DATABASE_URL: postgresql+psycopg2://tech:tech@db:5432/tech_intel
       DATA_DIR: /app/data
@@ -28,11 +42,21 @@ services:
       TECHDB_AGENT_API_KEY: ${TECHDB_AGENT_API_KEY}
       TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
       TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-glm-5.2}
+      TECHDB_AGENT_ALLOWED_MODELS: ${TECHDB_AGENT_ALLOWED_MODELS:-glm-5.2,glm-5.1,glm-4.5-flash}
+      TECHDB_AGENT_MAX_RETRIES: ${TECHDB_AGENT_MAX_RETRIES:-2}
+      TECHDB_AGENT_RETRY_BASE_DELAY_SECONDS: ${TECHDB_AGENT_RETRY_BASE_DELAY_SECONDS:-2}
+      TECHDB_AGENT_HISTORY_MAX_MESSAGES: ${TECHDB_AGENT_HISTORY_MAX_MESSAGES:-60}
+      TECHDB_AGENT_HISTORY_MAX_CHARS: ${TECHDB_AGENT_HISTORY_MAX_CHARS:-60000}
+      TECHDB_AGENT_RETRIEVAL_MAX_CHARS: ${TECHDB_AGENT_RETRIEVAL_MAX_CHARS:-12000}
+      TECHDB_AGENT_MAX_OUTPUT_TOKENS: ${TECHDB_AGENT_MAX_OUTPUT_TOKENS:-1800}
       TECHDB_KB_PATH: /knowledge-base
+      BREADTH_DATA_PATH: /app/breadth_data
     volumes:
       - ./backend/scripts:/app/scripts:ro
       - ${TECHDB_KB_PATH:-./external-data/knowledge-base}:/knowledge-base:ro
+      - ${TECHDB_CHATBOT_PACKAGE_PATH:-./external-data/chatbot-package}:/chatbot-integration-package:ro
       - ${TECHDB_DELIVERY_VIEWS_PATH:-./external-data/delivery-views}:/app/delivery_views:ro
+      - ./breadth/data:/app/breadth_data:ro
     depends_on:
       db:
         condition: service_healthy
@@ -45,6 +69,8 @@ services:
 
   web:
     image: nginx:1.27-alpine
+    networks:
+      - technet
     depends_on:
       - api
     ports:
@@ -57,6 +83,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    networks:
+      - technet
     command: uvicorn app.readonly_agent:app --host 0.0.0.0 --port 8765
     environment:
       DATABASE_URL: postgresql+psycopg2://tech:tech@db:5432/tech_intel
@@ -66,6 +94,7 @@ services:
       TECHDB_AGENT_API_KEY: ${TECHDB_AGENT_API_KEY}
       TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
       TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-glm-5.2}
+      TECHDB_AGENT_ALLOWED_MODELS: ${TECHDB_AGENT_ALLOWED_MODELS:-glm-5.2,glm-5.1,glm-4.5-flash}
       TECHDB_AGENT_AI_TIMEOUT_SECONDS: ${TECHDB_AGENT_AI_TIMEOUT_SECONDS:-90}
     volumes:
       - ${TECHDB_KB_PATH:-./external-data/knowledge-base}:/knowledge-base:ro

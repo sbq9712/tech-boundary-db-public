@@ -168,6 +168,7 @@ def _to_info_item_out(item: InfoItem) -> InfoItemOut:
         alert_reviewer_comment=item.alert_reviewer_comment,
         alert_dismiss_reason=item.alert_dismiss_reason,
         alert_color=item.alert_color,
+        alert_created_at=item.alert_created_at,
         alert_expires_at=item.alert_expires_at,
         last_modified_by=item.last_modified_by,
         created_by=item.created_by,
@@ -183,6 +184,7 @@ def _apply_alert_payload(item: InfoItem, alert: AlertUpsertIn | None) -> None:
         item.alert_body = None
         item.alert_reviewer_comment = None
         item.alert_color = None
+        item.alert_created_at = None
         item.alert_expires_at = None
         item.alert_dismiss_reason = alert.dismiss_reason if alert else None
         return
@@ -201,6 +203,8 @@ def _apply_alert_payload(item: InfoItem, alert: AlertUpsertIn | None) -> None:
             raise HTTPException(status_code=400, detail="expires_at must be in the future")
 
     item.alert_status = "active"
+    if item.alert_created_at is None:
+        item.alert_created_at = datetime.now(timezone.utc)
     item.alert_source = "manual"
     item.alert_manual_override = True
     item.alert_title = alert.alert_title
@@ -271,6 +275,52 @@ def _apply_upsert_fields(item: InfoItem, payload: InfoItemDraftIn | InfoItemPubl
     item.info_types = payload.info_types
     item.tags = payload.tags
     item.classification = payload.classification
+
+
+@router.get("/info-items/alerts")
+def get_active_alerts(
+    db: Session = Depends(get_db),
+) -> dict:
+    """Return info_items with active alerts for the home portal panel."""
+    stmt = (
+        select(InfoItem)
+        .options(selectinload(InfoItem.domains))
+        .where(InfoItem.alert_status == "active")
+        .order_by(InfoItem.alert_expires_at.desc().nullslast(), InfoItem.updated_at.desc())
+        .limit(30)
+    )
+    items = db.scalars(stmt).all()
+    domain_name_by_id = {
+        str(row["id"]): str(row.get("name") or "")
+        for row in _get_domains()
+    }
+    return {
+        "total": len(items),
+        "items": [
+            {
+                "id": str(item.id),
+                "title": item.title,
+                "alert_title": item.alert_title or item.title,
+                "alert_body": item.alert_body or "",
+                "alert_color": item.alert_color or "normal",
+                "published_at": item.published_at.isoformat() if item.published_at else "",
+                "alert_created_at": (item.alert_created_at or item.updated_at).isoformat() if (item.alert_created_at or item.updated_at) else "",
+                "alert_time": (item.alert_created_at or item.updated_at).isoformat() if (item.alert_created_at or item.updated_at) else "",
+                "domain_name": next(
+                    (
+                        domain_name_by_id.get(str(relation.domain_id), "")
+                        for relation in item.domains
+                        if domain_name_by_id.get(str(relation.domain_id), "")
+                    ),
+                    "待归类",
+                ),
+                "is_new_tech": item.is_new_tech,
+                "reviewer_comment": item.alert_reviewer_comment or "",
+                "target_url": "#breadth",
+            }
+            for item in items
+        ],
+    }
 
 
 @router.get("/info-items", response_model=list[InfoItemOut])

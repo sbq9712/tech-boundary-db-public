@@ -43,6 +43,7 @@ class InfoItem(Base):
     alert_reviewer_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     alert_dismiss_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     alert_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    alert_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     alert_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_modified_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(64), nullable=True)

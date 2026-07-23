@@ -93,6 +93,7 @@ class InfoItemOut(BaseModel):
     alert_reviewer_comment: str | None
     alert_dismiss_reason: str | None
     alert_color: str | None
+    alert_created_at: datetime | None
     alert_expires_at: datetime | None
     last_modified_by: str | None
     created_by: str | None

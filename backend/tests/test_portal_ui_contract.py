@@ -17,38 +17,86 @@ def load_served_js() -> str:
 
 def test_sidebar_is_visually_stable():
     css = load_served_css()
-    assert "--side-collapsed:248px;--side-expanded:248px" in css
-    assert ".sidebar{position:fixed" in css
-    assert "height:100dvh" in css.split(".sidebar{", 1)[1].split("}", 1)[0]
+    sidebar = css.split(".sidebar{", 1)[1].split("}", 1)[0]
+    assert "width:248px" in sidebar
+    assert "flex-shrink:0" in sidebar
+    assert "height:100dvh" in css.split(".app-shell{", 1)[1].split("}", 1)[0]
     assert "transition:width" not in css
-    assert ".brand-copy,.nav-text,.account-copy,.account-actions{opacity:1}" in css
-    workspace = css.split(".workspace{", 1)[1].split("}", 1)[0]
-    assert "margin-left:var(--side-collapsed)" in workspace
-    assert "overflow:hidden" in workspace
+    assert "overflow:hidden" in css.split(".workspace{", 1)[1].split("}", 1)[0]
+    assert "overflow-y:auto" in css.split(".main{", 1)[1].split("}", 1)[0]
 
 
-def test_home_layout_keeps_single_hot_intel_panel_right_of_conversation():
+def test_home_layout_is_boundary_alert_and_knowledge_workbench():
     css = load_served_css()
     js = load_served_js()
-    assert ".home-main{height:100%;display:grid;grid-template-columns:minmax(520px,1fr) 440px" in css
-    assert ".home-insights" in css
-    assert "function renderInsightPanels(){return insightCard('热点情报推送'" in js
-    assert "insightCard('行业参数边界'" not in js
-    assert "insightCard('相关行业预警情报'" not in js
-    assert "function dashboardPanel" not in js
+    assert "grid-template-rows:auto auto minmax(360px,1fr)" in css
+    assert ".home-boundary-grid" in css
+    assert ".home-alert-table" in css
+    assert ".home-knowledge-section" in css
+    assert "技术边界" in js
+    assert "技术预警" in js
+    assert "与知识库互动" in js
+    assert "loadHomeBoundaries" in js
+    assert "sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0))" in js
+    assert "是什么" in js and "关键指标边界" in js
+    assert "情报发布" in js and "预警生成" in js
+    assert "/breadth/data/processed/alert-records.json" in js
+    assert "knowledgeToggle" in js
+    assert "knowledge_interaction_expanded" in js
+    assert "knowledge-expanded" in js
+    assert "最新研究结论" not in js
+    assert "高信号变化" not in js
+    assert "基于知识库的问答" not in js
 
 
 def test_answer_contains_inline_resource_slots_and_enter_send():
     js = load_served_js()
     css = load_served_css()
+    assistant_text = css.split(".conversation-history .assistant-msg .response-text{", 1)[1].split("}", 1)[0]
+    user_text = css.split(".conversation-history .user-msg p{", 1)[1].split("}", 1)[0]
+    emphasis = css.split(".conversation-history .assistant-msg .response-text strong{", 1)[1].split("}", 1)[0]
+    assert "font-size:15px" in assistant_text
+    assert "font-size:15px" in user_text
+    assert "font-weight:700" in emphasis
+    assert "background:var(--brand-bg)" in emphasis
+    assert ".conversation-history .assistant-msg > strong" in css
     assert "function renderInlineResources" in js
-    assert "相关文档" in js
+    assert "检索：${stats.knowledge_base||0} 篇知识库" in js
+    assert "stats.sources||0" not in js
+    assert "stats.parameters||0" not in js
+    assert "回答实际引用" in js
+    assert "K=知识库文档" in js
     assert "参数边界" in js
     assert "预警情报" in js
     assert "相关仪表盘" in js
     assert "home_query_draft" in js
     assert "keydown" in js and "Enter" in js
     assert ".inline-resources" in css
+    assert "if(/^[-*_]{3,}$/.test(trimmed))" in js
+    assert "function normalizeChatSoftBreaks" in js
+    assert "!isSentenceEnd(previous)&&next&&!isBlockStart(next)" in js
+
+
+def test_home_exposes_model_selector_and_sends_model_param():
+    js = load_served_js()
+    css = load_served_css()
+    assert "modelSelect" in js
+    assert "assistant_model" in js
+    assert "/api/assistant/models" in js
+    assert "glm-5.1" in js
+    assert "method:'POST'" in js
+    assert "session_id:activeSessionId||null" in js
+    assert "AbortController" in js
+    assert ".model-select" in css
+
+
+def test_home_exposes_persisted_conversation_controls():
+    js = load_served_js()
+    assert "/api/conversations" in js
+    assert "sessionSelect" in js
+    assert "newConversationBtn" in js
+    assert "loadConversationMessages" in js
+    assert "panel_recommendations:data.panel_recommendations" in js
 
 
 def test_industry_map_page_uses_server_tree():
@@ -64,3 +112,21 @@ def test_industry_map_page_uses_server_tree():
     assert ".mindmap-root" in css
     assert ".mind-card" in css
     assert ".leaf-tags" in css
+    assert "category_counts" in js
+    assert "/api/delivery-intel/category-counts" in js
+    assert "(node.path||[]).join('/')" in js
+
+
+def test_deep_research_metrics_use_commercial_readiness_statuses():
+    js = load_served_js()
+    css = load_served_css()
+    assert "理论值 / 需求值 / 实际值分列" in js
+    assert "进一步调研方向" in js
+    assert "✓ 已达商用" in js
+    assert "! 未达商用" in js
+    assert "? 缺数据" in js
+    assert "? 理论不可达" in js
+    assert "verificationBadge" not in js
+    assert "isSofcReport?'':indicatorGrid('关键指标（经济）'" in js
+    assert ".commercial-status-missing" in css
+    assert "color:var(--red);background:var(--red-bg)" in css

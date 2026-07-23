@@ -5,7 +5,7 @@ from app.models.source import Source, Evidence
 from app.models.parameter_observation import ParameterObservation
 from app.models.knowledge_node import TechnologyNode, IndustryNode, TechIndustryRelation, InfoItemTechNode, InfoItemIndNode
 from app.models.knowledge_artifact import KnowledgeArtifact
-from app.models.conversation import ConversationSession, ConversationMessage, UserResearchProfile, UserResearchMemory
+from app.models.conversation import ConversationSession, ConversationMessage, ConversationAgentRun, UserResearchProfile, UserResearchMemory
 
 __all__ = [
     "Domain", "InfoItem", "InfoItemDomain", "User",
@@ -13,5 +13,5 @@ __all__ = [
     "ParameterObservation",
     "TechnologyNode", "IndustryNode", "TechIndustryRelation", "InfoItemTechNode", "InfoItemIndNode",
     "KnowledgeArtifact",
-    "ConversationSession", "ConversationMessage", "UserResearchProfile", "UserResearchMemory",
+    "ConversationSession", "ConversationMessage", "ConversationAgentRun", "UserResearchProfile", "UserResearchMemory",
 ]

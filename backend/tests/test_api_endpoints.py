@@ -184,6 +184,93 @@ def test_assistant_status_ok():
     assert "mode" in payload
 
 
+def test_assistant_models_lists_default_and_fallbacks():
+    with TestClient(app) as c:
+        c.headers.update({"Authorization": f"Bearer {create_token('admin1')}"})
+        response = c.get("/api/assistant/models")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["default_model"]
+    assert payload["default_model"] in payload["models"]
+    assert "glm-5.1" in payload["models"]
+    assert "glm-4.5-flash" in payload["models"]
+
+
+def test_assistant_stream_accepts_selected_model(monkeypatch):
+    from app.routers import assistant_stream
+
+    captured = {}
+
+    async def fake_stream_agent_response(query, session_id, db, selected_model=None, current_user=None):
+        captured["query"] = query
+        captured["session_id"] = session_id
+        captured["selected_model"] = selected_model
+        captured["current_user"] = current_user
+        yield 'event: done\ndata: {"citations": [], "retrieval_summary": {}}\n\n'
+
+    class FakeConversation:
+        id = "11111111-1111-1111-1111-111111111111"
+
+    class FakeDb:
+        def get(self, *_args):
+            return None
+
+    def fake_db():
+        yield FakeDb()
+
+    monkeypatch.setattr(assistant_stream, "stream_agent_response", fake_stream_agent_response)
+    monkeypatch.setattr(assistant_stream, "_resolve_session", lambda *_args: FakeConversation())
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with TestClient(app) as c:
+            c.headers.update({"Authorization": f"Bearer {create_token('admin1')}"})
+            response = c.post("/api/assistant/stream", json={"query": "SOFC", "model": "glm-4.5-flash"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 200
+    assert captured == {
+        "query": "SOFC",
+        "session_id": FakeConversation.id,
+        "selected_model": "glm-4.5-flash",
+        "current_user": "admin1",
+    }
+
+
+def test_assistant_stream_rejects_session_owned_by_another_user():
+    from app.routers.assistant_stream import _resolve_session
+
+    class OtherUsersSession:
+        user_id = "admin2"
+
+    class FakeDb:
+        def get(self, *_args):
+            return OtherUsersSession()
+
+    with pytest.raises(Exception) as exc_info:
+        _resolve_session(FakeDb(), "admin1", __import__("uuid").UUID("11111111-1111-1111-1111-111111111111"), "SOFC")
+    assert getattr(exc_info.value, "status_code", None) == 404
+
+
+def test_assistant_stream_rejects_unknown_model():
+    class FakeDb:
+        def get(self, *_args):
+            return None
+
+    def fake_db():
+        yield FakeDb()
+
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        with TestClient(app) as c:
+            c.headers.update({"Authorization": f"Bearer {create_token('admin1')}"})
+            response = c.get("/api/assistant/stream?query=SOFC&model=not-a-real-model")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 400
+
+
 def test_assistant_query_placeholder_ok(monkeypatch):
     monkeypatch.setenv("HERMES_AGENT_MODE", "mock")
     class FakeDb:

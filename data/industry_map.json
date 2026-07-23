@@ -154,27 +154,27 @@
                     "children": [
                       {
                         "id": "cb7a5166-f80c-4d6d-9b2e-79a6f60bdb35",
-                        "title": "热化学过程",
+                        "title": "传统化工",
                         "depth": 4,
                         "path": [
                           "零碳产业",
                           "物质循环",
                           "有机物（碳循环）",
                           "有机工业",
-                          "热化学过程"
+                          "传统化工"
                         ],
                         "children": [
                           {
                             "id": "5a04eeb7-9077-43e6-a702-7f76cd3cfe79",
-                            "title": "石油化工",
+                            "title": "C1化工",
                             "depth": 5,
                             "path": [
                               "零碳产业",
                               "物质循环",
                               "有机物（碳循环）",
                               "有机工业",
-                              "热化学过程",
-                              "石油化工"
+                              "传统化工",
+                              "C1化工"
                             ],
                             "children": [],
                             "coverage": {
@@ -190,15 +190,15 @@
                           },
                           {
                             "id": "fadbe09e-9ec6-407c-82a7-78aa8cfd31c8",
-                            "title": "煤化工",
+                            "title": "烯烃和芳烃",
                             "depth": 5,
                             "path": [
                               "零碳产业",
                               "物质循环",
                               "有机物（碳循环）",
                               "有机工业",
-                              "热化学过程",
-                              "煤化工"
+                              "传统化工",
+                              "烯烃和芳烃"
                             ],
                             "children": [],
                             "coverage": {
@@ -214,15 +214,39 @@
                           },
                           {
                             "id": "136253dd-0eb0-4d98-9fc6-6c77fd56c7ff",
-                            "title": "天然气化工",
+                            "title": "高分子材料",
                             "depth": 5,
                             "path": [
                               "零碳产业",
                               "物质循环",
                               "有机物（碳循环）",
                               "有机工业",
-                              "热化学过程",
-                              "天然气化工"
+                              "传统化工",
+                              "高分子材料"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "c9acb6a1-9dac-4c3c-8c62-e3e7806e1815",
+                            "title": "石油化工",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "有机工业",
+                              "传统化工",
+                              "石油化工"
                             ],
                             "children": [],
                             "coverage": {
@@ -438,7 +462,223 @@
                       "有机物（碳循环）",
                       "CCUS"
                     ],
-                    "children": [],
+                    "children": [
+                      {
+                        "id": "b811856b-cff0-43f4-af89-ba811c6a4ec7",
+                        "title": "捕集",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "有机物（碳循环）",
+                          "CCUS",
+                          "捕集"
+                        ],
+                        "children": [
+                          {
+                            "id": "3c0b4627-3328-4964-be2e-f21fef33e501",
+                            "title": "吸附法",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "捕集",
+                              "吸附法"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "81b328b1-b16e-429a-8af1-f1c360e45a3f",
+                            "title": "吸收法",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "捕集",
+                              "吸收法"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "546a0b32-d8fc-429d-bbe2-0ff81f4f3265",
+                            "title": "膜分离",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "捕集",
+                              "膜分离"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "75f812bc-80b1-4bc5-b9fa-259f45a7b2e8",
+                            "title": "化学链",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "捕集",
+                              "化学链"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          }
+                        ],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "45e84de3-0190-485a-848f-2a7eed45cfea",
+                        "title": "利用",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "有机物（碳循环）",
+                          "CCUS",
+                          "利用"
+                        ],
+                        "children": [
+                          {
+                            "id": "a7457d9d-9ed7-4e6a-b9b5-53d51faf8571",
+                            "title": "CO2重整",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "利用",
+                              "CO2重整"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "9bbe2898-649e-4bcd-bdf3-a074f6fcc54c",
+                            "title": "CO2矿化",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "利用",
+                              "CO2矿化"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          }
+                        ],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "2b8e56c2-672f-4434-a0e7-ae9f7b290dbf",
+                        "title": "封存",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "有机物（碳循环）",
+                          "CCUS",
+                          "封存"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
                     "coverage": {
                       "intel": false,
                       "special_issue": false,
@@ -1414,7 +1654,104 @@
                           "化学能",
                           "氢基能源"
                         ],
-                        "children": [],
+                        "children": [
+                          {
+                            "id": "f117a9bc-fb83-47e6-ad9a-fd94b09609d3",
+                            "title": "制氢",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "化学能",
+                              "氢基能源",
+                              "制氢"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "aea70d76-3ae1-48a1-a073-9133d63fc1dd",
+                            "title": "储氢",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "化学能",
+                              "氢基能源",
+                              "储氢"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "2e5f2cc7-0eea-4bb4-9d17-5c3f46075b40",
+                            "title": "运氢",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "化学能",
+                              "氢基能源",
+                              "运氢"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "73e609d5-79e5-413a-b324-2efc27206df5",
+                            "title": "用氢",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "化学能",
+                              "氢基能源",
+                              "用氢"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          }
+                        ],
                         "coverage": {
                           "intel": false,
                           "special_issue": false,
@@ -1428,14 +1765,14 @@
                       },
                       {
                         "id": "14716c45-fcdd-4a7b-b91f-3a6fc04e880c",
-                        "title": "可再生燃料",
+                        "title": "金属储能",
                         "depth": 4,
                         "path": [
                           "零碳产业",
                           "能量循环",
                           "能量存储",
                           "化学能",
-                          "可再生燃料"
+                          "金属储能"
                         ],
                         "children": [],
                         "coverage": {
@@ -1588,7 +1925,7 @@
           "dashboard": null
         }
       },
-      "node_count": 69,
+      "node_count": 71,
       "max_depth": 5
     },
     {
@@ -1742,6 +2079,27 @@
                   "special_issue": null,
                   "dashboard": null
                 }
+              },
+              {
+                "id": "387afcad-effc-43d4-a92a-0a91d12b3992",
+                "title": "AI4S",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "AI软件层",
+                  "AI4S"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
               }
             ],
             "coverage": {
@@ -1835,6 +2193,27 @@
                   "AI与智能科技",
                   "AI硬件层",
                   "数据中心"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "1593125b-9d44-443d-88c4-1ef795593e35",
+                "title": "算力能源基础设施",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "AI硬件层",
+                  "算力能源基础设施"
                 ],
                 "children": [],
                 "coverage": {
@@ -2019,7 +2398,7 @@
           "dashboard": null
         }
       },
-      "node_count": 20,
+      "node_count": 22,
       "max_depth": 3
     },
     {
@@ -2050,6 +2429,27 @@
                   "通用技术",
                   "检测和表征",
                   "先进科学仪器"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "52be8a6e-e2f9-44f9-b552-a80e7fc05bc2",
+                "title": "测试和表征技术",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "检测和表征",
+                  "测试和表征技术"
                 ],
                 "children": [],
                 "coverage": {
@@ -2147,6 +2547,28 @@
                       "通信和运输",
                       "电网技术",
                       "其它电网技术"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "cbdf0266-740e-4477-89bf-30bba5115030",
+                    "title": "电力电网系统与政策",
+                    "depth": 3,
+                    "path": [
+                      "通用技术",
+                      "通信和运输",
+                      "电网技术",
+                      "电力电网系统与政策"
                     ],
                     "children": [],
                     "coverage": {
@@ -2320,12 +2742,12 @@
             "children": [
               {
                 "id": "2c5870f4-176d-43e6-852d-95d0789e8e5e",
-                "title": "耐热材料",
+                "title": "高温结构材料",
                 "depth": 2,
                 "path": [
                   "通用技术",
                   "材料工程",
-                  "耐热材料"
+                  "高温结构材料"
                 ],
                 "children": [],
                 "coverage": {
@@ -2341,12 +2763,12 @@
               },
               {
                 "id": "67a88b91-d787-413c-8d60-434a1adcc666",
-                "title": "强度材料",
+                "title": "密封和防腐蚀材料",
                 "depth": 2,
                 "path": [
                   "通用技术",
                   "材料工程",
-                  "强度材料"
+                  "密封和防腐蚀材料"
                 ],
                 "children": [],
                 "coverage": {
@@ -2362,12 +2784,12 @@
               },
               {
                 "id": "0abdd450-6073-41c7-8985-9b7188851396",
-                "title": "密封材料",
+                "title": "超导材料",
                 "depth": 2,
                 "path": [
                   "通用技术",
                   "材料工程",
-                  "密封材料"
+                  "超导材料"
                 ],
                 "children": [],
                 "coverage": {
@@ -2383,12 +2805,12 @@
               },
               {
                 "id": "7b305e5c-7323-4498-86d2-7b251aa96eea",
-                "title": "耐腐蚀材料",
+                "title": "光电和磁性材料",
                 "depth": 2,
                 "path": [
                   "通用技术",
                   "材料工程",
-                  "耐腐蚀材料"
+                  "光电和磁性材料"
                 ],
                 "children": [],
                 "coverage": {
@@ -2403,13 +2825,34 @@
                 }
               },
               {
-                "id": "3416e5ca-31c9-4f08-8c43-98326ea62bb0",
-                "title": "其它先进材料",
+                "id": "c231de3c-2ddd-4e86-aef3-35337220b091",
+                "title": "热电材料",
                 "depth": 2,
                 "path": [
                   "通用技术",
                   "材料工程",
-                  "其它先进材料"
+                  "热电材料"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "59a2330d-820f-4bf9-857a-d8d5d936fe42",
+                "title": "光热材料",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "材料工程",
+                  "光热材料"
                 ],
                 "children": [],
                 "coverage": {
@@ -2447,11 +2890,11 @@
           "dashboard": null
         }
       },
-      "node_count": 20,
+      "node_count": 22,
       "max_depth": 3
     }
   ],
   "sheet_count": 3,
-  "total_node_count": 109,
+  "total_node_count": 115,
   "max_depth": 5
 }
