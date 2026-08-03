@@ -184,7 +184,7 @@
         if(!r.ok){ const j=await r.json().catch(()=>({})); showResult(j.detail||("上传失败 "+r.status),"err"); btn.disabled=false; btn.textContent="上传"; return; }
         const data=await r.json();
         const pendingCount=data.files.filter(f=>f.classification_status==="pending").length;
-        showResult("成功落盘 "+data.count+" 个文件"+(pendingCount?"，后台正在分类":""),"ok");
+        showResult("成功落盘 "+data.count+" 个文件，后台正在"+(pendingCount?"分类和索引":"建立索引"),"ok");
         pending=[]; render();
         setTimeout(()=>{ location.href="uploads_library.html"; },1200);
       }catch(e){

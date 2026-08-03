@@ -5,11 +5,13 @@
 ## 架构
 
 ```
-用户提问 → bge-m3 嵌入 → 余弦相似度搜索 → Top-20 记录 → GLM-5.2 流式生成 → 带引用的回答
+用户提问 → bge-m3 嵌入 → 基线 + 上传增量索引混合检索 → Top-20 记录 → GLM-5.2 流式生成 → 带引用的回答
 ```
 
 ### 组件
 - **嵌入模型**: bge-m3 (BAAI), 1024维, 本地 CPU 推理
+- **增量资料**: 上传服务通过 `POST /api/index/upsert` 写入独立向量/BM25 索引；基线索引保持只读
+- **增量持久化**: `/app/data/lightrag/incremental/index.pkl`，由 Compose 的 `qa_incremental_data` 卷保存
 - **LLM**: GLM-5.2 (ZAI API), 用于回答生成
 - **向量索引**: numpy 余弦相似度 (40K+ 记录)
 - **知识图谱**: LightRAG 实体抽取 (节点数持续扩展中)
@@ -49,6 +51,17 @@ qa-backend/
 服务器不运行 `setup.sh`，不从 Hugging Face 下载模型，也不通过
 Cloudflare 或开发者本机转发。门户和 QA 容器在同一 Docker 网络内通过
 `http://canonical-qa:8765` 通信。
+
+### 上传资料索引接口
+
+门户 API 在文件完成分类和文本解析后，向 canonical QA 发送一份文档的 chunk、77 类分类、密级、来源和 SHA-256。接口会为 chunk 生成 bge-m3 向量、重建增量 BM25，并原子替换同一 `document_id` 的旧版本：
+
+```text
+POST /api/index/upsert
+X-TechDB-Index-Token: <TECHDB_QA_INDEX_TOKEN>
+```
+
+该接口只供同一 Docker 网络内的 API 服务使用。设置 `TECHDB_QA_INDEX_TOKEN` 后，未携带正确令牌的请求会被拒绝。
 
 ### 1. 构建向量索引
 ```bash

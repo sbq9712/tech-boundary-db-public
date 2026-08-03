@@ -26,6 +26,9 @@ TECHDB_AGENT_PORT=8766
 TECHDB_QA_SERVICE_URL=http://canonical-qa:8765
 # CPU 环境首次加载 bge-m3 约需 50 秒，检索超时需留足余量。
 TECHDB_QA_SERVICE_TIMEOUT_SECONDS=120
+TECHDB_QA_INDEX_TIMEOUT_SECONDS=300
+TECHDB_QA_INDEX_TOKEN=<随机内部写入令牌>
+TECHDB_QA_INCREMENTAL_VOLUME=techdb_qa_incremental_0801
 ```
 
 `deploy.sh` 会创建并检查上传目录、准备 PostgreSQL 卷、优先复用已导入的 `0801` 镜像，并执行 Alembic 迁移。只有镜像缺失或 `TECHDB_FORCE_BUILD=true` 时才从源码构建。访问入口为 `http://<服务器>:8080`。
@@ -37,6 +40,7 @@ TECHDB_QA_SERVICE_TIMEOUT_SECONDS=120
 | PostgreSQL | `${TECHDB_PG_VOLUME}` Docker 卷 | 元数据、分类状态、校验和 |
 | 上传对象 | `${TECHDB_UPLOAD_HOST_PATH}` | 必须是服务器持久盘目录 |
 | canonical QA 资产 | `techdb-canonical-qa:0801` 镜像 | 内置 bge-m3、既有索引、记录与图谱；不在服务器下载 |
+| 上传增量索引 | `${TECHDB_QA_INCREMENTAL_VOLUME}` Docker 卷 | 新资料的 bge-m3 向量、BM25 和 chunk 元数据；不修改基线 |
 | 知识库 | `${TECHDB_KB_PATH}` | 只读挂载 |
 | 交付视图 | `${TECHDB_DELIVERY_VIEWS_PATH}` | 只读挂载 |
 | Chatbot 包 | `${TECHDB_CHATBOT_PACKAGE_PATH}` | 只读挂载 |
@@ -45,7 +49,7 @@ TECHDB_QA_SERVICE_TIMEOUT_SECONDS=120
 
 ## 分类目录
 
-新上传使用广度追踪 77 项目录，版本记录在 `breadth/data/taxonomy-manifest.json`。旧行业图景位于 `data/legacy-taxonomy/`，仅用于历史展示，不对历史资料做全量重分类。新上传的 embedding 当前未启用；canonical QA 则只消费其既有索引，不能用旧 Markdown 或 Chatbot 包静默替代。
+新上传使用广度追踪 77 项目录，版本记录在 `breadth/data/taxonomy-manifest.json`。旧行业图景位于 `data/legacy-taxonomy/`，仅用于历史展示，不对历史资料做全量重分类。新上传在分类后自动分块并调用 canonical QA 的内部 embedding 接口；被判定为“不相关”或无法提取文本的文件不进入向量索引。canonical QA 以既有索引为基线，不能用旧 Markdown 或 Chatbot 包静默替代。
 
 ## Canonical QA 资产边界
 
@@ -71,7 +75,7 @@ curl -I http://localhost:8080/.git/config
 curl -I http://localhost:8080/backend/app/main.py
 ```
 
-预期迁移为 `0019_clear_legacy_conversations (head)`，健康检查返回 `{"status":"ok"}`，三个敏感路径返回 404。再使用管理员账号从上传页完成一次真实上传，检查服务器目标目录、资料库分类状态和鉴权下载。
+预期迁移为 `0020_upload_embedding_state (head)`，健康检查返回 `{"status":"ok"}`，三个敏感路径返回 404。再使用管理员账号从上传页完成一次真实上传，检查服务器目标目录、资料库分类状态、`embedding_status=ready` 和鉴权下载。
 
 ## 常用命令
 

@@ -30,6 +30,11 @@ MAX_BATCH_FILES = 20
 MAX_BATCH_BYTES = 200 * 1024 * 1024
 STREAM_CHUNK_BYTES = 1024 * 1024
 MAX_CLASSIFICATION_TEXT_CHARS = 12_000
+MAX_INDEX_TEXT_CHARS = 500_000
+INDEX_CHUNK_CHARS = 2_000
+INDEX_CHUNK_OVERLAP = 200
+INDEX_MODEL = "bge-m3"
+INDEX_DIM = 1024
 
 ALLOWED_EXTS: dict[str, bool] = {
     ".pdf": True,
@@ -204,36 +209,40 @@ def classification_status_for(category: str) -> str:
     return "classified"
 
 
-def _append_limited(parts: list[str], text: str) -> bool:
+def _append_limited(parts: list[str], text: str, max_chars: int = MAX_CLASSIFICATION_TEXT_CHARS) -> bool:
     if not text:
         return False
     current = sum(len(item) for item in parts)
-    if current >= MAX_CLASSIFICATION_TEXT_CHARS:
+    if current >= max_chars:
         return True
-    parts.append(text[: MAX_CLASSIFICATION_TEXT_CHARS - current])
-    return sum(len(item) for item in parts) >= MAX_CLASSIFICATION_TEXT_CHARS
+    parts.append(text[: max_chars - current])
+    return sum(len(item) for item in parts) >= max_chars
 
 
-def extract_text(path: Path, original_filename: str) -> str | None:
+def extract_text(
+    path: Path,
+    original_filename: str,
+    max_chars: int = MAX_CLASSIFICATION_TEXT_CHARS,
+) -> str | None:
     ext = file_extension(original_filename)
     try:
         if ext in (".md", ".markdown", ".txt", ".csv"):
             with open(path, "rb") as handle:
-                raw = handle.read(MAX_CLASSIFICATION_TEXT_CHARS * 4)
-            return raw.decode("utf-8", errors="replace")[:MAX_CLASSIFICATION_TEXT_CHARS].strip() or None
+                raw = handle.read(max_chars * 4)
+            return raw.decode("utf-8", errors="replace")[:max_chars].strip() or None
 
         parts: list[str] = []
         if ext == ".pdf":
             from pypdf import PdfReader
 
             for page in PdfReader(str(path)).pages:
-                if _append_limited(parts, page.extract_text() or ""):
+                if _append_limited(parts, page.extract_text() or "", max_chars):
                     break
         elif ext == ".docx":
             from docx import Document
 
             for paragraph in Document(str(path)).paragraphs:
-                if _append_limited(parts, paragraph.text):
+                if _append_limited(parts, paragraph.text, max_chars):
                     break
         elif ext == ".xlsx":
             from openpyxl import load_workbook
@@ -244,7 +253,7 @@ def extract_text(path: Path, original_filename: str) -> str | None:
                 for worksheet in workbook.worksheets:
                     for row in worksheet.iter_rows(values_only=True):
                         text = "\t".join(str(cell) for cell in row if cell is not None)
-                        if _append_limited(parts, text):
+                        if _append_limited(parts, text, max_chars):
                             stop = True
                             break
                     if stop:
@@ -360,21 +369,89 @@ def _commit_processing_result(db, file_id: uuid.UUID, **values) -> bool:
     return updated.rowcount == 1
 
 
-def classify_uploaded_file(file_id: str | uuid.UUID) -> bool:
+def chunk_text(text: str) -> list[dict[str, str]]:
+    """Create deterministic overlapping chunks suitable for bge-m3."""
+    normalized = "\n".join(line.strip() for line in text.splitlines() if line.strip()).strip()
+    if not normalized:
+        return []
+    chunks: list[dict[str, str]] = []
+    start = 0
+    index = 0
+    while start < len(normalized):
+        end = min(len(normalized), start + INDEX_CHUNK_CHARS)
+        if end < len(normalized):
+            boundary = normalized.rfind("\n", start + INDEX_CHUNK_CHARS // 2, end)
+            if boundary > start:
+                end = boundary
+        value = normalized[start:end].strip()
+        if value:
+            chunks.append({"chunk_id": str(index), "text": value})
+            index += 1
+        if end >= len(normalized):
+            break
+        start = end - INDEX_CHUNK_OVERLAP
+    return chunks
+
+
+def request_incremental_index(record: UploadedFile, text: str) -> dict:
+    """Send extracted text to canonical-qa for embedding and persistence."""
+    chunks = chunk_text(text)
+    if not chunks:
+        return {"chunk_count": 0, "status": "skipped"}
+    base_url = os.getenv("TECHDB_QA_SERVICE_URL", "").strip().rstrip("/")
+    if not base_url:
+        raise RuntimeError("TECHDB_QA_SERVICE_URL 未配置，无法写入增量索引")
+    timeout = float(os.getenv("TECHDB_QA_INDEX_TIMEOUT_SECONDS", "300"))
+    token = os.getenv("TECHDB_QA_INDEX_TOKEN", "").strip()
+    payload = {
+        "document_id": str(record.id),
+        "filename": record.original_filename,
+        "title": record.title or record.original_filename,
+        "primary_category": record.primary_category or "未分类",
+        "secondary_categories": record.secondary_categories or [],
+        "confidentiality": record.confidentiality,
+        "source_type": record.source_type,
+        "checksum_sha256": record.checksum_sha256,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "chunks": chunks,
+    }
+    headers = {"X-TechDB-Index-Token": token} if token else {}
+    with httpx.Client(timeout=timeout) as client:
+        response = client.post(f"{base_url}/api/index/upsert", headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+    if result.get("status") != "ready":
+        raise RuntimeError("canonical-qa 未确认增量索引已写入")
+    return result
+
+
+def _commit_embedding_result(db, file_id: uuid.UUID, **values) -> bool:
+    updated = db.execute(
+        update(UploadedFile)
+        .where(UploadedFile.id == file_id, UploadedFile.embedding_status == "processing")
+        .values(**values)
+    )
+    db.commit()
+    return updated.rowcount == 1
+
+
+def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
+    """Classify (when needed), embed and publish one uploaded file."""
     try:
         uid = file_id if isinstance(file_id, uuid.UUID) else uuid.UUID(str(file_id))
     except ValueError:
         return False
 
     db = SessionLocal()
+    classification_claimed = False
     try:
         claimed = db.execute(
             update(UploadedFile)
-            .where(UploadedFile.id == uid, UploadedFile.classification_status == "pending")
+            .where(UploadedFile.id == uid, UploadedFile.embedding_status == "pending")
             .values(
-                classification_status="processing",
-                classification_attempts=UploadedFile.classification_attempts + 1,
-                classification_error=None,
+                embedding_status="processing",
+                embedding_attempts=UploadedFile.embedding_attempts + 1,
+                embedding_error=None,
             )
         )
         db.commit()
@@ -384,72 +461,121 @@ def classify_uploaded_file(file_id: str | uuid.UUID) -> bool:
         record = db.get(UploadedFile, uid)
         if record is None:
             return False
-        taxonomy = load_taxonomy()
-        path = safe_upload_path(record.stored_filename)
-        if not path.is_file():
-            _commit_processing_result(
+        try:
+            path = safe_upload_path(record.stored_filename)
+        except ValueError:
+            path = None
+        if path is None or not path.is_file():
+            _commit_embedding_result(
                 db,
                 uid,
                 storage_status="missing",
-                classification_status="failed",
-                classification_error="落盘文件不存在",
+                embedding_status="failed",
+                embedding_error="落盘文件不存在",
             )
             return False
 
-        text = extract_text(path, record.original_filename)
-        if not text:
-            return _commit_processing_result(
+        text = extract_text(path, record.original_filename, MAX_INDEX_TEXT_CHARS)
+        if record.classification_status in {"pending", "processing"}:
+            taxonomy = load_taxonomy()
+            classification_claimed = True
+            if record.classification_status == "pending":
+                claimed_classification = db.execute(
+                    update(UploadedFile)
+                    .where(UploadedFile.id == uid, UploadedFile.classification_status == "pending")
+                    .values(
+                        classification_status="processing",
+                        classification_attempts=UploadedFile.classification_attempts + 1,
+                        classification_error=None,
+                    )
+                )
+                db.commit()
+                if claimed_classification.rowcount != 1:
+                    db.refresh(record)
+                else:
+                    classification_claimed = True
+            if not text:
+                _commit_processing_result(
+                    db,
+                    uid,
+                    taxonomy_version=taxonomy.version,
+                    primary_category="未分类",
+                    secondary_categories=[],
+                    classification_status="unclassified",
+                    classification_source="system",
+                    classification_reason="当前文件无法提取可分类文本",
+                    classification_error=None,
+                    classified_at=datetime.now(timezone.utc),
+                )
+            else:
+                result = request_ai_classification(text[:MAX_CLASSIFICATION_TEXT_CHARS], taxonomy)
+                db.refresh(record)
+                values = {
+                    "taxonomy_version": taxonomy.version,
+                    "primary_category": result["primary_category"],
+                    "secondary_categories": result["secondary_categories"],
+                    "classification_status": classification_status_for(result["primary_category"]),
+                    "classification_confidence": result["confidence"],
+                    "classification_source": "ai",
+                    "classification_reason": result["reason"],
+                    "classification_error": None,
+                    "classified_at": datetime.now(timezone.utc),
+                }
+                if record.title_source != "manual" and result["title"]:
+                    values["title"] = result["title"]
+                    values["title_source"] = "ai_filled"
+                if not record.confidentiality and result["confidentiality"] in AI_CONFIDENTIALITY_LEVELS:
+                    values["confidentiality"] = result["confidentiality"]
+                if not record.source_type and result["source_type"] in SOURCE_TYPES:
+                    values["source_type"] = result["source_type"]
+                if not _commit_processing_result(db, uid, **values):
+                    return False
+            db.refresh(record)
+
+        if not text or record.primary_category == "不相关":
+            return _commit_embedding_result(
                 db,
                 uid,
-                taxonomy_version=taxonomy.version,
-                primary_category="未分类",
-                secondary_categories=[],
-                classification_status="unclassified",
-                classification_source="system",
-                classification_reason="当前文件无法提取可分类文本",
-                classification_error=None,
-                classified_at=datetime.now(timezone.utc),
+                embedding_status="skipped",
+                embedding_model=INDEX_MODEL,
+                embedding_dim=INDEX_DIM,
+                embedding_error=("当前文件无法提取可索引文本" if not text else "资料被分类为不相关"),
+                chunk_count=0,
+                embedded_at=datetime.now(timezone.utc),
             )
 
-        result = request_ai_classification(text, taxonomy)
-        db.refresh(record)
-        if record.classification_status != "processing":
-            return False
-        values = {
-            "taxonomy_version": taxonomy.version,
-            "primary_category": result["primary_category"],
-            "secondary_categories": result["secondary_categories"],
-            "classification_status": classification_status_for(result["primary_category"]),
-            "classification_confidence": result["confidence"],
-            "classification_source": "ai",
-            "classification_reason": result["reason"],
-            "classification_error": None,
-            "classified_at": datetime.now(timezone.utc),
-        }
-        if record.title_source != "manual" and result["title"]:
-            values["title"] = result["title"]
-            values["title_source"] = "ai_filled"
-        if not record.confidentiality and result["confidentiality"] in AI_CONFIDENTIALITY_LEVELS:
-            values["confidentiality"] = result["confidentiality"]
-        if not record.source_type and result["source_type"] in SOURCE_TYPES:
-            values["source_type"] = result["source_type"]
-        return _commit_processing_result(db, uid, **values)
+        result = request_incremental_index(record, text)
+        return _commit_embedding_result(
+            db,
+            uid,
+            embedding_status="ready",
+            embedding_model=INDEX_MODEL,
+            embedding_dim=INDEX_DIM,
+            embedding_error=None,
+            chunk_count=int(result.get("chunk_count", 0)),
+            embedded_at=datetime.now(timezone.utc),
+        )
     except Exception as exc:
         db.rollback()
-        logger.warning("upload classification failed for %s: %s", file_id, exc)
+        message = str(exc)[:2000]
+        logger.warning("upload ingestion failed for %s: %s", file_id, message)
         try:
-            _commit_processing_result(
-                db,
-                uid,
-                classification_status="failed",
-                classification_error=str(exc)[:2000],
-            )
+            values = {"embedding_status": "failed", "embedding_error": message}
+            if classification_claimed:
+                values.update({"classification_status": "failed", "classification_error": message})
+            db.execute(update(UploadedFile).where(UploadedFile.id == uid).values(**values))
+            db.commit()
         except Exception:
             db.rollback()
-            logger.exception("failed to persist upload classification error for %s", file_id)
+            logger.exception("failed to persist upload ingestion error for %s", file_id)
         return False
     finally:
         db.close()
+
+
+def classify_uploaded_file(file_id: str | uuid.UUID) -> bool:
+    """Backward-compatible entry point; classification now includes embedding."""
+    return process_uploaded_file(file_id)
 
 
 def reconcile_upload_storage() -> None:
@@ -489,9 +615,19 @@ def recover_pending_uploads() -> None:
         )
         db.commit()
         pending_ids = db.scalars(
-            select(UploadedFile.id).where(UploadedFile.classification_status == "pending")
+            select(UploadedFile.id).where(
+                (UploadedFile.classification_status == "pending")
+                | (UploadedFile.embedding_status == "pending")
+                | (UploadedFile.embedding_status == "processing")
+            )
         ).all()
+        db.execute(
+            update(UploadedFile)
+            .where(UploadedFile.embedding_status == "processing")
+            .values(embedding_status="pending", embedding_error="服务重启后自动恢复")
+        )
+        db.commit()
     finally:
         db.close()
     for file_id in pending_ids:
-        classify_uploaded_file(file_id)
+        process_uploaded_file(file_id)

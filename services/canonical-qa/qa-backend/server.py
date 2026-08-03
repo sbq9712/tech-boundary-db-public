@@ -20,6 +20,7 @@ import json
 import pickle
 import asyncio
 import re
+import secrets
 from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
@@ -30,21 +31,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from config import (
     WORKING_DIR, llm_model_func, embedding_func,
     llm_stream_func, MODEL_NAME, LLM_CONFIGURED,
 )
+from incremental_index import IncrementalIndex
 
 REPO = Path(__file__).resolve().parent.parent
 LITE_PATH = REPO / "data" / "processed" / "all-records-lite.json"
 INDEX_FILE = WORKING_DIR / "vector_index_v2.pkl"
 BM25_FILE = WORKING_DIR / "bm25_index.pkl"
+INCREMENTAL_INDEX_FILE = Path(
+    os.getenv("TECHDB_QA_INCREMENTAL_INDEX_PATH", str(WORKING_DIR / "incremental" / "index.pkl"))
+)
 JIEBA_DICT = WORKING_DIR / "jieba_custom_dict.txt"
 
 # ── Global state ──
@@ -55,6 +60,7 @@ _bm25_meta = None     # BM25 metadata list
 _bm25_corpus = None   # tokenized corpus for BM25
 _records = None       # full records from all-records-lite.json
 _index_mapping_status = None
+_incremental_index = IncrementalIndex(INCREMENTAL_INDEX_FILE, embedding_func)
 
 # ── RRF parameters ──
 RRF_K = 60          # RRF constant (1/(rank+k))
@@ -184,7 +190,7 @@ def remap_index_metadata():
 
 async def vector_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
     """Search the vector index for the most similar records."""
-    if _vector_index is None:
+    if _vector_index is None and not _incremental_index.record_count:
         return []
 
     # Embed the query
@@ -192,47 +198,47 @@ async def vector_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
     query_vec = np.array(query_emb[0], dtype=np.float32)
     query_vec = query_vec / max(np.linalg.norm(query_vec), 1e-8)
 
-    # Cosine similarity (embeddings are pre-normalized)
-    scores = _vector_index @ query_vec
-
-    # Get top_k indices
-    top_indices = np.argsort(scores)[::-1][:top_k]
-
     results = []
-    for idx in top_indices:
-        meta = _index_meta[idx]
-        score = float(scores[idx])
-        results.append({
-            "meta": meta,
-            "score": score,
-        })
-    return results
+    if _vector_index is not None:
+        # Cosine similarity (embeddings are pre-normalized)
+        scores = _vector_index @ query_vec
+        top_indices = np.argsort(scores)[::-1][:top_k]
+        results.extend(
+            {"meta": _index_meta[int(idx)], "score": float(scores[int(idx)])}
+            for idx in top_indices
+        )
+    results.extend(_incremental_index.vector_search(query_vec, top_k))
+    return sorted(results, key=lambda item: item["score"], reverse=True)[:top_k]
 
 
 def bm25_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
     """Search the BM25 index for keyword matches."""
-    if _bm25_index is None:
-        return []
-
     import jieba
     tokens = list(jieba.cut_for_search(query))
-    if not tokens:
+    if not tokens and _bm25_index is None:
         return []
 
-    scores = _bm25_index.get_scores(tokens)
-    top_indices = np.argsort(scores)[::-1][:top_k]
-
+    base_results = []
+    if _bm25_index is not None and tokens:
+        scores = _bm25_index.get_scores(tokens)
+        top_indices = np.argsort(scores)[::-1][:top_k]
+        base_results.extend(
+            {"meta": _bm25_meta[int(idx)], "score": float(scores[int(idx)])}
+            for idx in top_indices
+            if float(scores[int(idx)]) > 0
+        )
+    incremental_results = _incremental_index.bm25_search(query, top_k)
+    # BM25 scores from separately built corpora are not numerically comparable.
+    # Interleave their ranked lists before the outer RRF fusion.
     results = []
-    for idx in top_indices:
-        score = float(scores[idx])
-        if score <= 0:
-            continue
-        meta = _bm25_meta[idx]
-        results.append({
-            "meta": meta,
-            "score": score,
-        })
-    return results
+    for rank in range(max(len(base_results), len(incremental_results))):
+        if rank < len(base_results):
+            results.append(base_results[rank])
+        if rank < len(incremental_results):
+            results.append(incremental_results[rank])
+        if len(results) >= top_k:
+            break
+    return results[:top_k]
 
 
 def rrf_fuse(vec_results: list, bm25_results: list,
@@ -243,8 +249,12 @@ def rrf_fuse(vec_results: list, bm25_results: list,
     """
     rrf_scores = {}  # record_idx -> {rrf, meta, vec_score, bm25_score}
 
+    def result_key(result: dict) -> str:
+        meta = result["meta"]
+        return str(meta.get("key", f"base:{meta.get('idx', '')}"))
+
     for rank, result in enumerate(vec_results):
-        rec_idx = result["meta"]["idx"]
+        rec_idx = result_key(result)
         if rec_idx not in rrf_scores:
             rrf_scores[rec_idx] = {"rrf": 0.0, "meta": result["meta"],
                                    "vec_score": 0.0, "bm25_score": 0.0}
@@ -252,7 +262,7 @@ def rrf_fuse(vec_results: list, bm25_results: list,
         rrf_scores[rec_idx]["vec_score"] = result["score"]
 
     for rank, result in enumerate(bm25_results):
-        rec_idx = result["meta"]["idx"]
+        rec_idx = result_key(result)
         if rec_idx not in rrf_scores:
             rrf_scores[rec_idx] = {"rrf": 0.0, "meta": result["meta"],
                                    "vec_score": 0.0, "bm25_score": 0.0}
@@ -308,8 +318,12 @@ def build_context(search_results: list) -> tuple:
     for i, result in enumerate(search_results):
         meta = result["meta"]
         score = result["score"]
-        orig_idx = meta.get("idx", -1)
-        record = records[orig_idx] if 0 <= orig_idx < len(records) else None
+        if meta.get("kind") == "upload":
+            orig_idx = meta.get("document_id", "")
+            record = meta
+        else:
+            orig_idx = meta.get("idx", -1)
+            record = records[orig_idx] if 0 <= orig_idx < len(records) else None
         if not record:
             continue
 
@@ -371,6 +385,7 @@ async def lifespan(app: FastAPI):
 
     mapping_status = remap_index_metadata()
     print(f"[startup] Index metadata mapped: {mapping_status}", flush=True)
+    _incremental_index.load()
 
     # Load jieba custom dictionary for query tokenization
     if JIEBA_DICT.exists():
@@ -407,11 +422,67 @@ async def health():
         "bm25_ready": _bm25_index is not None,
         "indexed_records": len(_index_meta) if _index_meta else 0,
         "bm25_records": len(_bm25_meta) if _bm25_meta else 0,
+        "incremental_index_ready": _incremental_index.loaded,
+        "incremental_records": _incremental_index.record_count,
+        "incremental_documents": _incremental_index.document_count,
+        "total_indexed_records": (len(_index_meta) if _index_meta else 0) + _incremental_index.record_count,
         "total_records": len(_records) if _records else 0,
         "index_mapping_ready": _index_mapping_status is not None,
         "index_mapping": _index_mapping_status or {},
         "time": datetime.now().isoformat(),
     }
+
+
+class IndexChunk(BaseModel):
+    chunk_id: str = ""
+    text: str
+
+
+class IndexUpsertRequest(BaseModel):
+    document_id: str
+    filename: str = ""
+    title: str = ""
+    primary_category: str = "未分类"
+    secondary_categories: list[str] = Field(default_factory=list)
+    confidentiality: str | None = None
+    source_type: str | None = None
+    checksum_sha256: str | None = None
+    created_at: str | None = None
+    chunks: list[IndexChunk]
+
+
+def _check_index_token(token: str | None) -> None:
+    expected = os.getenv("TECHDB_QA_INDEX_TOKEN", "").strip()
+    if expected and not secrets.compare_digest(token or "", expected):
+        raise HTTPException(status_code=401, detail="invalid index token")
+
+
+@app.post("/api/index/upsert")
+async def index_upsert(
+    req: IndexUpsertRequest,
+    x_techdb_index_token: str | None = Header(default=None),
+):
+    """Embed and persist one uploaded document in the incremental index."""
+    _check_index_token(x_techdb_index_token)
+    try:
+        result = await _incremental_index.upsert(
+            document_id=req.document_id,
+            filename=req.filename,
+            title=req.title,
+            primary_category=req.primary_category,
+            secondary_categories=req.secondary_categories,
+            confidentiality=req.confidentiality,
+            source_type=req.source_type,
+            checksum_sha256=req.checksum_sha256,
+            created_at=req.created_at,
+            chunks=[chunk.model_dump() for chunk in req.chunks],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        print(f"[index] upsert failed for {req.document_id}: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail="embedding index is unavailable") from exc
+    return {"status": "ready", **result}
 
 
 @app.post("/api/chat/stream")
@@ -426,7 +497,7 @@ async def chat_stream(req: ChatRequest):
                 "message": "正在检索相关知识..."
             })}
 
-            if _vector_index is None:
+            if _vector_index is None and not _incremental_index.record_count:
                 yield {"event": "error", "data": json.dumps({
                     "message": "向量索引尚未构建。请运行: python qa-backend/vector_index.py"
                 })}
@@ -582,6 +653,10 @@ async def stats():
         "total_records": total,
         "indexed_records": indexed,
         "bm25_records": len(_bm25_meta) if _bm25_meta else 0,
+        "incremental_index_ready": _incremental_index.loaded,
+        "incremental_records": _incremental_index.record_count,
+        "incremental_documents": _incremental_index.document_count,
+        "total_indexed_records": indexed + _incremental_index.record_count,
         "graph_nodes": nodes,
         "graph_edges": edges,
         "vector_index_ready": _vector_index is not None,
@@ -596,7 +671,7 @@ async def stats():
 @app.get("/api/search")
 async def search(q: str, top_k: int = 10):
     """Quick vector search without LLM generation. Returns matching records."""
-    if _vector_index is None:
+    if _vector_index is None and not _incremental_index.record_count:
         return JSONResponse(
             {"error": "Vector index not loaded", "results": []},
             status_code=503,

@@ -57,6 +57,17 @@ class UploadedFile(Base):
     classification_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     classified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # 增量 embedding 与 QA 索引状态；分类完成不代表已经可检索。
+    embedding_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", index=True
+    )
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    embedding_dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    embedded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     submitted_by: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

@@ -41,9 +41,9 @@ _Avoid_: 当前分类目录
 _Avoid_: 付费来源、来源类型
 
 **可向量检索**:
-资料已经分块并由指定 embedding 模型写入向量索引。该状态晚于资料入库，当前版本不要求达到此状态。
+资料已经分块并由与基线一致的 bge-m3（1024 维）写入 canonical QA 独立增量索引。该状态晚于资料入库，由 `embedding_status=ready` 表示。
 _Avoid_: 文件落盘、资料入库
 
 **Canonical QA 索引**:
-由 `sbq9712/tech-db` 独立服务维护的既有 bge-m3、向量和 BM25 检索资产。0801 门户只消费其检索 API，不把新上传资料自动写入该索引，也不使用旧 Markdown 或 Chatbot 包回退。
-_Avoid_: 新上传 embedding 管线、门户本地索引
+由 `sbq9712/tech-db` 独立服务维护的既有 bge-m3、向量和 BM25 基线资产；上传资料通过内部 upsert 接口写入同服务的独立增量索引。0801 门户只消费其检索 API，不使用旧 Markdown 或 Chatbot 包回退。
+_Avoid_: 重建基线 embedding、门户本地索引

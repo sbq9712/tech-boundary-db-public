@@ -29,6 +29,11 @@ services:
     image: techdb-canonical-qa:0801
     networks:
       - technet
+    environment:
+      TECHDB_QA_INDEX_TOKEN: ${TECHDB_QA_INDEX_TOKEN:-}
+      TECHDB_QA_INCREMENTAL_INDEX_PATH: /app/data/lightrag/incremental/index.pkl
+    volumes:
+      - qa_incremental_data:/app/data/lightrag/incremental
     ports:
       - "${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8765}:8765"
     healthcheck:
@@ -70,6 +75,8 @@ services:
       TECHDB_AGENT_MAX_OUTPUT_TOKENS: ${TECHDB_AGENT_MAX_OUTPUT_TOKENS:-1800}
       TECHDB_QA_SERVICE_URL: ${TECHDB_QA_SERVICE_URL:-http://canonical-qa:8765}
       TECHDB_QA_SERVICE_TIMEOUT_SECONDS: ${TECHDB_QA_SERVICE_TIMEOUT_SECONDS:-120}
+      TECHDB_QA_INDEX_TIMEOUT_SECONDS: ${TECHDB_QA_INDEX_TIMEOUT_SECONDS:-300}
+      TECHDB_QA_INDEX_TOKEN: ${TECHDB_QA_INDEX_TOKEN:-}
       TECHDB_KB_PATH: /knowledge-base
       BREADTH_DATA_PATH: /app/breadth_data
       TECHDB_UPLOAD_DIR: /app/uploads
@@ -138,3 +145,5 @@ volumes:
   pg_data:
     external: true
     name: ${TECHDB_PG_VOLUME:-v260723_pg_data}
+  qa_incremental_data:
+    name: ${TECHDB_QA_INCREMENTAL_VOLUME:-techdb_qa_incremental_0801}

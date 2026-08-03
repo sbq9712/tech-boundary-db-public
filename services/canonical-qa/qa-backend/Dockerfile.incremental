@@ -1,0 +1,10 @@
+ARG QA_BASE_IMAGE=techdb-canonical-qa:0801-base
+FROM ${QA_BASE_IMAGE}
+
+USER root
+COPY --chown=qa:qa qa-backend/config.py qa-backend/server.py \
+    qa-backend/incremental_index.py /app/qa-backend/
+RUN mkdir -p /app/data/lightrag/incremental \
+    && chown -R qa:qa /app/data/lightrag/incremental
+
+USER qa

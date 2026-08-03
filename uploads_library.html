@@ -36,9 +36,9 @@
     .size-cell{ color:var(--text-tertiary); white-space:nowrap; }
     .category-cell{ min-width:240px; max-width:360px; overflow-wrap:anywhere; line-height:1.45; }
     .status{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:99px; font-size:11px; white-space:nowrap; background:var(--bg-panel); color:var(--text-tertiary); }
-    .status.classified{ background:var(--green-bg); color:var(--green); }
-    .status.pending,.status.processing{ background:var(--amber-bg); color:var(--amber); }
-    .status.failed{ background:var(--red-bg); color:var(--red); }
+    .status.classified,.status.ready{ background:var(--green-bg); color:var(--green); }
+    .status.pending,.status.processing,.status.embedding_pending,.status.embedding_processing{ background:var(--amber-bg); color:var(--amber); }
+    .status.failed,.status.embedding_failed{ background:var(--red-bg); color:var(--red); }
     .ai-mark{ font-size:10px; color:var(--text-quaternary); }
     .ai-mark.ai_filled{ color:var(--green); }
     .lib-foot{ margin-top:20px; display:flex; justify-content:space-between; align-items:center; }
@@ -119,7 +119,8 @@
 
     const statusLabels={
       pending:"待分类", processing:"分类中", classified:"已分类", unclassified:"未分类",
-      irrelevant:"不相关", failed:"分类失败", legacy_unclassified:"历史未分类"
+      irrelevant:"不相关", failed:"分类失败", legacy_unclassified:"历史未分类",
+      embedding_pending:"待索引", embedding_processing:"索引中", embedding_failed:"索引失败", embedding_skipped:"未索引", embedding_legacy_unindexed:"历史未索引", ready:"可检索"
     };
 
     function esc(value){
@@ -169,9 +170,10 @@
         const titleSource=esc(f.title_source||"");
         const aiMark=f.title_source==="manual"?"":`<span class="ai-mark ${titleSource}">${f.title_source==="ai_filled"?"AI":"…"}</span>`;
         const canRetry=isAdmin&&["failed","unclassified","legacy_unclassified"].includes(f.classification_status);
+        const canRetryEmbedding=isAdmin&&f.embedding_status==="failed";
         const category=f.primary_category||"-";
-        const status=f.classification_status||"legacy_unclassified";
-        const statusDetail=f.classification_error||f.classification_reason||"";
+        const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
+        const statusDetail=f.embedding_error||f.classification_error||f.classification_reason||"";
         return `<tr>
           <td class="fname">${esc(f.title||f.original_filename)}${aiMark}<small>${esc(f.original_filename)}${f.note?" · "+esc(f.note):""}</small></td>
           <td class="category-cell" title="${esc(category)}">${esc(category)}</td>
@@ -181,7 +183,7 @@
           <td class="size-cell">${fmtSize(f.size_bytes)}</td>
           <td>${esc(f.submitted_by)}</td>
           <td class="size-cell">${fmtTime(f.created_at)}</td>
-          <td><div class="row-actions"><button class="btn" data-download="${esc(f.id)}">下载</button>${canRetry?`<button class="btn" data-retry="${esc(f.id)}">重试分类</button>`:""}</div></td>
+          <td><div class="row-actions"><button class="btn" data-download="${esc(f.id)}">下载</button>${canRetry?`<button class="btn" data-retry="${esc(f.id)}">重试分类</button>`:""}${canRetryEmbedding?`<button class="btn" data-retry-embedding="${esc(f.id)}">重试索引</button>`:""}</div></td>
         </tr>`;
       }).join("");
       const start=total?offset+1:0, end=Math.min(offset+data.files.length,total);
@@ -190,7 +192,8 @@
       document.getElementById("nextBtn").disabled=offset+limit>=total;
       tb.querySelectorAll("button[data-download]").forEach(b=>b.onclick=()=>download(b.dataset.download));
       tb.querySelectorAll("button[data-retry]").forEach(b=>b.onclick=()=>retryClassification(b.dataset.retry,b));
-      if(data.files.some(f=>["pending","processing"].includes(f.classification_status))){
+      tb.querySelectorAll("button[data-retry-embedding]").forEach(b=>b.onclick=()=>retryEmbedding(b.dataset.retryEmbedding,b));
+      if(data.files.some(f=>["pending","processing"].includes(f.classification_status)||["pending","processing"].includes(f.embedding_status))){
         refreshTimer=setTimeout(load,3000);
       }
     }
@@ -199,6 +202,15 @@
       button.disabled=true;
       try{
         const r=await Auth.authFetch(API+"/uploads/"+encodeURIComponent(id)+"/classification/retry",{method:"POST"});
+        if(!r||!r.ok){ const data=r?await r.json().catch(()=>({})):{}; throw new Error(data.detail||"重试失败"); }
+        await load();
+      }catch(e){ alert(e.message); button.disabled=false; }
+    }
+
+    async function retryEmbedding(id,button){
+      button.disabled=true;
+      try{
+        const r=await Auth.authFetch(API+"/uploads/"+encodeURIComponent(id)+"/embedding/retry",{method:"POST"});
         if(!r||!r.ok){ const data=r?await r.json().catch(()=>({})):{}; throw new Error(data.detail||"重试失败"); }
         await load();
       }catch(e){ alert(e.message); button.disabled=false; }

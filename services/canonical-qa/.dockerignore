@@ -4,9 +4,11 @@
 qa-backend/*
 !qa-backend/config.py
 !qa-backend/server.py
+!qa-backend/incremental_index.py
 !qa-backend/check_assets.py
 !qa-backend/qa-assets-manifest.json
 !qa-backend/Dockerfile.release
+!qa-backend/Dockerfile.incremental
 !data/
 data/*
 !data/lightrag/

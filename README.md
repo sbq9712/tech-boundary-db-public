@@ -46,10 +46,11 @@ Canonical QA 的可审计运行源码和离线构建清单位于 `services/canon
 Nginx (:8080)
   ├── 白名单静态前端镜像 (HTML/JS/CSS)
   └── /api/ → FastAPI (:8000)
-                ├── 情报 CRUD、上传落盘与 77 类分类
+                ├── 情报 CRUD、上传落盘、77 类分类与增量 embedding 编排
                 ├── 用户范围会话与公司模型生成
                 └── Docker 内网调用 canonical-qa (:8765)
-                     └── 镜像内既有 bge-m3 + 向量 + BM25 索引
+                     ├── 镜像内既有 bge-m3 + 向量 + BM25 基线索引
+                     └── Docker 卷中的上传资料增量向量/BM25 索引
 
 PostgreSQL 16 (容器内部 :5432)
 上传对象 (${TECHDB_UPLOAD_HOST_PATH} -> /app/uploads)
@@ -58,9 +59,9 @@ readonly-agent (:8765 容器内部；:8766 为兼容宿主机端口)
 
 ## 数据模型
 
-19 张表，核心包括 `info_items`、`domains`、`sources`、`knowledge_artifacts`、`uploaded_files` 和 `users`。新上传采用广度追踪 77 项分类目录；历史行业图景保留为快照。
+19 张业务表，核心包括 `info_items`、`domains`、`sources`、`knowledge_artifacts`、`uploaded_files` 和 `users`。上传 embedding 状态作为 `uploaded_files` 的字段维护；新上传采用广度追踪 77 项分类目录，历史行业图景保留为快照。
 
-“文件落盘”指对象写入服务器持久目录且数据库登记 SHA-256；“资料入库”指该文件已得到分类终态。新上传的 embedding 管线尚未接入。门户问答使用的是上游已有且已校验的独立索引，不会把二者混为一谈；模型、索引与记录资产随 `techdb-canonical-qa:0801` 镜像部署到同一服务器。
+“文件落盘”指对象写入服务器持久目录且数据库登记 SHA-256；“资料入库”指该文件已得到分类终态；只有 `embedding_status=ready` 才代表新资料已进入问答检索。门户以 canonical QA 的既有基线索引为基础，并在其上融合上传资料增量索引；不重建或修改基线资产。
 
 ## 项目文档
 

@@ -834,15 +834,19 @@ GET /api/info-items?status=draft,ai_suggested
 
 `confidentiality` 只接受 `公开`、`内部`、`管理员`。历史值（如“付费来源”“秘密”）兼容导入时归一为 `内部`；AI 自动补齐只允许 `公开` 或 `内部`，`管理员` 需要上传者明确选择。密级当前仅作元数据标签，不单独改变下载权限；“付费数据库”属于 `source_type`，不是密级。
 
-文件先持久落盘并登记 SHA-256。未手工指定分类时返回 `pending`，后台再调用内网/本地模型分类；分类失败不会删除文件。
+文件先持久落盘并登记 SHA-256。未手工指定分类时返回 `pending`，后台再调用内网/本地模型分类；分类完成后提取文本、分块，并调用 canonical QA 内部 embedding 接口写入增量索引。分类失败或 embedding 失败都不会删除文件。
 
 ### `GET /api/uploads`
 
-查询参数：`limit`、`offset`、`source_type`、`primary_category`、`classification_status`。响应包含总数 `count` 和 `files`。
+查询参数：`limit`、`offset`、`source_type`、`primary_category`、`classification_status`。响应包含总数 `count` 和 `files`；每条记录另返回 `embedding_status`、`embedding_model`、`embedding_dim`、`chunk_count`、`embedding_error` 和 `ingestion_status`。
 
 ### `POST /api/uploads/{id}/classification/retry`
 
 把已落盘资料重新置为 `pending` 并启动后台分类。`pending/processing` 状态下重复调用不会创建并行任务。
+
+### `POST /api/uploads/{id}/embedding/retry`
+
+管理员重试已分类文件的 embedding 和增量索引写入。索引失败不会修改分类结果；同一文件重复重试会替换其旧 chunk，不产生重复记录。
 
 ### `PUT /api/uploads/{id}/classification`
 

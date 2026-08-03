@@ -29,9 +29,9 @@ from app.services.upload_ingestion import (
     StoredUpload,
     UploadValidationError,
     classification_status_for,
-    classify_uploaded_file,
     load_taxonomy,
     persist_upload,
+    process_uploaded_file,
     remove_stored_upload,
     safe_upload_path,
     validate_filename,
@@ -49,11 +49,16 @@ class ClassificationOverride(BaseModel):
 
 def _serialize(record: UploadedFile) -> dict:
     terminal = {"classified", "unclassified", "irrelevant", "legacy_unclassified"}
-    ingestion_status = (
-        "ready"
-        if record.storage_status == "stored" and record.classification_status in terminal
-        else record.classification_status
-    )
+    if record.storage_status != "stored":
+        ingestion_status = record.storage_status
+    elif record.classification_status not in terminal:
+        ingestion_status = record.classification_status
+    elif record.embedding_status == "ready":
+        ingestion_status = "ready"
+    elif record.embedding_status == "skipped":
+        ingestion_status = "embedding_skipped"
+    else:
+        ingestion_status = f"embedding_{record.embedding_status}"
     return {
         "id": str(record.id),
         "original_filename": record.original_filename,
@@ -78,6 +83,13 @@ def _serialize(record: UploadedFile) -> dict:
         "classification_error": record.classification_error,
         "classification_attempts": record.classification_attempts,
         "classified_at": record.classified_at.isoformat() if record.classified_at else None,
+        "embedding_status": record.embedding_status,
+        "embedding_model": record.embedding_model,
+        "embedding_dim": record.embedding_dim,
+        "embedding_error": record.embedding_error,
+        "embedding_attempts": record.embedding_attempts,
+        "chunk_count": record.chunk_count,
+        "embedded_at": record.embedded_at.isoformat() if record.embedded_at else None,
         "ingestion_status": ingestion_status,
         "submitted_by": record.submitted_by,
         "created_at": record.created_at.isoformat() if record.created_at else None,
@@ -213,9 +225,8 @@ async def upload_files(
             remove_stored_upload(stored)
         raise
 
-    pending_ids = [str(record.id) for record in records if record.classification_status == "pending"]
-    for file_id in pending_ids:
-        background_tasks.add_task(classify_uploaded_file, file_id)
+    for record in records:
+        background_tasks.add_task(process_uploaded_file, str(record.id))
     return {"count": len(records), "files": [_serialize(record) for record in records]}
 
 
@@ -259,15 +270,46 @@ def retry_upload_classification(
         return {"id": str(record.id), "classification_status": record.classification_status}
     record.classification_status = "pending"
     record.classification_error = None
+    record.embedding_status = "pending"
+    record.embedding_error = None
+    record.embedded_at = None
+    record.chunk_count = 0
     db.commit()
-    background_tasks.add_task(classify_uploaded_file, str(record.id))
+    background_tasks.add_task(process_uploaded_file, str(record.id))
     return {"id": str(record.id), "classification_status": "pending"}
+
+
+@router.post("/uploads/{file_id}/embedding/retry", status_code=202)
+def retry_upload_embedding(
+    file_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    record = db.get(UploadedFile, _uuid_or_400(file_id))
+    if record is None:
+        raise HTTPException(404, "文件不存在")
+    if record.storage_status != "stored":
+        raise HTTPException(409, "文件未正常落盘，不能重试 embedding")
+    terminal = {"classified", "unclassified", "irrelevant", "legacy_unclassified"}
+    if record.classification_status not in terminal:
+        raise HTTPException(409, "请先完成文件分类")
+    if record.embedding_status in {"pending", "processing"}:
+        return {"id": str(record.id), "embedding_status": record.embedding_status}
+    record.embedding_status = "pending"
+    record.embedding_error = None
+    record.embedded_at = None
+    record.chunk_count = 0
+    db.commit()
+    background_tasks.add_task(process_uploaded_file, str(record.id))
+    return {"id": str(record.id), "embedding_status": "pending"}
 
 
 @router.put("/uploads/{file_id}/classification")
 def override_upload_classification(
     file_id: str,
     payload: ClassificationOverride,
+    background_tasks: BackgroundTasks,
     current_user: str = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -287,8 +329,13 @@ def override_upload_classification(
     record.classification_reason = payload.reason or "管理员人工修正"
     record.classification_error = None
     record.classified_at = datetime.now(timezone.utc)
+    record.embedding_status = "pending"
+    record.embedding_error = None
+    record.embedded_at = None
+    record.chunk_count = 0
     db.commit()
     db.refresh(record)
+    background_tasks.add_task(process_uploaded_file, str(record.id))
     return _serialize(record)
 
 
