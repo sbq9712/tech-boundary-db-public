@@ -10,7 +10,9 @@ Verified upstream state at commit
 - `bm25_index.pkl.gz` exists upstream (56,236,343 bytes)
 - `jieba_custom_dict.txt` and `graph-export.json` exist upstream
 - `bge-m3` is still downloaded separately by upstream `setup.sh`
-- `data/processed/all-records-lite.json` is not present at the raw GitHub path
+- `data/processed/all-records-lite.json` is not committed at the raw GitHub path,
+  but the 30 committed `lite-part-*.js` shards and the official
+  `scripts/rebuild_lite_from_shards.py` reproduce it (verified: 59,717 records)
 - upstream `config.py` still reads a Z.AI-specific key file at import time
 - upstream `qa.js` still hard-codes a temporary `trycloudflare.com` URL
 
@@ -20,7 +22,8 @@ existing compatible set supplied by the owner:
 - `vector_index_v2.pkl` or `vector_index.pkl`
 - `bm25_index.pkl`
 - `jieba_custom_dict.txt`
-- `all-records-lite.json`
+- generated `all-records-lite.json` (run the upstream shard script; do not
+  rebuild the embedding index)
 - complete `bge-m3` model directory
 - optional `graph-export.json` for the relationship graph
 

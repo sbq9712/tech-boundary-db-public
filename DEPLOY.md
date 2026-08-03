@@ -49,7 +49,7 @@ TECHDB_QA_SERVICE_URL=http://host.docker.internal:8765
 
 ## Canonical QA 资产边界
 
-门户问答需要独立的 `sbq9712/tech-db` QA 服务。远端上游已提供压缩向量/BM25 索引、jieba 字典和图谱导出，但 `bge-m3` 模型和 `all-records-lite.json` 仍不随 0801 应用交付；其原始 `setup.sh` 仍绑定 Z.AI，`qa.js` 仍硬编码临时 Cloudflare 地址。不要直接把这套脚本用于公司服务器。待资产所有者提供完整模型与记录集后，按公司 API 改造 QA 服务并配置 `TECHDB_QA_SERVICE_URL`。在此之前门户会返回“检索服务未配置”，不会回退到旧知识源。
+门户问答需要独立的 `sbq9712/tech-db` QA 服务。远端上游已提供压缩向量/BM25 索引、jieba 字典和图谱导出；`all-records-lite.json` 不在提交中，但可由仓库内 30 个分片和官方脚本恢复。完整 `bge-m3` 模型、公司 API 适配和 QA 服务镜像仍不随 0801 应用交付。不要直接把上游 `setup.sh` 用于公司服务器：它绑定 Z.AI、用户目录密钥、Hugging Face 下载和临时 Cloudflare 地址。待资产所有者提供模型并完成公司 API 适配后，再配置 `TECHDB_QA_SERVICE_URL`。在此之前门户会返回“检索服务未配置”，不会回退到旧知识源。
 
 ## 备份与恢复
 
