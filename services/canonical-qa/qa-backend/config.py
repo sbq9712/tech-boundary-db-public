@@ -1,0 +1,199 @@
+"""LightRAG configuration for tech-db Q&A system.
+
+Uses an OpenAI-compatible LLM when chat/ingest endpoints need generation and
+bge-m3 (sentence-transformers) for local query embeddings.  Retrieval-only
+deployments do not need an LLM key because the portal owns answer generation.
+"""
+import os
+import sys
+import json
+import asyncio
+import urllib.request
+import urllib.error
+from pathlib import Path
+
+# ── Paths ──
+REPO = Path(__file__).resolve().parent.parent
+WORKING_DIR = REPO / "data" / "lightrag"
+WORKING_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── API Config ──
+ENV_FILE = os.path.expanduser("~/.config/anthropic-proxy.env")
+API_BASE = os.getenv("TECHDB_QA_LLM_BASE_URL", "https://api.z.ai/api/coding/paas/v4").rstrip("/")
+MODEL_NAME = os.getenv("TECHDB_QA_LLM_MODEL", "glm-5.2")
+
+def load_api_key():
+    configured = os.getenv("TECHDB_QA_LLM_API_KEY", "").strip()
+    if configured:
+        return configured
+    with open(ENV_FILE, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("ZAI_API_KEY="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return ""
+
+API_KEY = load_api_key() if os.path.exists(ENV_FILE) else os.getenv("TECHDB_QA_LLM_API_KEY", "").strip()
+LLM_CONFIGURED = bool(API_KEY)
+
+
+def _require_api_key() -> str:
+    if not API_KEY:
+        raise RuntimeError(
+            "QA LLM API key is not configured; retrieval-only mode is available, "
+            "but chat or graph-ingest generation requires TECHDB_QA_LLM_API_KEY."
+        )
+    return API_KEY
+
+
+# ── LLM Function (OpenAI-compatible, async) ──
+async def llm_model_func(
+    prompt: str,
+    system_prompt: str = None,
+    history_messages: list = None,
+    **kwargs
+) -> str:
+    """Call the configured OpenAI-compatible LLM."""
+    api_key = _require_api_key()
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    if history_messages:
+        messages.extend(history_messages)
+    messages.append({"role": "user", "content": prompt})
+
+    payload = {
+        "model": MODEL_NAME,
+        "messages": messages,
+        "temperature": kwargs.get("temperature", 0.3),
+        "max_tokens": kwargs.get("max_tokens", 4096),
+    }
+
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        f"{API_BASE}/chat/completions",
+        data=data,
+        method="POST",
+    )
+    req.add_header("Content-Type", "application/json; charset=utf-8")
+    req.add_header("Authorization", f"Bearer {api_key}")
+    req.add_header("Accept", "application/json")
+
+    def _do_request():
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            raw = resp.read().decode("utf-8")
+        result = json.loads(raw)
+        choices = result.get("choices") or []
+        if not choices:
+            return ""
+        msg = choices[0].get("message", {})
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            content = "".join(
+                p.get("text", "") if isinstance(p, dict) else str(p) for p in content
+            )
+        return content
+
+    # Run in executor to make it async
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _do_request)
+
+
+# ── Streaming LLM Function ──
+async def llm_stream_func(
+    prompt: str,
+    system_prompt: str = None,
+    history_messages: list = None,
+    **kwargs
+):
+    """Stream tokens from the configured OpenAI-compatible LLM."""
+    api_key = _require_api_key()
+    from openai import AsyncOpenAI
+
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    if history_messages:
+        messages.extend(history_messages)
+    messages.append({"role": "user", "content": prompt})
+
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=API_BASE,
+    )
+
+    stream = await client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        temperature=kwargs.get("temperature", 0.3),
+        max_tokens=kwargs.get("max_tokens", 4096),
+        stream=True,
+    )
+
+    async for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+
+
+# ── Embedding Function (bge-m3 via sentence-transformers, async) ──
+from lightrag.utils import EmbeddingFunc
+
+_MODEL = None
+EMBEDDING_DIM = 1024
+EMBEDDING_MAX_TOKEN = 8192
+
+def _get_model():
+    global _MODEL
+    if _MODEL is None:
+        import torch
+        torch.set_num_threads(max(torch.get_num_threads(), 10))
+        from sentence_transformers import SentenceTransformer
+        # 查找模型路径：优先项目目录，其次 home 目录
+        model_candidates = [
+            Path(os.getenv("TECHDB_QA_MODEL_PATH", "")) if os.getenv("TECHDB_QA_MODEL_PATH") else None,
+            REPO / "bge-m3-model",
+            Path.home() / "bge-m3-model",
+            Path("/home/rhett/bge-m3-model"),
+        ]
+        model_path = None
+        for p in model_candidates:
+            if p is None:
+                continue
+            if (p / "pytorch_model.bin").exists() or (p / "model.safetensors").exists():
+                model_path = str(p)
+                break
+        if not model_path:
+            raise RuntimeError(
+                "bge-m3 模型未找到。请运行 ./setup.sh 下载模型，"
+                "或手动从 https://huggingface.co/BAAI/bge-m3 下载到项目根目录的 bge-m3-model/ 文件夹"
+            )
+        _MODEL = SentenceTransformer(model_path, device="cpu")
+    return _MODEL
+
+async def _embedding_func_impl(texts: list) -> list:
+    """Embed texts using bge-m3."""
+    model = _get_model()
+    loop = asyncio.get_event_loop()
+
+    def _encode():
+        if isinstance(texts, str):
+            texts_list = [texts]
+        else:
+            texts_list = list(texts)
+        embeddings = model.encode(
+            texts_list,
+            batch_size=32,
+            show_progress_bar=False,
+            normalize_embeddings=True,
+        )
+        return embeddings
+
+    return await loop.run_in_executor(None, _encode)
+
+# Wrap with EmbeddingFunc so LightRAG knows the dimension and token limits
+embedding_func = EmbeddingFunc(
+    embedding_dim=EMBEDDING_DIM,
+    max_token_size=EMBEDDING_MAX_TOKEN,
+    func=_embedding_func_impl,
+    model_name="bge-m3",
+)

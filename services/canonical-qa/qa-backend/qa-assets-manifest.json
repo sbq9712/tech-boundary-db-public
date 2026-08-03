@@ -1,0 +1,41 @@
+{
+  "upstream_commit": "fdffba1ba6b8dc40e5927bf3d301dec144012bc4",
+  "bge_m3_revision": "5617a9f61b028005a4858fdac845db406aefb181",
+  "expected_total_records": 59717,
+  "expected_indexed_records": 24091,
+  "expected_embedding_dim": 1024,
+  "files": {
+    "bge-m3-model/pytorch_model.bin": {
+      "bytes": 2271145830,
+      "sha256": "b5e0ce3470abf5ef3831aa1bd5553b486803e83251590ab7ff35a117cf6aad38"
+    },
+    "bge-m3-model/config.json": {
+      "bytes": 687,
+      "sha256": "26159e7ad065073448460117eb24b7a4572f6f4e78eadff65dc0a11c052449fa"
+    },
+    "bge-m3-model/tokenizer.json": {
+      "bytes": 17098108,
+      "sha256": "21106b6d7dab2952c1d496fb21d5dc9db75c28ed361a05f5020bbba27810dd08"
+    },
+    "data/lightrag/vector_index_v2.pkl": {
+      "bytes": 105095854,
+      "sha256": "4ecc368906bf31e33768fd7bf0603468bcb5758fd7039145e6b4a24586145c90"
+    },
+    "data/lightrag/bm25_index.pkl": {
+      "bytes": 160892722,
+      "sha256": "86a866c53cbeda60782d04cb9749f7d330a368257f88af076393a78763648a36"
+    },
+    "data/lightrag/jieba_custom_dict.txt": {
+      "bytes": 125188,
+      "sha256": "741754bdfe18668b52158570d3f4502231dd3ab26a8ae78187365cdf9e57c837"
+    },
+    "data/lightrag/graph-export.json": {
+      "bytes": 2794137,
+      "sha256": "0949751cafc8e200bdb59c81395d8c4efc26b93c2d23aa7595b7c5265cbc5ac1"
+    },
+    "data/processed/all-records-lite.json": {
+      "bytes": 137210020,
+      "sha256": "ce0232957f05b65a1d6f53b368b58a8ce7b2cd44b858e5a732dc131ed3d9ead9"
+    }
+  }
+}

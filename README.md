@@ -1,4 +1,4 @@
-# 技术边界数据库 0801（`v260801.0`）
+# 技术边界数据库 0801（`v260801.2`）
 
 技术情报收集、知识管理与 AI 问答平台。
 
@@ -37,6 +37,8 @@ cp .env.example .env
 **AI**：公司内网 OpenAI 兼容端点（默认 CATL AI 网关，支持可配置模型列表）
 
 **部署**：Docker Compose 五服务容器化，canonical QA 模型与索引随独立镜像离线交付
+
+Canonical QA 的可审计运行源码和离线构建清单位于 `services/canonical-qa/`；大模型、索引和记录资产不进入 `main`，只随 `techdb-canonical-qa:0801` 镜像交付。
 
 ## 架构
 

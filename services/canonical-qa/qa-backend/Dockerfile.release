@@ -1,0 +1,32 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    TECHDB_QA_MODEL_PATH=/app/bge-m3-model
+
+COPY requirements.txt /tmp/requirements.txt
+
+RUN python -m pip install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r /tmp/requirements.txt
+
+RUN useradd --create-home --uid 10001 qa
+
+WORKDIR /app
+
+COPY --chown=qa:qa qa-backend/config.py qa-backend/server.py \
+    qa-backend/check_assets.py qa-backend/qa-assets-manifest.json /app/qa-backend/
+COPY --chown=qa:qa data/lightrag /app/data/lightrag
+COPY --chown=qa:qa data/processed/all-records-lite.json /app/data/processed/all-records-lite.json
+COPY --chown=qa:qa bge-m3-model /app/bge-m3-model
+
+RUN python /app/qa-backend/check_assets.py
+
+USER qa
+EXPOSE 8765
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=5 \
+    CMD python -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready']"
+
+CMD ["python", "qa-backend/server.py"]
