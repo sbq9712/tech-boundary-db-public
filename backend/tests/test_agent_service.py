@@ -2,7 +2,7 @@ import asyncio
 import inspect
 
 from app.routers.assistant_stream import _conversation_title
-from app.services import agent_service
+from app.services import agent_service, github_qa
 from app.services.agent_service import (
     _build_prompt,
     _build_retrieval_query,
@@ -92,6 +92,38 @@ def test_unconfigured_retrieval_service_is_explicit(monkeypatch):
     assert status["status"] == "unconfigured"
     assert status["ready"] is False
     assert "vector_index_v2.pkl" in status["required_assets"][0]
+
+
+def test_retrieval_service_requires_verified_index_mapping(monkeypatch):
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url):
+            if url.endswith("/api/health"):
+                return FakeResponse({"vector_index_ready": True, "bm25_ready": True})
+            return FakeResponse({"total_records": 59717, "indexed_records": 24091})
+
+    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+    monkeypatch.setattr(github_qa.httpx, "AsyncClient", lambda **_kwargs: FakeClient())
+    status = asyncio.run(service_status())
+
+    assert status["status"] == "assets_missing"
+    assert status["ready"] is False
+    assert status["stats"]["index_mapping_ready"] is False
 
 
 def test_stream_path_does_not_use_legacy_portal_sources():

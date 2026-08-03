@@ -25,6 +25,19 @@ services:
       timeout: 3s
       retries: 20
 
+  canonical-qa:
+    image: techdb-canonical-qa:0801
+    networks:
+      - technet
+    ports:
+      - "${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8765}:8765"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready']"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 5
+
   api:
     image: techdb-api:0801
     build:
@@ -55,8 +68,8 @@ services:
       TECHDB_AGENT_HISTORY_MAX_CHARS: ${TECHDB_AGENT_HISTORY_MAX_CHARS:-60000}
       TECHDB_AGENT_RETRIEVAL_MAX_CHARS: ${TECHDB_AGENT_RETRIEVAL_MAX_CHARS:-12000}
       TECHDB_AGENT_MAX_OUTPUT_TOKENS: ${TECHDB_AGENT_MAX_OUTPUT_TOKENS:-1800}
-      TECHDB_QA_SERVICE_URL: ${TECHDB_QA_SERVICE_URL:-}
-      TECHDB_QA_SERVICE_TIMEOUT_SECONDS: ${TECHDB_QA_SERVICE_TIMEOUT_SECONDS:-30}
+      TECHDB_QA_SERVICE_URL: ${TECHDB_QA_SERVICE_URL:-http://canonical-qa:8765}
+      TECHDB_QA_SERVICE_TIMEOUT_SECONDS: ${TECHDB_QA_SERVICE_TIMEOUT_SECONDS:-120}
       TECHDB_KB_PATH: /knowledge-base
       BREADTH_DATA_PATH: /app/breadth_data
       TECHDB_UPLOAD_DIR: /app/uploads
@@ -71,12 +84,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      canonical-qa:
+        condition: service_healthy
       readonly-agent:
         condition: service_started
     ports:
       - "${TECHDB_API_BIND:-127.0.0.1}:8000:8000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   web:
     image: techdb-web:0801

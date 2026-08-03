@@ -705,11 +705,11 @@ GET /api/info-items?status=draft,ai_suggested
 |---|---|
 | `status` | `unconfigured` / `error` / `assets_missing` / `ok` |
 | `configured` | 是否配置了 `TECHDB_QA_SERVICE_URL` |
-| `ready` | 向量和 BM25 索引是否同时就绪 |
+| `ready` | 向量、BM25 和记录下标映射校验是否同时就绪 |
 | `provider` | 固定为 `sbq9712/tech-db canonical hybrid retrieval` |
 | `required_assets` | 服务运行所需的模型、索引和记录资产 |
 | `message` | 面向用户的状态说明 |
-| `stats` | 就绪或已连接时的记录、索引和图谱统计 |
+| `stats` | 就绪或已连接时的记录、索引、映射和图谱统计 |
 
 ### `GET /api/assistant/models`
 

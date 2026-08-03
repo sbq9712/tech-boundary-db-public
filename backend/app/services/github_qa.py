@@ -20,6 +20,7 @@ REQUIRED_QA_ASSETS = (
     "jieba_custom_dict.txt",
     "all-records-lite.json",
     "bge-m3 model directory",
+    "qa-assets-manifest.json",
 )
 
 
@@ -38,11 +39,11 @@ def qa_service_url() -> str:
 
 
 def qa_service_timeout() -> float:
-    raw = os.getenv("TECHDB_QA_SERVICE_TIMEOUT_SECONDS", "30").strip()
+    raw = os.getenv("TECHDB_QA_SERVICE_TIMEOUT_SECONDS", "120").strip()
     try:
         return max(1.0, float(raw))
     except ValueError:
-        return 30.0
+        return 120.0
 
 
 def _require_url() -> str:
@@ -112,7 +113,11 @@ async def service_status() -> dict[str, Any]:
         error = _service_error(exc)
         return {**base, "status": "error", "message": error.public_message, "code": error.code}
 
-    ready = bool(health.get("vector_index_ready")) and bool(health.get("bm25_ready"))
+    ready = (
+        bool(health.get("vector_index_ready"))
+        and bool(health.get("bm25_ready"))
+        and bool(health.get("index_mapping_ready"))
+    )
     return {
         **base,
         "status": "ok" if ready else "assets_missing",
@@ -126,6 +131,8 @@ async def service_status() -> dict[str, Any]:
             "graph_edges": stats.get("graph_edges", 0),
             "vector_index_ready": health.get("vector_index_ready", False),
             "bm25_ready": health.get("bm25_ready", False),
+            "index_mapping_ready": health.get("index_mapping_ready", False),
+            "index_mapping": health.get("index_mapping", {}),
         },
     }
 

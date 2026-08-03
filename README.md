@@ -8,11 +8,12 @@
 
 ```bash
 docker load -i techdb-api-0801.tar
+docker load -i techdb-canonical-qa-0801.tar
 docker load -i techdb-readonly-agent-0801.tar
 docker load -i techdb-web-0801.tar
 docker load -i postgres-16.tar
 cp .env.example .env
-# 编辑 .env，填入密码、公司模型配置及 TECHDB_QA_SERVICE_URL
+# 编辑 .env，填入密码和公司内网模型配置
 ./deploy.sh
 ```
 
@@ -34,7 +35,8 @@ cp .env.example .env
 **后端**：FastAPI + PostgreSQL 16 + SQLAlchemy + Alembic  
 **前端**：Vanilla JS + Nginx  
 **AI**：公司内网 OpenAI 兼容端点（默认 CATL AI 网关，支持可配置模型列表）
-**部署**：Docker Compose 四服务容器化；canonical QA 检索服务独立部署
+
+**部署**：Docker Compose 五服务容器化，canonical QA 模型与索引随独立镜像离线交付
 
 ## 架构
 
@@ -44,8 +46,8 @@ Nginx (:8080)
   └── /api/ → FastAPI (:8000)
                 ├── 情报 CRUD、上传落盘与 77 类分类
                 ├── 用户范围会话与公司模型生成
-                └── 调用 canonical QA 检索服务
-                     └── 既有 bge-m3 + 向量 + BM25 索引
+                └── Docker 内网调用 canonical-qa (:8765)
+                     └── 镜像内既有 bge-m3 + 向量 + BM25 索引
 
 PostgreSQL 16 (容器内部 :5432)
 上传对象 (${TECHDB_UPLOAD_HOST_PATH} -> /app/uploads)
@@ -56,7 +58,7 @@ readonly-agent (:8765 容器内部；:8766 为兼容宿主机端口)
 
 19 张表，核心包括 `info_items`、`domains`、`sources`、`knowledge_artifacts`、`uploaded_files` 和 `users`。新上传采用广度追踪 77 项分类目录；历史行业图景保留为快照。
 
-“文件落盘”指对象写入服务器持久目录且数据库登记 SHA-256；“资料入库”指该文件已得到分类终态。新上传的 embedding 管线尚未接入。门户问答使用的是上游已有的独立索引，不会把二者混为一谈；该服务仍需提供兼容的模型和完整记录资产，详见 `external-data/qa-assets/README.md`。
+“文件落盘”指对象写入服务器持久目录且数据库登记 SHA-256；“资料入库”指该文件已得到分类终态。新上传的 embedding 管线尚未接入。门户问答使用的是上游已有且已校验的独立索引，不会把二者混为一谈；模型、索引与记录资产随 `techdb-canonical-qa:0801` 镜像部署到同一服务器。
 
 ## 项目文档
 

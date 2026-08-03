@@ -1,38 +1,31 @@
-# Canonical QA assets
+# Canonical QA asset contract
 
-This directory is a deployment contract, not an asset bundle. The `0801`
-release does not rebuild or fabricate missing retrieval assets.
+The portal repository does not store the large QA model or indexes. They are
+delivered inside `techdb-canonical-qa:0801` on the `docker-images` branch and
+run on the same server and Docker network as the portal.
 
-Verified upstream state at commit
-`fdffba1ba6b8dc40e5927bf3d301dec144012bc4`:
+Pinned sources:
 
-- `vector_index_v2.pkl.gz` exists upstream (93,358,971 bytes)
-- `bm25_index.pkl.gz` exists upstream (56,236,343 bytes)
-- `jieba_custom_dict.txt` and `graph-export.json` exist upstream
-- `bge-m3` is still downloaded separately by upstream `setup.sh`
-- `data/processed/all-records-lite.json` is not committed at the raw GitHub path,
-  but the 30 committed `lite-part-*.js` shards and the official
-  `scripts/rebuild_lite_from_shards.py` reproduce it (verified: 59,717 records)
-- upstream `config.py` still reads a Z.AI-specific key file at import time
-- upstream `qa.js` still hard-codes a temporary `trycloudflare.com` URL
+- upstream repository commit: `fdffba1ba6b8dc40e5927bf3d301dec144012bc4`
+- BAAI/bge-m3 revision: `5617a9f61b028005a4858fdac845db406aefb181`
+- records rebuilt by the upstream shard script: 59,717
+- vector index metadata: 24,091 records, 1,024 dimensions
+- BM25 metadata: 24,091 records
 
-The internal `sbq9712/tech-db` retrieval service must be hydrated with the
-existing compatible set supplied by the owner:
+The release image contains and verifies:
 
-- `vector_index_v2.pkl` or `vector_index.pkl`
-- `bm25_index.pkl`
-- `jieba_custom_dict.txt`
-- generated `all-records-lite.json` (run the upstream shard script; do not
-  rebuild the embedding index)
-- complete `bge-m3` model directory
-- optional `graph-export.json` for the relationship graph
+- `bge-m3-model/pytorch_model.bin` and tokenizer/configuration files
+- `vector_index_v2.pkl` and `bm25_index.pkl`
+- `jieba_custom_dict.txt` and `graph-export.json`
+- generated `all-records-lite.json`
+- `qa-assets-manifest.json` with exact sizes and SHA-256 values
 
-Configure the running service URL through `TECHDB_QA_SERVICE_URL`. These files
-must stay outside Git and must not be copied into the portal web image.
+The shard-rebuilt record order differs from the order used to build the
+indexes. The release service therefore remaps index metadata at startup and
+reports `index_mapping_ready=true`; deployment must fail if this check does
+not pass.
 
-Do not run upstream `setup.sh` unchanged on the company server. It assumes
-Hugging Face access, Z.AI credentials, a user-home key file, and a temporary
-Cloudflare workflow. The company
-deployment must receive the complete model and record assets first, then use
-the company API configuration. Until that happens, no QA service image is a
-valid 0801 deliverable.
+Do not run the upstream `setup.sh` on the company server. Production must not
+download from Hugging Face, access a developer workstation, or use a
+Cloudflare tunnel. The QA container performs retrieval only; answer generation
+remains in the portal API and uses the configured company intranet gateway.

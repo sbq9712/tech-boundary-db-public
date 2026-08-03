@@ -53,12 +53,7 @@ require_config TECHDB_AGENT_API_KEY your_api_key_here replace_with_company_gatew
 echo "✓ API Key 已配置"
 echo "✓ 模型: $TECHDB_AGENT_MODEL"
 echo "✓ 端点: $TECHDB_AGENT_BASE_URL"
-if [ -n "${TECHDB_QA_SERVICE_URL:-}" ]; then
-    echo "✓ Canonical QA 检索服务: $TECHDB_QA_SERVICE_URL"
-else
-    echo "⚠️  TECHDB_QA_SERVICE_URL 未配置"
-    echo "   门户问答会明确显示检索服务未配置，不会回退到旧知识源。"
-fi
+echo "✓ Canonical QA 检索服务: ${TECHDB_QA_SERVICE_URL:-http://canonical-qa:8765}"
 echo ""
 
 # 准备上传文件持久目录。相对路径统一相对于项目根目录解析。
@@ -135,6 +130,13 @@ fi
 echo ""
 
 # 优先复用 docker-images 分支导入的稳定镜像。缺失时才从当前源码构建。
+if ! docker image inspect techdb-canonical-qa:0801 >/dev/null 2>&1; then
+    echo "❌ 错误：缺少 techdb-canonical-qa:0801 镜像"
+    echo "   该镜像包含已校验的 bge-m3、向量/BM25 索引和记录资产，不能在服务器现场临时下载或重建。"
+    echo "   请先从 docker-images 分支下载并执行 docker load。"
+    exit 1
+fi
+
 APP_IMAGES=("techdb-api:0801" "techdb-readonly-agent:0801" "techdb-web:0801")
 APP_SERVICES=("api" "readonly-agent" "web")
 BUILD_SERVICES=()
@@ -189,6 +191,23 @@ if [ "$DB_READY" != "true" ]; then
     exit 1
 fi
 
+QA_READY=false
+for i in $(seq 1 90); do
+    if docker compose exec -T canonical-qa python -c \
+        "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready']" \
+        >/dev/null 2>&1; then
+        echo "  ✓ Canonical QA 模型、索引和记录映射已就绪"
+        QA_READY=true
+        break
+    fi
+    sleep 2
+done
+if [ "$QA_READY" != "true" ]; then
+    echo "❌ Canonical QA 在 180 秒内未就绪"
+    docker compose logs --tail=100 canonical-qa
+    exit 1
+fi
+
 # 检查服务状态
 echo ""
 echo "📊 服务状态："
@@ -198,6 +217,7 @@ echo ""
 # 获取端口
 WEB_PORT="${TECHDB_WEB_PORT:-8080}"
 AGENT_PORT="${TECHDB_AGENT_PORT:-8766}"
+QA_PORT="${TECHDB_QA_PORT:-8765}"
 
 echo "========================================"
 echo "✅ 部署完成"
@@ -206,6 +226,7 @@ echo ""
 echo "访问地址："
 echo "  前端：  http://localhost:${WEB_PORT}"
 echo "  API：  http://localhost:8000"
+echo "  QA 诊断：http://localhost:${QA_PORT}/api/health"
 echo "  兼容 Agent：http://localhost:${AGENT_PORT}/health"
 echo ""
 echo "常用命令："

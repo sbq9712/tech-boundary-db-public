@@ -3,9 +3,9 @@
 ## 前提
 
 - Linux 服务器，Docker 24+，Docker Compose V2
-- 2GB 以上内存；磁盘容量需覆盖广度数据、PostgreSQL、知识库和上传资料
+- x86_64 Linux 服务器，建议至少 8GB 内存；磁盘需覆盖五个镜像、PostgreSQL 和上传资料
 - 公司内网或本地 OpenAI 兼容模型端点
-- `docker-images` 分支提供的四个镜像 tar，或可访问的镜像构建环境
+- `docker-images` 分支提供的五个镜像 tar；服务器部署不依赖公网构建或下载模型
 
 ## 首次部署
 
@@ -13,7 +13,6 @@
 cp .env.example .env
 openssl rand -hex 32
 # 编辑 .env：填写 SECRET_KEY、数据库/管理员密码、模型配置和上传目录
-# canonical QA 就绪后再填写 TECHDB_QA_SERVICE_URL
 ./deploy.sh
 ```
 
@@ -24,8 +23,9 @@ TECHDB_UPLOAD_HOST_PATH=/srv/techdb/data/uploads
 TECHDB_API_BIND=127.0.0.1
 TECHDB_AGENT_BIND=127.0.0.1
 TECHDB_AGENT_PORT=8766
-# 同机运行上游 QA 时可通过该地址从 API 容器访问宿主机的 8765。
-TECHDB_QA_SERVICE_URL=http://host.docker.internal:8765
+TECHDB_QA_SERVICE_URL=http://canonical-qa:8765
+# CPU 环境首次加载 bge-m3 约需 50 秒，检索超时需留足余量。
+TECHDB_QA_SERVICE_TIMEOUT_SECONDS=120
 ```
 
 `deploy.sh` 会创建并检查上传目录、准备 PostgreSQL 卷、优先复用已导入的 `0801` 镜像，并执行 Alembic 迁移。只有镜像缺失或 `TECHDB_FORCE_BUILD=true` 时才从源码构建。访问入口为 `http://<服务器>:8080`。
@@ -36,7 +36,7 @@ TECHDB_QA_SERVICE_URL=http://host.docker.internal:8765
 |---|---|---|
 | PostgreSQL | `${TECHDB_PG_VOLUME}` Docker 卷 | 元数据、分类状态、校验和 |
 | 上传对象 | `${TECHDB_UPLOAD_HOST_PATH}` | 必须是服务器持久盘目录 |
-| canonical QA 服务 | `${TECHDB_QA_SERVICE_URL}` | 独立服务，承载上游既有检索索引 |
+| canonical QA 资产 | `techdb-canonical-qa:0801` 镜像 | 内置 bge-m3、既有索引、记录与图谱；不在服务器下载 |
 | 知识库 | `${TECHDB_KB_PATH}` | 只读挂载 |
 | 交付视图 | `${TECHDB_DELIVERY_VIEWS_PATH}` | 只读挂载 |
 | Chatbot 包 | `${TECHDB_CHATBOT_PACKAGE_PATH}` | 只读挂载 |
@@ -49,7 +49,7 @@ TECHDB_QA_SERVICE_URL=http://host.docker.internal:8765
 
 ## Canonical QA 资产边界
 
-门户问答需要独立的 `sbq9712/tech-db` QA 服务。远端上游已提供压缩向量/BM25 索引、jieba 字典和图谱导出；`all-records-lite.json` 不在提交中，但可由仓库内 30 个分片和官方脚本恢复。完整 `bge-m3` 模型、公司 API 适配和 QA 服务镜像仍不随 0801 应用交付。不要直接把上游 `setup.sh` 用于公司服务器：它绑定 Z.AI、用户目录密钥、Hugging Face 下载和临时 Cloudflare 地址。待资产所有者提供模型并完成公司 API 适配后，再配置 `TECHDB_QA_SERVICE_URL`。在此之前门户会返回“检索服务未配置”，不会回退到旧知识源。
+`techdb-canonical-qa:0801` 固定到上游提交 `fdffba1` 和 bge-m3 revision `5617a9f`，内置并校验向量/BM25 索引、jieba 字典、图谱、59,717 条记录和 24,091 条索引元数据。启动时会修复并验证分片重建导致的记录下标漂移；映射失败则拒绝就绪，避免引用错文。该容器只负责检索，门户 API 负责使用公司内网模型生成回答，因此 QA 容器不需要 Z.AI 或其他 LLM 密钥。不要在服务器运行上游 `setup.sh`，也不要使用 Cloudflare 或任何本机转发地址。
 
 ## 备份与恢复
 
@@ -77,7 +77,7 @@ curl -I http://localhost:8080/backend/app/main.py
 
 ```bash
 docker compose logs -f api
-docker compose up -d --build
+docker compose up -d --no-build
 docker compose down              # 保留数据
 ```
 
