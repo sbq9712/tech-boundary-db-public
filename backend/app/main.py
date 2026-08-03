@@ -1,13 +1,15 @@
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.session import SessionLocal
-from app.routers import assistant, assistant_stream, auth, conversations, dashboards, delivery_intel, domains, health, industry_map, info_items, intake, parameter_observations, users
+from app.routers import assistant, assistant_stream, auth, conversations, dashboards, delivery_intel, domains, health, industry_map, info_items, intake, parameter_observations, uploads, users
 from app.services.bootstrap import seed_domains_if_empty, seed_users_if_empty
+from app.services.upload_ingestion import recover_pending_uploads
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +36,15 @@ async def lifespan(_: FastAPI):
             db.close()
     except Exception as exc:  # pragma: no cover
         logger.warning("database bootstrap skipped: %s", exc)
+    if os.getenv("TECHDB_UPLOAD_RECOVERY_ENABLED", "true").lower() in {"1", "true", "yes"}:
+        threading.Thread(
+            target=recover_pending_uploads,
+            name="upload-ingestion-recovery",
+            daemon=True,
+        ).start()
     yield
 
-app = FastAPI(title="Tech Intel API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Tech Intel API", version="0801", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,3 +67,4 @@ app.include_router(parameter_observations.router, prefix="/api")
 app.include_router(conversations.router, prefix="/api")
 app.include_router(delivery_intel.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
+app.include_router(uploads.router, prefix="/api")

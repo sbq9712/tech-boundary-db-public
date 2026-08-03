@@ -476,8 +476,7 @@ Open: info_detail.html?id=INFO_CCUS_0001
         <select id="editClassification">
           <option value="公开">公开</option>
           <option value="内部">内部</option>
-          <option value="秘密">秘密</option>
-          <option value="机密">机密</option>
+          <option value="管理员">管理员</option>
         </select>
 
         <div class="muted small" style="margin-top:12px;">上传/复核信息不可编辑。</div>
@@ -942,7 +941,7 @@ Open: info_detail.html?id=INFO_CCUS_0001
         // ---------- details edit modal ----------
         const SOURCE_TYPE_OPTIONS = ["产业新闻", "学术文献", "报告发布", "政策", "企业公告"];
         const INFO_TYPE_OPTIONS = ["技术", "政策"];
-        const CLASSIFICATION_OPTIONS = ["公开", "内部", "秘密", "机密"];
+        const CLASSIFICATION_OPTIONS = ["公开", "内部", "管理员"];
 
         function renderToggleChips(container, options, selected){
           container.innerHTML = "";

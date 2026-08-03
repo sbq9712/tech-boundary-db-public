@@ -82,6 +82,78 @@ _LEGACY_DASHBOARDS = [
 ]
 
 
+import re as _re2
+
+def _parse_section2_table(raw: str) -> list[dict]:
+    """Parse the markdown table under section 2 into a list of row dicts."""
+    # Find the section 2 heading and its table
+    m = _re2.search(r'##\s*§?\s*2[^{]*?\n', raw)
+    if not m:
+        return []
+    after = raw[m.end():]
+    # Capture the first markdown table block (lines starting with |)
+    table_lines: list[str] = []
+    for line in after.splitlines():
+        stripped = line.strip()
+        if stripped.startswith('|'):
+            table_lines.append(stripped)
+        elif table_lines:
+            break
+    if len(table_lines) < 3:
+        return []
+    headers = [h.strip() for h in table_lines[0].split('|') if h.strip()]
+    rows: list[dict] = []
+    for line in table_lines[2:]:  # skip header + separator
+        cells = [c.strip() for c in line.split('|') if c.strip() or line.startswith('||') ]
+        cells = [c for c in line.split('|')]
+        cells = [c.strip() for c in cells[1:-1] if cells]  # drop empty edges
+        if len(cells) < len(headers):
+            cells += [''] * (len(headers) - len(cells))
+        row = dict(zip(headers, cells))
+        rows.append(row)
+    return rows
+
+
+def _match_indicator_value(indicator_name: str, table_rows: list[dict]) -> str:
+    """Fuzzy-match an editorial indicator name against section 2 rows and
+    return the actual/disclosed value, or empty string if not found."""
+    if not table_rows:
+        return ""
+    # Column name variants for the actual value
+    value_keys = ['实际值/公开披露', '当前实测/披露', '实际值', '当前实测']
+    name_keys = ['关键指标', '指标']
+    # Shorten the indicator name for fuzzy matching (remove qualifiers like
+    # "大型系统", "商业" etc. that differ between homepage and table)
+    core = indicator_name
+    for prefix in ('大型系统', '商业', '整站', '净'):
+        core = core.replace(prefix, "")
+    core = core.strip()
+    best_row = None
+    best_score = 0
+    for row in table_rows:
+        for nk in name_keys:
+            cell_name = row.get(nk, "")
+            if not cell_name:
+                continue
+            if indicator_name == cell_name:
+                best_row = row
+                break
+            # Check if core characters overlap
+            overlap = sum(1 for ch in core if ch in cell_name)
+            score = overlap / max(len(core), 1) if core else 0
+            if score > best_score and score >= 0.5:
+                best_score = score
+                best_row = row
+        if best_row and indicator_name == best_row.get(next((k for k in name_keys if k in best_row), ""), ""):
+            break
+    if not best_row:
+        return ""
+    for vk in value_keys:
+        val = best_row.get(vk, "")
+        if val:
+            return val
+    return ""
+
 def _build_kb_dashboards(db: Session) -> list[dict]:
     """Build dashboard cards from knowledge_artifacts + parameter_observations.
 
@@ -184,6 +256,26 @@ def _build_kb_dashboards(db: Session) -> list[dict]:
             unit = f" {payload['unit']}" if payload["unit"] and payload["unit"] != "-" else ""
             metrics.append(f"{payload['name']}: {payload['value']}{unit}")
             key_indicators.append(payload)
+
+        # Fallback: when reviewed homepage indicators have no matching DB
+        # parameters yet, read the section 2 metrics table from the KB
+        # document and populate values from the actual/disclosed column.
+        if not key_indicators and homepage_indicator_names:
+            table_rows = _parse_section2_table(raw)
+            for name in homepage_indicator_names:
+                cs = commercial_statuses.get(name, "")
+                csr = commercial_status_reasons.get(name, "")
+                value = _match_indicator_value(name, table_rows)
+                key_indicators.append({
+                    "name": name,
+                    "value": value or "\u2014",
+                    "unit": "",
+                    "type": "technical",
+                    "verification": "",
+                    "commercial_status": cs,
+                    "commercial_status_reason": csr,
+                })
+                metrics.append(f"{name}: {value}" if value else name)
 
         dashboards.append({
             "id": dash_id,

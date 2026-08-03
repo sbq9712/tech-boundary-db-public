@@ -7,11 +7,68 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=98" />
+  <link rel="stylesheet" href="styles.css?v=138" />
 </head>
 <body>
   <div class="layout">
     <aside class="sidebar" id="sidebar">
+      <div class="view-tabs" id="viewTabs">
+        <button class="view-tab active" data-view="intelligence" type="button">广度情报总表</button>
+        <button class="view-tab" data-view="reports" type="button">日报/周报/月报</button>
+        <button class="view-tab" data-view="calendar" type="button">会议日历</button>
+      </div>
+
+      <div id="reportView" style="display:none">
+        <div class="filter-block">
+          <div class="filter-head"><span class="filter-title">报告类型</span></div>
+          <div class="report-type-buttons">
+            <button class="report-type-btn active" data-report-type="daily" type="button">日报</button>
+            <button class="report-type-btn" data-report-type="weekly" type="button">周报</button>
+            <button class="report-type-btn" data-report-type="monthly" type="button">月报</button>
+          </div>
+        </div>
+        <div class="filter-block">
+          <div id="reportList" class="report-list-sidebar"></div>
+        </div>
+      </div>
+
+      <div id="calendarView" style="display:none">
+        <div class="filter-block">
+          <div class="filter-head"><span class="filter-title">年份</span></div>
+          <select id="calYear" class="cal-year-select">
+            <option value="2025">2025年</option>
+            <option value="2026" selected>2026年</option>
+            <option value="2027">2027年</option>
+          </select>
+        </div>
+        <div class="filter-block">
+          <div class="filter-head"><span class="filter-title">月份</span></div>
+          <div class="cal-month-grid" id="calMonthPicker">
+            <button class="cal-month-btn" data-month="-1" type="button">全年</button>
+            <button class="cal-month-btn" data-month="0" type="button">1月</button>
+            <button class="cal-month-btn" data-month="1" type="button">2月</button>
+            <button class="cal-month-btn" data-month="2" type="button">3月</button>
+            <button class="cal-month-btn" data-month="3" type="button">4月</button>
+            <button class="cal-month-btn" data-month="4" type="button">5月</button>
+            <button class="cal-month-btn" data-month="5" type="button">6月</button>
+            <button class="cal-month-btn active" data-month="6" type="button">7月</button>
+            <button class="cal-month-btn" data-month="7" type="button">8月</button>
+            <button class="cal-month-btn" data-month="8" type="button">9月</button>
+            <button class="cal-month-btn" data-month="9" type="button">10月</button>
+            <button class="cal-month-btn" data-month="10" type="button">11月</button>
+            <button class="cal-month-btn" data-month="11" type="button">12月</button>
+          </div>
+        </div>
+        <div class="filter-block">
+          <div class="filter-head"><span class="filter-title">领域分类</span></div>
+          <div class="cal-cat-list" id="calCatList">
+            <label class="cal-cat-item"><input type="checkbox" value="零碳产业" checked><span>零碳产业</span></label>
+            <label class="cal-cat-item"><input type="checkbox" value="AI与智能科技" checked><span>AI与智能科技</span></label>
+            <label class="cal-cat-item"><input type="checkbox" value="通用技术" checked><span>通用技术</span></label>
+          </div>
+        </div>
+      </div>
+
       <div class="filter-block">
         <div class="filter-head">
           <span class="filter-title">日期</span>
@@ -100,6 +157,7 @@
       <section id="recordList" class="record-list">
         <div class="loading-hint">正在载入情报数据…</div>
       </section>
+      <div id="reportContent" class="report-content" style="display:none"></div>
     </main>
   </div>
 
@@ -137,30 +195,117 @@
       if (!Number.isInteger(expectedParts) || expectedParts <= 0) {
         throw new Error('manifest missing valid total_shards');
       }
-      window.__LITE_PARTS__ = new Array(expectedParts);
-      await Promise.all(Array.from({ length: expectedParts }, async (_, j) => {
-        const response = await fetch(`data/processed/lite-part-${j}.js?v=${encodeURIComponent(dataVersion)}`);
-        if (!response.ok) throw new Error(`lite-part-${j}.js HTTP ${response.status}`);
+      const hint = document.querySelector('.loading-hint');
+      let done = 0;
+      const BATCH = Math.min(10, expectedParts);
+      window.__BODY_SHARDS__ = {};  // shard index → loaded data (for on-demand body)
+
+      // ── Tier 1: Ultra-minimal meta shards (3.9MB gzip) → instant render ──
+      const metaParts = new Array(expectedParts);
+      let useMetaShards = true;
+
+      async function fetchMetaShard(j) {
+        const response = await fetch(`data/processed/meta-part-${j}.js?v=${encodeURIComponent(dataVersion)}`);
+        if (!response.ok) {
+          if (j === 0 && response.status === 404) { useMetaShards = false; return; }
+          throw new Error(`meta-part-${j}.js HTTP ${response.status}`);
+        }
         const text = await response.text();
-        const marker = 'window.__LITE_PARTS__.push(';
+        const marker = 'window.__META_PARTS__.push(';
         const start = text.indexOf(marker);
-        const end = text.lastIndexOf(');');
-        if (start < 0 || end <= start) throw new Error(`invalid lite-part-${j}.js wrapper`);
-        const payload = text.slice(start + marker.length, end);
-        window.__LITE_PARTS__[j] = JSON.parse(payload);
-      }));
-      const data = window.__LITE_PARTS__.flat();
+        const end2 = text.lastIndexOf(');');
+        if (start < 0 || end2 <= start) throw new Error(`invalid meta-part-${j}.js wrapper`);
+        const payload = text.slice(start + marker.length, end2);
+        metaParts[j] = JSON.parse(payload);
+        done++;
+        if (hint) hint.textContent = `正在载入情报数据… ${Math.round(done / expectedParts * 100)}%`;
+      }
+
+      try {
+        for (let s = 0; s < expectedParts; s += BATCH) {
+          const end = Math.min(s + BATCH, expectedParts);
+          await Promise.all(Array.from({ length: end - s }, (_, k) => fetchMetaShard(s + k)));
+          if (!useMetaShards) break;
+        }
+      } catch(e) { useMetaShards = false; }
+
+      // Fallback: load full lite-part shards if meta-part unavailable
+      if (!useMetaShards) {
+        window.__LITE_PARTS__ = new Array(expectedParts);
+        done = 0;
+        for (let s = 0; s < expectedParts; s += BATCH) {
+          const end = Math.min(s + BATCH, expectedParts);
+          await Promise.all(Array.from({ length: end - s }, async (_, k) => {
+            const j = s + k;
+            const response = await fetch(`data/processed/lite-part-${j}.js?v=${encodeURIComponent(dataVersion)}`);
+            if (!response.ok) throw new Error(`lite-part-${j}.js HTTP ${response.status}`);
+            const text = await response.text();
+            const marker = 'window.__LITE_PARTS__.push(';
+            const start = text.indexOf(marker);
+            const end2 = text.lastIndexOf(');');
+            if (start < 0 || end2 <= start) throw new Error(`invalid lite-part-${j}.js wrapper`);
+            const payload = text.slice(start + marker.length, end2);
+            window.__LITE_PARTS__[j] = JSON.parse(payload);
+            done++;
+            if (hint) hint.textContent = `正在载入情报数据… ${Math.round(done / expectedParts * 100)}%`;
+          }));
+        }
+        const data = window.__LITE_PARTS__.flat();
+        if (Number.isInteger(expectedRecords) && data.length !== expectedRecords) {
+          throw new Error(`record count mismatch: ${data.length} != ${expectedRecords}`);
+        }
+        window.__LITE_DATA__ = data;
+        window.__LITE_LOADED__ = true;
+        window.__SUMMARY_LOADED__ = true;
+        window.__BODY_LOADED__ = true;
+        document.dispatchEvent(new Event('lite-ready'));
+        document.dispatchEvent(new Event('summary-ready'));
+        return;
+      }
+
+      const data = metaParts.flat();
       if (Number.isInteger(expectedRecords) && data.length !== expectedRecords) {
         throw new Error(`record count mismatch: ${data.length} != ${expectedRecords}`);
       }
       window.__LITE_DATA__ = data;
       window.__LITE_LOADED__ = true;
+      window.__SUMMARY_LOADED__ = false;
+      window.__BODY_LOADED__ = false;
       document.dispatchEvent(new Event('lite-ready'));
+
+      // ── Tier 2: Background-load summary shards (AI摘要 + 评分维度, 8.5MB gzip) ──
+      (async () => {
+        let sd = 0;
+        async function fetchSummaryShard(j) {
+          const response = await fetch(`data/processed/summary-part-${j}.js?v=${encodeURIComponent(dataVersion)}`);
+          if (!response.ok) return;
+          const text = await response.text();
+          const marker = 'window.__SUMMARY_PARTS__.push(';
+          const start = text.indexOf(marker);
+          const end2 = text.lastIndexOf(');');
+          if (start < 0 || end2 <= start) return;
+          const payload = text.slice(start + marker.length, end2);
+          const items = JSON.parse(payload);
+          // Store in a map for the app to pick up
+          window.__SUMMARY_PARTS__ = window.__SUMMARY_PARTS__ || [];
+          window.__SUMMARY_PARTS__[j] = items;
+          sd++;
+        }
+        for (let s = 0; s < expectedParts; s += BATCH) {
+          const end = Math.min(s + BATCH, expectedParts);
+          await Promise.all(Array.from({ length: end - s }, (_, k) => fetchSummaryShard(s + k)));
+        }
+        window.__SUMMARY_LOADED__ = true;
+        document.dispatchEvent(new Event('summary-ready'));
+      })();
+
+      // ── Tier 3: Body text loaded on-demand per shard when user clicks [展开全文] ──
+      // Implemented in app.js expand handler via fetchBodyShard()
     }
   </script>
   <script src="data/processed/manifest-data.js"></script>
   <script src="data/category-order-data.js"></script>
-  <script src="app.js?v=100"></script>
+  <script src="app.js?v=138"></script>
   <script>
     // Information Sources Panel Data
     window.__SOURCES__ = {

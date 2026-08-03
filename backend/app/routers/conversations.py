@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -28,9 +28,9 @@ class SessionIn(BaseModel):
 class MessageIn(BaseModel):
     role: str  # user | assistant
     content: str
-    citations_json: list = []
-    panel_recommendations_json: dict = {}
-    retrieval_summary_json: dict = {}
+    citations_json: list = Field(default_factory=list)
+    panel_recommendations_json: dict = Field(default_factory=dict)
+    retrieval_summary_json: dict = Field(default_factory=dict)
 
 
 class MemoryIn(BaseModel):
@@ -68,6 +68,20 @@ def create_session(
     db.commit()
     db.refresh(s)
     return {"id": str(s.id), "title": s.title, "topic_hint": s.topic_hint}
+
+
+@router.delete("/conversations/{session_id}", status_code=204)
+def delete_session(
+    session_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+) -> Response:
+    session = db.get(ConversationSession, session_id)
+    if not session or session.user_id != current_user:
+        raise HTTPException(404, "session not found")
+    db.delete(session)
+    db.commit()
+    return Response(status_code=204)
 
 
 # ── Messages ──────────────────────────────────────────────

@@ -1,14 +1,18 @@
-# 技术边界数据库 v260723
+# 技术边界数据库 0801（`v260801.0`）
 
 技术情报收集、知识管理与 AI 问答平台。
 
 ## 快速部署
 
+在已导入交付镜像的服务器上：
+
 ```bash
-tar -xzf techdb-v260723.tar.gz
-cd v260723
+docker load -i techdb-api-0801.tar
+docker load -i techdb-readonly-agent-0801.tar
+docker load -i techdb-web-0801.tar
+docker load -i postgres-16.tar
 cp .env.example .env
-# 编辑 .env，填入 TECHDB_AGENT_API_KEY
+# 编辑 .env，填入密码、公司模型配置及 TECHDB_QA_SERVICE_URL
 ./deploy.sh
 ```
 
@@ -23,31 +27,36 @@ cp .env.example .env
 - **仪表盘** — 行业赛道分析视图生成
 - **个人研究 Agent** — 账号级会话、正式知识索引、证据引用与 SSE 流式问答
 - **知识库集成** — 与 Obsidian vault 联动
+- **资料入库** — 管理员上传、服务器持久落盘、广度追踪 77 类自动分类、鉴权下载
 
 ## 技术栈
 
 **后端**：FastAPI + PostgreSQL 16 + SQLAlchemy + Alembic  
 **前端**：Vanilla JS + Nginx  
-**AI**：OpenAI 兼容端点（已验证 GLM-5.1，支持可配置模型列表）  
-**部署**：Docker Compose 四服务容器化
+**AI**：公司内网 OpenAI 兼容端点（默认 CATL AI 网关，支持可配置模型列表）
+**部署**：Docker Compose 四服务容器化；canonical QA 检索服务独立部署
 
 ## 架构
 
 ```
 Nginx (:8080)
-  ├── 静态前端 (HTML/JS/CSS)
+  ├── 白名单静态前端镜像 (HTML/JS/CSS)
   └── /api/ → FastAPI (:8000)
-                ├── 情报 CRUD
-                ├── 图谱与仪表盘
-                └── 调用 readonly-agent (:8765)
-                      └── AI 检索增强 (知识库 + chatbot 包)
+                ├── 情报 CRUD、上传落盘与 77 类分类
+                ├── 用户范围会话与公司模型生成
+                └── 调用 canonical QA 检索服务
+                     └── 既有 bge-m3 + 向量 + BM25 索引
 
 PostgreSQL 16 (容器内部 :5432)
+上传对象 (${TECHDB_UPLOAD_HOST_PATH} -> /app/uploads)
+readonly-agent (:8765 容器内部；:8766 为兼容宿主机端口)
 ```
 
 ## 数据模型
 
-18 张表，核心：`info_items`、`domains`、`sources`、`dashboards`、`alerts`、`users`。
+19 张表，核心包括 `info_items`、`domains`、`sources`、`knowledge_artifacts`、`uploaded_files` 和 `users`。新上传采用广度追踪 77 项分类目录；历史行业图景保留为快照。
+
+“文件落盘”指对象写入服务器持久目录且数据库登记 SHA-256；“资料入库”指该文件已得到分类终态。新上传的 embedding 管线尚未接入。门户问答使用的是上游已有的独立索引，不会把二者混为一谈；该服务仍需提供兼容的模型和完整记录资产，详见 `external-data/qa-assets/README.md`。
 
 ## 项目文档
 

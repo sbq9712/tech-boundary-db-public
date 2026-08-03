@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.core.security import get_current_user
+from app.services.github_qa import QAServiceError, graph_snapshot, service_status
 from app.services.hermes_bridge import HermesAgentBridge
-from urllib import request as urlrequest
-from urllib.error import URLError
-import json
-import os
 
 router = APIRouter(
     tags=["assistant"],
@@ -22,21 +19,16 @@ class AssistantQuery(BaseModel):
 
 
 @router.get("/assistant/status")
-def assistant_status() -> dict:
-    mode = os.getenv("HERMES_AGENT_MODE", "mock").strip().lower()
-    query_url = os.getenv("HERMES_AGENT_HTTP_URL", "").strip()
-    health_url = query_url.rsplit("/", 1)[0] + "/health" if query_url else ""
-    payload = {"status": "configured", "mode": mode, "agent": None, "health": None}
-    if mode != "http" or not health_url:
-        return payload
+async def assistant_status() -> dict:
+    return await service_status()
+
+
+@router.get("/assistant/graph")
+async def assistant_graph(limit: int = Query(default=200, ge=1, le=500)) -> dict:
     try:
-        with urlrequest.urlopen(health_url, timeout=5) as resp:
-            body = json.loads(resp.read().decode("utf-8", errors="replace"))
-    except (URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-        payload.update({"status": "error", "error": str(exc)})
-        return payload
-    payload.update({"status": "ok", "agent": body.get("agent"), "health": body})
-    return payload
+        return await graph_snapshot(limit)
+    except QAServiceError as exc:
+        raise HTTPException(status_code=503, detail={"code": exc.code, "message": exc.public_message}) from exc
 
 
 @router.post("/assistant/query")

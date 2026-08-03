@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
+from app.core.classification import CONFIDENTIALITY_LEVELS
 from app.core.security import get_current_user
 
 router = APIRouter(
@@ -64,7 +65,7 @@ INTAKE_SCHEMA = {
         "review_need",
     ],
     "review_statuses": ["draft", "pending_review", "human_checked", "rejected"],
-    "confidentiality_levels": ["公开", "内部", "非公开", "付费来源", "受限来源"],
+    "confidentiality_levels": list(CONFIDENTIALITY_LEVELS),
 }
 
 

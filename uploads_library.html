@@ -1,0 +1,222 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>资料库</title>
+  <link rel="stylesheet" href="app.css" />
+  <style>
+    body{ overflow:auto; }
+    .lib-wrap{ max-width:1200px; margin:0 auto; padding:24px 20px 60px; }
+    .lib-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; gap:16px; flex-wrap:wrap; }
+    .lib-head h1{ font-size:22px; font-weight:600; margin:0; }
+    .lib-head .muted{ color:var(--text-tertiary); font-size:13px; margin-top:4px; }
+    .filter-row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .filter-row select{ max-width:360px; }
+    select, input{ font-family:var(--sans); font-size:13px; padding:7px 10px; border:1px solid var(--border-standard); border-radius:var(--radius-md); background:var(--bg-canvas); color:var(--text-primary); }
+    .btn{ cursor:pointer; padding:7px 14px; border-radius:var(--radius-md); border:1px solid var(--border-standard); background:var(--bg-panel); color:var(--text-primary); font-size:13px; font-weight:500; }
+    .btn:hover{ background:var(--bg-hover); }
+    .btn.primary{ background:var(--brand); color:#fff; border-color:var(--brand); }
+    .btn.primary:hover{ background:var(--brand-light); }
+    table{ width:100%; border-collapse:collapse; background:var(--bg-canvas); border:1px solid var(--border-subtle); border-radius:var(--radius-lg); overflow:hidden; }
+    thead th{ text-align:left; padding:11px 14px; font-size:12px; font-weight:500; color:var(--text-tertiary); background:var(--bg-panel); border-bottom:1px solid var(--border-standard); white-space:nowrap; }
+    tbody td{ padding:11px 14px; font-size:13px; border-bottom:1px solid var(--border-subtle); vertical-align:middle; }
+    tbody tr:last-child td{ border-bottom:none; }
+    tbody tr:hover{ background:var(--bg-panel); }
+    .fname{ font-weight:500; color:var(--text-primary); }
+    .fname small{ display:block; font-weight:400; color:var(--text-tertiary); font-size:12px; margin-top:2px; }
+    .tag{ display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:500; background:var(--brand-bg); color:var(--brand); }
+    .tag.conf-内部{ background:var(--amber-bg); color:var(--amber); }
+    .tag.conf-管理员{ background:var(--red-bg); color:var(--red); }
+    .src-badge{ color:var(--text-tertiary); font-size:12px; }
+    .empty{ text-align:center; padding:60px 20px; color:var(--text-tertiary); }
+    .table-scroll{ overflow-x:auto; border:1px solid var(--border-subtle); border-radius:var(--radius-lg); }
+    .table-scroll table{ min-width:1120px; border:0; border-radius:0; }
+    .row-actions{ display:flex; gap:8px; white-space:nowrap; }
+    .size-cell{ color:var(--text-tertiary); white-space:nowrap; }
+    .category-cell{ min-width:240px; max-width:360px; overflow-wrap:anywhere; line-height:1.45; }
+    .status{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:99px; font-size:11px; white-space:nowrap; background:var(--bg-panel); color:var(--text-tertiary); }
+    .status.classified{ background:var(--green-bg); color:var(--green); }
+    .status.pending,.status.processing{ background:var(--amber-bg); color:var(--amber); }
+    .status.failed{ background:var(--red-bg); color:var(--red); }
+    .ai-mark{ font-size:10px; color:var(--text-quaternary); }
+    .ai-mark.ai_filled{ color:var(--green); }
+    .lib-foot{ margin-top:20px; display:flex; justify-content:space-between; align-items:center; }
+    .topnav a,.topnav span{ white-space:nowrap; }
+    @media(max-width:640px){
+      .topnav{ gap:10px!important; padding:10px 12px!important; }
+      .topnav .nav-separator,.topnav .nav-context{ display:none; }
+      .lib-wrap{ padding:18px 12px 40px; }
+      .filter-row{ width:100%; align-items:stretch; }
+      .filter-row select{ width:100%; max-width:none; }
+      .filter-row .btn.primary{ text-align:center; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topnav" style="display:flex;align-items:center;gap:16px;padding:10px 24px;background:var(--bg-panel);border-bottom:1px solid var(--border-subtle);font-size:13px;">
+    <a href="index.html" style="font-weight:700;color:var(--brand);text-decoration:none;">← 技术边界数据库</a>
+    <span class="nav-separator" style="color:var(--border-standard);">|</span>
+    <span class="nav-context" style="color:var(--text-tertiary);">资料库</span>
+    <span style="flex:1;"></span>
+    <a href="index.html" style="color:var(--text-tertiary);text-decoration:none;">返回主页</a>
+  </nav>
+  <div class="lib-wrap">
+    <div class="lib-head">
+      <div>
+        <h1>资料库</h1>
+        <div class="muted">管理员上传的资料，登录用户可下载</div>
+      </div>
+      <div class="filter-row">
+        <select id="srcFilter">
+          <option value="">全部来源</option>
+          <option>论文</option><option>专利</option><option>研报</option>
+          <option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option>
+        </select>
+        <select id="categoryFilter" aria-label="业务分类">
+          <option value="">全部分类</option>
+        </select>
+        <select id="statusFilter" aria-label="分类状态">
+          <option value="">全部状态</option>
+          <option value="pending">待分类</option>
+          <option value="processing">分类中</option>
+          <option value="classified">已分类</option>
+          <option value="unclassified">未分类</option>
+          <option value="irrelevant">不相关</option>
+          <option value="failed">分类失败</option>
+          <option value="legacy_unclassified">历史未分类</option>
+        </select>
+        <a class="btn primary" id="uploadLink" href="uploads_admin.html" style="display:none;">上传资料</a>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>资料</th><th>分类</th><th>状态</th><th>来源类型</th><th>密级</th><th>大小</th><th>上传者</th><th>时间</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div id="emptyMsg" class="empty" style="display:none;">暂无资料</div>
+
+    <div class="lib-foot">
+      <span class="muted" id="countInfo"></span>
+      <div class="row-actions">
+        <button class="btn" id="prevBtn">上一页</button>
+        <button class="btn" id="nextBtn">下一页</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="auth.js"></script>
+  <script>
+    Auth.requireAuth();
+    const API = "/api";
+    let offset = 0, limit = 30, total = 0, isAdmin = false, refreshTimer = null;
+
+    const statusLabels={
+      pending:"待分类", processing:"分类中", classified:"已分类", unclassified:"未分类",
+      irrelevant:"不相关", failed:"分类失败", legacy_unclassified:"历史未分类"
+    };
+
+    function esc(value){
+      return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[ch]);
+    }
+
+    function fmtSize(n){ if(!n) return "-"; const u=["B","KB","MB","GB"]; let i=0,s=n; while(s>=1024&&i<3){s/=1024;i++;} return s.toFixed(s<10?1:0)+" "+u[i]; }
+    function fmtTime(iso){ if(!iso) return "-"; const d=new Date(iso); return isNaN(d)?"-":d.toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}); }
+
+    async function checkAdmin(){
+      try{
+        const r=await Auth.authFetch(API+"/auth/me");
+        if(!r||!r.ok) return;
+        const j=await r.json();
+        isAdmin=j.role==="admin";
+        if(isAdmin) document.getElementById("uploadLink").style.display="";
+      }catch(e){}
+    }
+
+    async function loadTaxonomy(){
+      const r=await Auth.authFetch(API+"/uploads/taxonomy");
+      if(!r||!r.ok) return;
+      const data=await r.json();
+      const select=document.getElementById("categoryFilter");
+      select.innerHTML='<option value="">全部分类</option>'+data.categories.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    }
+
+    async function load(){
+      if(refreshTimer){ clearTimeout(refreshTimer); refreshTimer=null; }
+      const src=document.getElementById("srcFilter").value;
+      const category=document.getElementById("categoryFilter").value;
+      const status=document.getElementById("statusFilter").value;
+      let url=API+"/uploads?limit="+limit+"&offset="+offset;
+      if(src) url+="&source_type="+encodeURIComponent(src);
+      if(category) url+="&primary_category="+encodeURIComponent(category);
+      if(status) url+="&classification_status="+encodeURIComponent(status);
+      const r=await Auth.authFetch(url);
+      if(!r) return;
+      if(!r.ok){ alert("资料列表加载失败 "+r.status); return; }
+      const data=await r.json();
+      total=data.count;
+      if(offset>0&&!data.files.length){ offset=Math.max(0,offset-limit); return load(); }
+      const tb=document.getElementById("rows");
+      document.getElementById("emptyMsg").style.display=data.files.length?"none":"block";
+      tb.innerHTML=data.files.map(f=>{
+        const conf=f.confidentiality?`<span class="tag conf-${esc(f.confidentiality)}">${esc(f.confidentiality)}</span>`:"-";
+        const titleSource=esc(f.title_source||"");
+        const aiMark=f.title_source==="manual"?"":`<span class="ai-mark ${titleSource}">${f.title_source==="ai_filled"?"AI":"…"}</span>`;
+        const canRetry=isAdmin&&["failed","unclassified","legacy_unclassified"].includes(f.classification_status);
+        const category=f.primary_category||"-";
+        const status=f.classification_status||"legacy_unclassified";
+        const statusDetail=f.classification_error||f.classification_reason||"";
+        return `<tr>
+          <td class="fname">${esc(f.title||f.original_filename)}${aiMark}<small>${esc(f.original_filename)}${f.note?" · "+esc(f.note):""}</small></td>
+          <td class="category-cell" title="${esc(category)}">${esc(category)}</td>
+          <td><span class="status ${esc(status)}" title="${esc(statusDetail)}">${esc(statusLabels[status]||status)}</span></td>
+          <td><span class="src-badge">${esc(f.source_type||"-")}</span></td>
+          <td>${conf}</td>
+          <td class="size-cell">${fmtSize(f.size_bytes)}</td>
+          <td>${esc(f.submitted_by)}</td>
+          <td class="size-cell">${fmtTime(f.created_at)}</td>
+          <td><div class="row-actions"><button class="btn" data-download="${esc(f.id)}">下载</button>${canRetry?`<button class="btn" data-retry="${esc(f.id)}">重试分类</button>`:""}</div></td>
+        </tr>`;
+      }).join("");
+      const start=total?offset+1:0, end=Math.min(offset+data.files.length,total);
+      document.getElementById("countInfo").textContent=`共 ${total} 条，当前 ${start}-${end}`;
+      document.getElementById("prevBtn").disabled=offset===0;
+      document.getElementById("nextBtn").disabled=offset+limit>=total;
+      tb.querySelectorAll("button[data-download]").forEach(b=>b.onclick=()=>download(b.dataset.download));
+      tb.querySelectorAll("button[data-retry]").forEach(b=>b.onclick=()=>retryClassification(b.dataset.retry,b));
+      if(data.files.some(f=>["pending","processing"].includes(f.classification_status))){
+        refreshTimer=setTimeout(load,3000);
+      }
+    }
+
+    async function retryClassification(id,button){
+      button.disabled=true;
+      try{
+        const r=await Auth.authFetch(API+"/uploads/"+encodeURIComponent(id)+"/classification/retry",{method:"POST"});
+        if(!r||!r.ok){ const data=r?await r.json().catch(()=>({})):{}; throw new Error(data.detail||"重试失败"); }
+        await load();
+      }catch(e){ alert(e.message); button.disabled=false; }
+    }
+
+    function download(id){
+      // 带鉴权下载：先取 token，再 fetch blob 触发下载
+      const token=Auth.getToken();
+      fetch(API+"/uploads/"+id+"/download",{headers:{Authorization:"Bearer "+token}})
+        .then(r=>{ if(!r.ok) throw new Error("下载失败 "+r.status); return r.blob().then(b=>{ const cd=r.headers.get("Content-Disposition")||""; let name="download"; const utf8=cd.match(/filename\*=UTF-8''([^;]+)/i); const plain=cd.match(/filename="([^"]+)"/); if(utf8){ try{name=decodeURIComponent(utf8[1]);}catch(e){name=utf8[1];} }else if(plain){name=plain[1];} const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(u),0); }); })
+        .catch(e=>alert(e.message));
+    }
+
+    ["srcFilter","categoryFilter","statusFilter"].forEach(id=>document.getElementById(id).onchange=()=>{ offset=0; load(); });
+    document.getElementById("prevBtn").onclick=()=>{ offset=Math.max(0,offset-limit); load(); };
+    document.getElementById("nextBtn").onclick=()=>{ if(offset+limit<total){offset+=limit; load();} };
+
+    Promise.all([checkAdmin(),loadTaxonomy()]).finally(load);
+  </script>
+</body>
+</html>

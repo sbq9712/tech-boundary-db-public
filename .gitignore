@@ -29,6 +29,9 @@ Thumbs.db
 
 # Runtime state and logs
 pg_data/
+runtime-data/
+uploads/*
+!uploads/.gitkeep
 *.log
 *.pid
 *.sock
@@ -56,12 +59,15 @@ external-data/*
 !external-data/knowledge-base/
 !external-data/delivery-views/
 !external-data/chatbot-package/
+!external-data/qa-assets/
 external-data/knowledge-base/*
 external-data/delivery-views/*
 external-data/chatbot-package/*
+external-data/qa-assets/*
 !external-data/knowledge-base/.gitkeep
 !external-data/delivery-views/.gitkeep
 !external-data/chatbot-package/.gitkeep
+!external-data/qa-assets/README.md
 
 # Large raw/index data remains outside Git.
 data_sources/tech_kb_builder_2025w41/indexes/

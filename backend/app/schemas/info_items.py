@@ -4,20 +4,30 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.classification import normalize_confidentiality
+
+
+class ConfidentialityFields(BaseModel):
+    classification: str | None = None
+
+    @field_validator("classification", mode="before")
+    @classmethod
+    def normalize_classification(cls, value: object) -> str | None:
+        return normalize_confidentiality(value)
 
 
 class IndicatorsUpsertIn(BaseModel):
     indicators: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class InfoItemDetailsUpdateIn(BaseModel):
+class InfoItemDetailsUpdateIn(ConfidentialityFields):
     source_url: str | None = None
     source_types: list[str] = Field(default_factory=list)
     info_types: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     comment: str | None = None
-    classification: str | None = None
 
 
 class AlertUpsertIn(BaseModel):
@@ -30,7 +40,7 @@ class AlertUpsertIn(BaseModel):
     dismiss_reason: str | None = None
 
 
-class InfoItemDraftIn(BaseModel):
+class InfoItemDraftIn(ConfidentialityFields):
     title: str = Field(min_length=1)
     content: str = Field(min_length=1)
     source_url: str | None = None
@@ -42,13 +52,12 @@ class InfoItemDraftIn(BaseModel):
     info_types: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     domain_ids: list[str] = Field(min_length=1)
-    classification: str | None = None
     status: str = "draft"
     draft_data: dict[str, Any] = Field(default_factory=dict)
     alert: AlertUpsertIn | None = None
 
 
-class InfoItemPublishIn(BaseModel):
+class InfoItemPublishIn(ConfidentialityFields):
     title: str = Field(min_length=1)
     content: str = Field(min_length=1)
     source_url: str | None = None
@@ -60,7 +69,6 @@ class InfoItemPublishIn(BaseModel):
     info_types: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     domain_ids: list[str] = Field(min_length=1)
-    classification: str | None = None
     draft_id: UUID | None = None
     revision_of: UUID | None = None
     draft_data: dict[str, Any] = Field(default_factory=dict)

@@ -395,11 +395,12 @@
     const val = (v || "").trim();
     if(!val) return "内部";
     const lower = val.toLowerCase();
-    if(lower === "public") return "公开";
-    if(lower === "internal") return "内部";
-    if(lower === "secret") return "秘密";
-    if(lower === "top_secret") return "机密";
-    return val;
+    if(val === "公开" || lower === "public") return "公开";
+    if(val === "管理员" || lower === "admin") return "管理员";
+    if(val === "内部" || lower === "internal") return "内部";
+    if(["非公开", "付费来源", "受限来源", "秘密", "机密"].includes(val)) return "内部";
+    if(["secret", "top_secret"].includes(lower)) return "内部";
+    return "内部";
   }
 
   function parseBool(v){

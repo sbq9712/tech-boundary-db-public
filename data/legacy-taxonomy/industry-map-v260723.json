@@ -1,0 +1,2900 @@
+{
+  "source": "/mnt/d/##EDMUNDS/技术数据库/行业图景/行业图景.xmind",
+  "sheets": [
+    {
+      "id": "a34d7a6d-c43e-4e19-ac74-b42e8dadaa63",
+      "title": "零碳产业",
+      "root": {
+        "id": "a81aaf27-912e-45dd-ae58-e1afe91a4a62",
+        "title": "零碳产业",
+        "depth": 0,
+        "path": [
+          "零碳产业"
+        ],
+        "children": [
+          {
+            "id": "4b645861-be64-472d-8731-0f16695ed994",
+            "title": "物质循环",
+            "depth": 1,
+            "path": [
+              "零碳产业",
+              "物质循环"
+            ],
+            "children": [
+              {
+                "id": "b2b2c2fa-e9bd-43d8-929e-abf793fc8888",
+                "title": "资源处理",
+                "depth": 2,
+                "path": [
+                  "零碳产业",
+                  "物质循环",
+                  "资源处理"
+                ],
+                "children": [
+                  {
+                    "id": "0372ec81-d2d0-418a-9960-5e78f4c61713",
+                    "title": "勘探技术",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "物质循环",
+                      "资源处理",
+                      "勘探技术"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "60dd3b4a-2e9d-4f44-a6d7-b4a0e7a120db",
+                    "title": "开采技术",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "物质循环",
+                      "资源处理",
+                      "开采技术"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "f5cf7d48-fe1f-45aa-b44f-27e183bd2df6",
+                    "title": "尾矿处理",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "物质循环",
+                      "资源处理",
+                      "尾矿处理"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "0f13c061-0119-414d-812b-ae15f7f24415",
+                    "title": "资源回收",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "物质循环",
+                      "资源处理",
+                      "资源回收"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  }
+                ],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "a2e125d3-f15b-41a7-bbe5-1a501b6cd7e8",
+                "title": "有机物（碳循环）",
+                "depth": 2,
+                "path": [
+                  "零碳产业",
+                  "物质循环",
+                  "有机物（碳循环）"
+                ],
+                "children": [
+                  {
+                    "id": "7c26b896-4238-4a06-8c13-6319107e6bc9",
+                    "title": "有机工业",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "物质循环",
+                      "有机物（碳循环）",
+                      "有机工业"
+                    ],
+                    "children": [
+                      {
+                        "id": "cb7a5166-f80c-4d6d-9b2e-79a6f60bdb35",
+                        "title": "传统化工",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "有机物（碳循环）",
+                          "有机工业",
+                          "传统化工"
+                        ],
+                        "children": [
+                          {
+                            "id": "5a04eeb7-9077-43e6-a702-7f76cd3cfe79",
+                            "title": "C1化工",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "有机工业",
+                              "传统化工",
+                              "C1化工"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "fadbe09e-9ec6-407c-82a7-78aa8cfd31c8",
+                            "title": "烯烃和芳烃",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "有机工业",
+                              "传统化工",
+                              "烯烃和芳烃"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "136253dd-0eb0-4d98-9fc6-6c77fd56c7ff",
+                            "title": "高分子材料",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "有机工业",
+                              "传统化工",
+                              "高分子材料"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "c9acb6a1-9dac-4c3c-8c62-e3e7806e1815",
+                            "title": "石油化工",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "有机工业",
+                              "传统化工",
+                              "石油化工"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          }
+                        ],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "a1f098a3-516f-40a7-97d1-531bf73f3e56",
+                        "title": "电化学过程",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "有机物（碳循环）",
+                          "有机工业",
+                          "电化学过程"
+                        ],
+                        "children": [
+                          {
+                            "id": "69b511d7-b0e6-4cb4-973f-d54dee2156c4",
+                            "title": "CO2RR",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "有机工业",
+                              "电化学过程",
+                              "CO2RR"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "c65c1d32-0153-4b03-8b5f-10bfea02ba7d",
+                            "title": "有机电合成",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "有机工业",
+                              "电化学过程",
+                              "有机电合成"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          }
+                        ],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "8d729320-1cce-4627-8ac6-43e494345c6a",
+                        "title": "生物过程",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "有机物（碳循环）",
+                          "有机工业",
+                          "生物过程"
+                        ],
+                        "children": [
+                          {
+                            "id": "9de02e07-66c8-48f9-b55d-b3bb2a566989",
+                            "title": "农林",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "有机工业",
+                              "生物过程",
+                              "农林"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "f50c07c5-9679-4bfa-a91d-5fc0743860e1",
+                            "title": "传统生物化工",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "有机工业",
+                              "生物过程",
+                              "传统生物化工"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "5d73af99-3eb1-446d-895c-8450122937a0",
+                            "title": "合成生物学",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "有机工业",
+                              "生物过程",
+                              "合成生物学"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          }
+                        ],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "9783ecd5-a374-40af-b253-8408ef6d2fca",
+                    "title": "CCUS",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "物质循环",
+                      "有机物（碳循环）",
+                      "CCUS"
+                    ],
+                    "children": [
+                      {
+                        "id": "b811856b-cff0-43f4-af89-ba811c6a4ec7",
+                        "title": "捕集",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "有机物（碳循环）",
+                          "CCUS",
+                          "捕集"
+                        ],
+                        "children": [
+                          {
+                            "id": "3c0b4627-3328-4964-be2e-f21fef33e501",
+                            "title": "吸附法",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "捕集",
+                              "吸附法"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "81b328b1-b16e-429a-8af1-f1c360e45a3f",
+                            "title": "吸收法",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "捕集",
+                              "吸收法"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "546a0b32-d8fc-429d-bbe2-0ff81f4f3265",
+                            "title": "膜分离",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "捕集",
+                              "膜分离"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "75f812bc-80b1-4bc5-b9fa-259f45a7b2e8",
+                            "title": "化学链",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "捕集",
+                              "化学链"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          }
+                        ],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "45e84de3-0190-485a-848f-2a7eed45cfea",
+                        "title": "利用",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "有机物（碳循环）",
+                          "CCUS",
+                          "利用"
+                        ],
+                        "children": [
+                          {
+                            "id": "a7457d9d-9ed7-4e6a-b9b5-53d51faf8571",
+                            "title": "CO2重整",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "利用",
+                              "CO2重整"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "9bbe2898-649e-4bcd-bdf3-a074f6fcc54c",
+                            "title": "CO2矿化",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "物质循环",
+                              "有机物（碳循环）",
+                              "CCUS",
+                              "利用",
+                              "CO2矿化"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          }
+                        ],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "2b8e56c2-672f-4434-a0e7-ae9f7b290dbf",
+                        "title": "封存",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "有机物（碳循环）",
+                          "CCUS",
+                          "封存"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  }
+                ],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "92309144-a8f0-48c1-b954-901528b677e7",
+                "title": "无机物",
+                "depth": 2,
+                "path": [
+                  "零碳产业",
+                  "物质循环",
+                  "无机物"
+                ],
+                "children": [
+                  {
+                    "id": "19e1c981-1154-4f01-96fe-ff5c71f0952d",
+                    "title": "黑色金属",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "物质循环",
+                      "无机物",
+                      "黑色金属"
+                    ],
+                    "children": [
+                      {
+                        "id": "6a787a93-53a7-4a16-a73d-bc83d6d98507",
+                        "title": "钢铁",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "无机物",
+                          "黑色金属",
+                          "钢铁"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "dff18600-57e6-4b31-a96a-08eac221c4fd",
+                        "title": "其它黑色金属产业",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "无机物",
+                          "黑色金属",
+                          "其它黑色金属产业"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "e6d31a09-e1c7-4eef-963c-8d567c6164eb",
+                    "title": "有色金属",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "物质循环",
+                      "无机物",
+                      "有色金属"
+                    ],
+                    "children": [
+                      {
+                        "id": "ef939e63-674c-4fef-9ddd-9a8aef641450",
+                        "title": "铝业",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "无机物",
+                          "有色金属",
+                          "铝业"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "31b2a026-2845-4858-8ea3-fcf3ab119f3e",
+                        "title": "铜业",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "无机物",
+                          "有色金属",
+                          "铜业"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "0b79193e-b7f4-4a58-b47b-e81407cf9f76",
+                        "title": "其它有色金属产业",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "无机物",
+                          "有色金属",
+                          "其它有色金属产业"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "75a666f3-9701-4bf1-ad63-5e155003092e",
+                    "title": "非金属",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "物质循环",
+                      "无机物",
+                      "非金属"
+                    ],
+                    "children": [
+                      {
+                        "id": "2e95408d-c243-4a9d-bd67-81f007ba504e",
+                        "title": "水泥",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "无机物",
+                          "非金属",
+                          "水泥"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "2cab12ad-f1be-45fc-bf6c-2c766794c11e",
+                        "title": "玻璃",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "无机物",
+                          "非金属",
+                          "玻璃"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "a72715a6-c74d-4ed8-a4c4-5ea1199a0a7b",
+                        "title": "陶瓷",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "无机物",
+                          "非金属",
+                          "陶瓷"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "948f26b5-436c-4c1c-955a-73ea9137f260",
+                        "title": "其它无机非金属",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "物质循环",
+                          "无机物",
+                          "非金属",
+                          "其它无机非金属"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  }
+                ],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              }
+            ],
+            "coverage": {
+              "intel": false,
+              "special_issue": false,
+              "dashboard": false
+            },
+            "links": {
+              "intel": null,
+              "special_issue": null,
+              "dashboard": null
+            }
+          },
+          {
+            "id": "59aba10d-0b18-4f00-a99a-b7d65ebe838a",
+            "title": "能量循环",
+            "depth": 1,
+            "path": [
+              "零碳产业",
+              "能量循环"
+            ],
+            "children": [
+              {
+                "id": "ac632b80-22ff-422a-961d-e6c98a0f5922",
+                "title": "能源测",
+                "depth": 2,
+                "path": [
+                  "零碳产业",
+                  "能量循环",
+                  "能源测"
+                ],
+                "children": [
+                  {
+                    "id": "c46514ae-80e1-4ff3-a9b0-7167ceb48607",
+                    "title": "发电技术",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "能量循环",
+                      "能源测",
+                      "发电技术"
+                    ],
+                    "children": [
+                      {
+                        "id": "61b22a4d-a8b1-48ce-b1f3-ef9c2efe890b",
+                        "title": "火电",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能源测",
+                          "发电技术",
+                          "火电"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "4e05d0e4-f973-41f8-8a76-648ccf11b8ed",
+                        "title": "水电",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能源测",
+                          "发电技术",
+                          "水电"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "3f411fec-4b3c-48e4-9031-c89c7e7db9c7",
+                        "title": "光伏",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能源测",
+                          "发电技术",
+                          "光伏"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "d6038188-6a27-4e12-99a1-8357e154fff9",
+                        "title": "光热",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能源测",
+                          "发电技术",
+                          "光热"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "e40832e6-749e-4f6a-8411-df039f5eb909",
+                        "title": "风电",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能源测",
+                          "发电技术",
+                          "风电"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "2d9da00b-fb6e-415e-9e98-9fe03621dc73",
+                        "title": "核电",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能源测",
+                          "发电技术",
+                          "核电"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "3afef988-44c1-45e4-a83b-25a9a6cd1361",
+                        "title": "燃料电池",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能源测",
+                          "发电技术",
+                          "燃料电池"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "5ab73d84-a821-4143-9fa6-00318a6a193f",
+                        "title": "其他发电技术",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能源测",
+                          "发电技术",
+                          "其他发电技术"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "dabecf24-9796-4c61-97aa-dc5fc5aceaf3",
+                    "title": "供热技术",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "能量循环",
+                      "能源测",
+                      "供热技术"
+                    ],
+                    "children": [
+                      {
+                        "id": "d1ee1300-42af-4aee-8b45-a03f6c2f9c66",
+                        "title": "热电联产",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能源测",
+                          "供热技术",
+                          "热电联产"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "95987425-0a0f-4900-b3c1-978ddcbe14f2",
+                        "title": "热泵",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能源测",
+                          "供热技术",
+                          "热泵"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  }
+                ],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "8cca371c-567a-4f98-b456-3781b6e16f94",
+                "title": "能量存储",
+                "depth": 2,
+                "path": [
+                  "零碳产业",
+                  "能量循环",
+                  "能量存储"
+                ],
+                "children": [
+                  {
+                    "id": "afcd6d30-0106-4b26-8368-f1cf3ac97e70",
+                    "title": "电化学储能",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "能量循环",
+                      "能量存储",
+                      "电化学储能"
+                    ],
+                    "children": [
+                      {
+                        "id": "0a484ff0-4f32-4bb7-949a-a0cd9771ddd1",
+                        "title": "二次电池",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "电化学储能",
+                          "二次电池"
+                        ],
+                        "children": [
+                          {
+                            "id": "b4ea5a93-4d59-49f5-acff-02e90e145bc5",
+                            "title": "锂电池",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "电化学储能",
+                              "二次电池",
+                              "锂电池"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "5a875dc0-673f-4f6c-a287-8006f3327b1a",
+                            "title": "钠电池",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "电化学储能",
+                              "二次电池",
+                              "钠电池"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "4bae61a2-4c45-44a4-9603-f2fa8cf478d9",
+                            "title": "其它电池体系",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "电化学储能",
+                              "二次电池",
+                              "其它电池体系"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          }
+                        ],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "1384b2f9-610f-4d58-92fc-7d0f377338b2",
+                        "title": "一次电池",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "电化学储能",
+                          "一次电池"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "859ab2c5-2775-4e75-bc2d-e62bc7675ba5",
+                        "title": "超级电容器",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "电化学储能",
+                          "超级电容器"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "cd0bd742-b0ee-4f33-8681-77fe17b7ba08",
+                    "title": "储热",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "能量循环",
+                      "能量存储",
+                      "储热"
+                    ],
+                    "children": [
+                      {
+                        "id": "3ef5b7e0-a44b-4527-9c16-02f23b727f78",
+                        "title": "熔盐储热",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "储热",
+                          "熔盐储热"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "399a5888-37c7-4eda-a286-9364eec63a02",
+                        "title": "固态储热",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "储热",
+                          "固态储热"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "1800aac4-2d05-42f8-b4d3-0d259d66f6ea",
+                        "title": "压缩空气",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "储热",
+                          "压缩空气"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "f51ef24a-861f-43e1-9d1c-852bd2108b42",
+                        "title": "水储热",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "储热",
+                          "水储热"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "b4bd4626-04a7-4e6a-a5a0-26c087e887a2",
+                        "title": "其他储热技术",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "储热",
+                          "其他储热技术"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "0826cabd-68e5-47e4-89f1-4e2a281c97fa",
+                    "title": "化学能",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "能量循环",
+                      "能量存储",
+                      "化学能"
+                    ],
+                    "children": [
+                      {
+                        "id": "bbed7401-385e-465f-9e14-b5d97f889342",
+                        "title": "氢基能源",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "化学能",
+                          "氢基能源"
+                        ],
+                        "children": [
+                          {
+                            "id": "f117a9bc-fb83-47e6-ad9a-fd94b09609d3",
+                            "title": "制氢",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "化学能",
+                              "氢基能源",
+                              "制氢"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "aea70d76-3ae1-48a1-a073-9133d63fc1dd",
+                            "title": "储氢",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "化学能",
+                              "氢基能源",
+                              "储氢"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "2e5f2cc7-0eea-4bb4-9d17-5c3f46075b40",
+                            "title": "运氢",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "化学能",
+                              "氢基能源",
+                              "运氢"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          },
+                          {
+                            "id": "73e609d5-79e5-413a-b324-2efc27206df5",
+                            "title": "用氢",
+                            "depth": 5,
+                            "path": [
+                              "零碳产业",
+                              "能量循环",
+                              "能量存储",
+                              "化学能",
+                              "氢基能源",
+                              "用氢"
+                            ],
+                            "children": [],
+                            "coverage": {
+                              "intel": false,
+                              "special_issue": false,
+                              "dashboard": false
+                            },
+                            "links": {
+                              "intel": null,
+                              "special_issue": null,
+                              "dashboard": null
+                            }
+                          }
+                        ],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "14716c45-fcdd-4a7b-b91f-3a6fc04e880c",
+                        "title": "金属储能",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "化学能",
+                          "金属储能"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "5c043271-5eb9-4873-ac78-7d99e4a11e33",
+                    "title": "机械能",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "能量循环",
+                      "能量存储",
+                      "机械能"
+                    ],
+                    "children": [
+                      {
+                        "id": "74078548-da77-4d37-8d1e-38f71c33676d",
+                        "title": "重力储能",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "机械能",
+                          "重力储能"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      },
+                      {
+                        "id": "fffd6bf3-f59d-491f-bbda-36d12047b212",
+                        "title": "飞轮储能",
+                        "depth": 4,
+                        "path": [
+                          "零碳产业",
+                          "能量循环",
+                          "能量存储",
+                          "机械能",
+                          "飞轮储能"
+                        ],
+                        "children": [],
+                        "coverage": {
+                          "intel": false,
+                          "special_issue": false,
+                          "dashboard": false
+                        },
+                        "links": {
+                          "intel": null,
+                          "special_issue": null,
+                          "dashboard": null
+                        }
+                      }
+                    ],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "fb7625ae-a994-47ca-ad48-298a7ad3d56a",
+                    "title": "其它储能技术",
+                    "depth": 3,
+                    "path": [
+                      "零碳产业",
+                      "能量循环",
+                      "能量存储",
+                      "其它储能技术"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  }
+                ],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              }
+            ],
+            "coverage": {
+              "intel": false,
+              "special_issue": false,
+              "dashboard": false
+            },
+            "links": {
+              "intel": null,
+              "special_issue": null,
+              "dashboard": null
+            }
+          }
+        ],
+        "coverage": {
+          "intel": false,
+          "special_issue": false,
+          "dashboard": false
+        },
+        "links": {
+          "intel": null,
+          "special_issue": null,
+          "dashboard": null
+        }
+      },
+      "node_count": 71,
+      "max_depth": 5
+    },
+    {
+      "id": "3a463337-35ca-4efa-a5dc-be514d2f9688",
+      "title": "AI与智能科技",
+      "root": {
+        "id": "be32b39f-c193-455f-84d1-0a28d1b5425d",
+        "title": "AI与智能科技",
+        "depth": 0,
+        "path": [
+          "AI与智能科技"
+        ],
+        "children": [
+          {
+            "id": "99de5ac6-b8a8-469a-bdd8-57da59b11ff4",
+            "title": "AI软件层",
+            "depth": 1,
+            "path": [
+              "AI与智能科技",
+              "AI软件层"
+            ],
+            "children": [
+              {
+                "id": "46c6449f-e5c1-4011-a517-c032a1f8f306",
+                "title": "底座大模型",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "AI软件层",
+                  "底座大模型"
+                ],
+                "children": [
+                  {
+                    "id": "c5dc2188-28dd-404e-8fde-079d69014ad0",
+                    "title": "文本模型",
+                    "depth": 3,
+                    "path": [
+                      "AI与智能科技",
+                      "AI软件层",
+                      "底座大模型",
+                      "文本模型"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "f4172c39-fa1e-420e-9b30-07e409b995dd",
+                    "title": "多模态模型",
+                    "depth": 3,
+                    "path": [
+                      "AI与智能科技",
+                      "AI软件层",
+                      "底座大模型",
+                      "多模态模型"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  }
+                ],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "4c3a8b7b-d7f1-4f51-bc8b-e5412067c219",
+                "title": "工程改进",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "AI软件层",
+                  "工程改进"
+                ],
+                "children": [
+                  {
+                    "id": "e65434f7-f33a-4ac8-b0a5-c73012aca1a7",
+                    "title": "工作流",
+                    "depth": 3,
+                    "path": [
+                      "AI与智能科技",
+                      "AI软件层",
+                      "工程改进",
+                      "工作流"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "3e44203a-9ecd-44da-91a9-f0396fec54ab",
+                    "title": "AGENT",
+                    "depth": 3,
+                    "path": [
+                      "AI与智能科技",
+                      "AI软件层",
+                      "工程改进",
+                      "AGENT"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  }
+                ],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "387afcad-effc-43d4-a92a-0a91d12b3992",
+                "title": "AI4S",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "AI软件层",
+                  "AI4S"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              }
+            ],
+            "coverage": {
+              "intel": false,
+              "special_issue": false,
+              "dashboard": false
+            },
+            "links": {
+              "intel": null,
+              "special_issue": null,
+              "dashboard": null
+            }
+          },
+          {
+            "id": "0819158e-5060-45be-bef0-22eaaf3b481a",
+            "title": "AI硬件层",
+            "depth": 1,
+            "path": [
+              "AI与智能科技",
+              "AI硬件层"
+            ],
+            "children": [
+              {
+                "id": "e362c977-4020-473c-a1d9-1b430357861b",
+                "title": "半导体",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "AI硬件层",
+                  "半导体"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "775f3d0a-536f-4f32-83dc-07a9e88e8c90",
+                "title": "芯片",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "AI硬件层",
+                  "芯片"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "5e2b969e-a864-4937-8655-3477f117a857",
+                "title": "计算集群",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "AI硬件层",
+                  "计算集群"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "ae33d10f-963f-4200-8e24-336f9d437e74",
+                "title": "数据中心",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "AI硬件层",
+                  "数据中心"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "1593125b-9d44-443d-88c4-1ef795593e35",
+                "title": "算力能源基础设施",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "AI硬件层",
+                  "算力能源基础设施"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              }
+            ],
+            "coverage": {
+              "intel": false,
+              "special_issue": false,
+              "dashboard": false
+            },
+            "links": {
+              "intel": null,
+              "special_issue": null,
+              "dashboard": null
+            }
+          },
+          {
+            "id": "8d888827-55d7-48c5-8187-7079f694f463",
+            "title": "其它智能科技",
+            "depth": 1,
+            "path": [
+              "AI与智能科技",
+              "其它智能科技"
+            ],
+            "children": [
+              {
+                "id": "4389f334-671f-4f0b-82b6-0b17cbacc8e3",
+                "title": "脑机接口",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "其它智能科技",
+                  "脑机接口"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "f93caef9-2170-4bb3-8292-793379d41d42",
+                "title": "量子信息",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "其它智能科技",
+                  "量子信息"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              }
+            ],
+            "coverage": {
+              "intel": false,
+              "special_issue": false,
+              "dashboard": false
+            },
+            "links": {
+              "intel": null,
+              "special_issue": null,
+              "dashboard": null
+            }
+          },
+          {
+            "id": "b4c13724-8f28-4811-99f4-a5e3d17fe1a8",
+            "title": "具身智能",
+            "depth": 1,
+            "path": [
+              "AI与智能科技",
+              "具身智能"
+            ],
+            "children": [
+              {
+                "id": "e1642bac-b7c6-4833-a8c0-52526d29ae98",
+                "title": "模型和具身操作系统",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "具身智能",
+                  "模型和具身操作系统"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "3f4131cf-8dc0-4cd3-ac3c-68f9d6cbe1a4",
+                "title": "硬件和控制",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "具身智能",
+                  "硬件和控制"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "50fe36f1-0c6b-422f-a1c9-58706af2d0f3",
+                "title": "供能和换电生态",
+                "depth": 2,
+                "path": [
+                  "AI与智能科技",
+                  "具身智能",
+                  "供能和换电生态"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              }
+            ],
+            "coverage": {
+              "intel": false,
+              "special_issue": false,
+              "dashboard": false
+            },
+            "links": {
+              "intel": null,
+              "special_issue": null,
+              "dashboard": null
+            }
+          }
+        ],
+        "coverage": {
+          "intel": false,
+          "special_issue": false,
+          "dashboard": false
+        },
+        "links": {
+          "intel": null,
+          "special_issue": null,
+          "dashboard": null
+        }
+      },
+      "node_count": 22,
+      "max_depth": 3
+    },
+    {
+      "id": "72679c6d-b9a9-4ce6-8c0a-2493907a4ed0",
+      "title": "通用技术",
+      "root": {
+        "id": "3fe6cec7-b520-4257-a3ad-bac0a1f831cf",
+        "title": "通用技术",
+        "depth": 0,
+        "path": [
+          "通用技术"
+        ],
+        "children": [
+          {
+            "id": "57320678-8775-4bb7-8377-8f6c38f378ba",
+            "title": "检测和表征",
+            "depth": 1,
+            "path": [
+              "通用技术",
+              "检测和表征"
+            ],
+            "children": [
+              {
+                "id": "31612933-deea-4757-8739-d565167bca76",
+                "title": "先进科学仪器",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "检测和表征",
+                  "先进科学仪器"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "52be8a6e-e2f9-44f9-b552-a80e7fc05bc2",
+                "title": "测试和表征技术",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "检测和表征",
+                  "测试和表征技术"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              }
+            ],
+            "coverage": {
+              "intel": false,
+              "special_issue": false,
+              "dashboard": false
+            },
+            "links": {
+              "intel": null,
+              "special_issue": null,
+              "dashboard": null
+            }
+          },
+          {
+            "id": "716ab5a8-c687-41c6-8059-0dd0efad0eb9",
+            "title": "通信和运输",
+            "depth": 1,
+            "path": [
+              "通用技术",
+              "通信和运输"
+            ],
+            "children": [
+              {
+                "id": "a1f96356-e350-43b4-8d98-94ea5acc5bec",
+                "title": "电网技术",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "通信和运输",
+                  "电网技术"
+                ],
+                "children": [
+                  {
+                    "id": "46f8ea0f-b723-4581-a9e9-bfd5d9537d82",
+                    "title": "孤网园区",
+                    "depth": 3,
+                    "path": [
+                      "通用技术",
+                      "通信和运输",
+                      "电网技术",
+                      "孤网园区"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "ffa7ca03-ef35-41df-aa60-73d379a5498e",
+                    "title": "配电和电力交易",
+                    "depth": 3,
+                    "path": [
+                      "通用技术",
+                      "通信和运输",
+                      "电网技术",
+                      "配电和电力交易"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "2166f43d-bbc2-4936-ab57-ef02985d8373",
+                    "title": "其它电网技术",
+                    "depth": 3,
+                    "path": [
+                      "通用技术",
+                      "通信和运输",
+                      "电网技术",
+                      "其它电网技术"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  },
+                  {
+                    "id": "cbdf0266-740e-4477-89bf-30bba5115030",
+                    "title": "电力电网系统与政策",
+                    "depth": 3,
+                    "path": [
+                      "通用技术",
+                      "通信和运输",
+                      "电网技术",
+                      "电力电网系统与政策"
+                    ],
+                    "children": [],
+                    "coverage": {
+                      "intel": false,
+                      "special_issue": false,
+                      "dashboard": false
+                    },
+                    "links": {
+                      "intel": null,
+                      "special_issue": null,
+                      "dashboard": null
+                    }
+                  }
+                ],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "75d2342c-d64e-4170-b5ba-57ca1aaaf0b3",
+                "title": "管网技术",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "通信和运输",
+                  "管网技术"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "15ccf519-5426-41b0-83e1-d981a4fe13ab",
+                "title": "航天",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "通信和运输",
+                  "航天"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "797eb20d-ce3b-4176-984d-2714f5208f01",
+                "title": "航空",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "通信和运输",
+                  "航空"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "bdd8a799-e3d1-4ef4-ad0b-ba00e50d5a60",
+                "title": "陆路运输",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "通信和运输",
+                  "陆路运输"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "fc6681f1-52e0-4bb4-813e-b6beb45d885c",
+                "title": "水路运输",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "通信和运输",
+                  "水路运输"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              }
+            ],
+            "coverage": {
+              "intel": false,
+              "special_issue": false,
+              "dashboard": false
+            },
+            "links": {
+              "intel": null,
+              "special_issue": null,
+              "dashboard": null
+            }
+          },
+          {
+            "id": "027b32a3-663d-4bf9-a0cd-f3681e3a9996",
+            "title": "催化剂",
+            "depth": 1,
+            "path": [
+              "通用技术",
+              "催化剂"
+            ],
+            "children": [],
+            "coverage": {
+              "intel": false,
+              "special_issue": false,
+              "dashboard": false
+            },
+            "links": {
+              "intel": null,
+              "special_issue": null,
+              "dashboard": null
+            }
+          },
+          {
+            "id": "2944184e-1e2f-4a6a-9cdc-074c4e8527e3",
+            "title": "材料工程",
+            "depth": 1,
+            "path": [
+              "通用技术",
+              "材料工程"
+            ],
+            "children": [
+              {
+                "id": "2c5870f4-176d-43e6-852d-95d0789e8e5e",
+                "title": "高温结构材料",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "材料工程",
+                  "高温结构材料"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "67a88b91-d787-413c-8d60-434a1adcc666",
+                "title": "密封和防腐蚀材料",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "材料工程",
+                  "密封和防腐蚀材料"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "0abdd450-6073-41c7-8985-9b7188851396",
+                "title": "超导材料",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "材料工程",
+                  "超导材料"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "7b305e5c-7323-4498-86d2-7b251aa96eea",
+                "title": "光电和磁性材料",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "材料工程",
+                  "光电和磁性材料"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "c231de3c-2ddd-4e86-aef3-35337220b091",
+                "title": "热电材料",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "材料工程",
+                  "热电材料"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              },
+              {
+                "id": "59a2330d-820f-4bf9-857a-d8d5d936fe42",
+                "title": "光热材料",
+                "depth": 2,
+                "path": [
+                  "通用技术",
+                  "材料工程",
+                  "光热材料"
+                ],
+                "children": [],
+                "coverage": {
+                  "intel": false,
+                  "special_issue": false,
+                  "dashboard": false
+                },
+                "links": {
+                  "intel": null,
+                  "special_issue": null,
+                  "dashboard": null
+                }
+              }
+            ],
+            "coverage": {
+              "intel": false,
+              "special_issue": false,
+              "dashboard": false
+            },
+            "links": {
+              "intel": null,
+              "special_issue": null,
+              "dashboard": null
+            }
+          }
+        ],
+        "coverage": {
+          "intel": false,
+          "special_issue": false,
+          "dashboard": false
+        },
+        "links": {
+          "intel": null,
+          "special_issue": null,
+          "dashboard": null
+        }
+      },
+      "node_count": 22,
+      "max_depth": 3
+    }
+  ],
+  "sheet_count": 3,
+  "total_node_count": 115,
+  "max_depth": 5
+}

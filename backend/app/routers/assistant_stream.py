@@ -19,6 +19,13 @@ class StreamQueryIn(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     session_id: uuid.UUID | None = None
     model: str | None = Field(default=None, max_length=80)
+    regenerate: bool = False
+    retry: bool = False
+
+
+def _conversation_title(query: str) -> str:
+    text = query.strip()
+    return text[:20] + ("..." if len(text) > 20 else "")
 
 
 def _resolve_session(
@@ -36,7 +43,7 @@ def _resolve_session(
     session = ConversationSession(
         id=uuid.uuid4(),
         user_id=current_user,
-        title=query.strip()[:80],
+        title=_conversation_title(query),
         topic_hint=query.strip()[:200],
     )
     db.add(session)
@@ -63,6 +70,8 @@ def _stream_response(
             db,
             selected_model=selected_model,
             current_user=current_user,
+            regenerate=payload.regenerate,
+            retry=payload.retry,
         ),
         media_type="text/event-stream",
         headers={
@@ -85,6 +94,8 @@ async def stream_query(
     query: str = Query(..., min_length=1, max_length=2000),
     session_id: str | None = None,
     model: str | None = Query(default=None, max_length=80),
+    regenerate: bool = False,
+    retry: bool = False,
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
@@ -109,7 +120,7 @@ async def stream_query(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail="invalid session_id") from exc
     return _stream_response(
-        StreamQueryIn(query=query, session_id=parsed_session_id, model=model),
+        StreamQueryIn(query=query, session_id=parsed_session_id, model=model, regenerate=regenerate, retry=retry),
         db,
         current_user,
     )

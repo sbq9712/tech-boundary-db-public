@@ -3,7 +3,7 @@ networks:
     driver: bridge
     # WSL host eth0 MTU is 1410, but Docker default bridge is 1500.
     # Oversized TLS ClientHello packets get silently dropped at the WSL NAT,
-    # causing SSL UNEXPECTED_EOF errors to external APIs (e.g. api.z.ai).
+    # causing SSL UNEXPECTED_EOF errors to external AI APIs.
     # Match the network MTU to the host to fix this.
     driver_opts:
       com.docker.network.driver.mtu: ${TECHDB_DOCKER_MTU:-1410}
@@ -26,6 +26,7 @@ services:
       retries: 20
 
   api:
+    image: techdb-api:0801
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -44,23 +45,29 @@ services:
       HERMES_AGENT_TIMEOUT_SECONDS: ${HERMES_AGENT_TIMEOUT_SECONDS:-120}
       HERMES_AGENT_TOOLSETS: ${HERMES_AGENT_TOOLSETS:-}
       TECHDB_AGENT_API_KEY: ${TECHDB_AGENT_API_KEY}
-      TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
-      TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-glm-5.2}
-      TECHDB_AGENT_ALLOWED_MODELS: ${TECHDB_AGENT_ALLOWED_MODELS:-glm-5.2,glm-5.1,glm-4.5-flash}
+      TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://aigate.catl.com/v1}
+      TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-GLM-5.2}
+      TECHDB_AGENT_ALLOWED_MODELS: ${TECHDB_AGENT_ALLOWED_MODELS:-}
+      TECHDB_AGENT_AI_TIMEOUT_SECONDS: ${TECHDB_AGENT_AI_TIMEOUT_SECONDS:-90}
       TECHDB_AGENT_MAX_RETRIES: ${TECHDB_AGENT_MAX_RETRIES:-2}
       TECHDB_AGENT_RETRY_BASE_DELAY_SECONDS: ${TECHDB_AGENT_RETRY_BASE_DELAY_SECONDS:-2}
       TECHDB_AGENT_HISTORY_MAX_MESSAGES: ${TECHDB_AGENT_HISTORY_MAX_MESSAGES:-60}
       TECHDB_AGENT_HISTORY_MAX_CHARS: ${TECHDB_AGENT_HISTORY_MAX_CHARS:-60000}
       TECHDB_AGENT_RETRIEVAL_MAX_CHARS: ${TECHDB_AGENT_RETRIEVAL_MAX_CHARS:-12000}
       TECHDB_AGENT_MAX_OUTPUT_TOKENS: ${TECHDB_AGENT_MAX_OUTPUT_TOKENS:-1800}
+      TECHDB_QA_SERVICE_URL: ${TECHDB_QA_SERVICE_URL:-}
+      TECHDB_QA_SERVICE_TIMEOUT_SECONDS: ${TECHDB_QA_SERVICE_TIMEOUT_SECONDS:-30}
       TECHDB_KB_PATH: /knowledge-base
       BREADTH_DATA_PATH: /app/breadth_data
+      TECHDB_UPLOAD_DIR: /app/uploads
+      TECHDB_UPLOAD_RECOVERY_ENABLED: ${TECHDB_UPLOAD_RECOVERY_ENABLED:-true}
     volumes:
       - ./backend/scripts:/app/scripts:ro
       - ${TECHDB_KB_PATH:-./external-data/knowledge-base}:/knowledge-base:ro
       - ${TECHDB_CHATBOT_PACKAGE_PATH:-./external-data/chatbot-package}:/chatbot-integration-package:ro
       - ${TECHDB_DELIVERY_VIEWS_PATH:-./external-data/delivery-views}:/app/delivery_views:ro
       - ./breadth/data:/app/breadth_data:ro
+      - ${TECHDB_UPLOAD_HOST_PATH:-./uploads}:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -72,18 +79,19 @@ services:
       - "host.docker.internal:host-gateway"
 
   web:
-    image: nginx:1.27-alpine
+    image: techdb-web:0801
+    build:
+      context: .
+      dockerfile: web/Dockerfile
     networks:
       - technet
     depends_on:
       - api
     ports:
       - "${TECHDB_WEB_PORT:-8080}:80"
-    volumes:
-      - ./:/usr/share/nginx/html:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
   readonly-agent:
+    image: techdb-readonly-agent:0801
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -100,9 +108,9 @@ services:
       TECHDB_KB_PATH: /knowledge-base
       TECHDB_CHATBOT_PACKAGE_PATH: /chatbot-integration-package
       TECHDB_AGENT_API_KEY: ${TECHDB_AGENT_API_KEY}
-      TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
-      TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-glm-5.2}
-      TECHDB_AGENT_ALLOWED_MODELS: ${TECHDB_AGENT_ALLOWED_MODELS:-glm-5.2,glm-5.1,glm-4.5-flash}
+      TECHDB_AGENT_BASE_URL: ${TECHDB_AGENT_BASE_URL:-https://aigate.catl.com/v1}
+      TECHDB_AGENT_MODEL: ${TECHDB_AGENT_MODEL:-GLM-5.2}
+      TECHDB_AGENT_ALLOWED_MODELS: ${TECHDB_AGENT_ALLOWED_MODELS:-}
       TECHDB_AGENT_AI_TIMEOUT_SECONDS: ${TECHDB_AGENT_AI_TIMEOUT_SECONDS:-90}
     volumes:
       - ${TECHDB_KB_PATH:-./external-data/knowledge-base}:/knowledge-base:ro
@@ -111,7 +119,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "${TECHDB_AGENT_BIND:-127.0.0.1}:8765:8765"
+      - "${TECHDB_AGENT_BIND:-127.0.0.1}:${TECHDB_AGENT_PORT:-8766}:8765"
 
 volumes:
   pg_data:

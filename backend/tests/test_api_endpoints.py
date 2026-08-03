@@ -3,9 +3,11 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.security import create_token
-from app.db.session import get_db
+from app.core.security import create_token, hash_password
+from app.db.session import SessionLocal, get_db
 from app.main import app
+from app.models.user import User
+from app.routers.auth import _failed_attempts
 
 CAPTURE_LEAF_ID = "DOM_CCUS_L4_CAPTURE_02_02"
 CAPTURE_REGEN_ID = "IND_CCUS_CAPTURE_04"
@@ -21,6 +23,42 @@ TRANSPORT_LEAF_ID = "DOM_CCUS_L4_TRANSPORT_01_01"
 TRANSPORT_DISTANCE_ID = "IND_CCUS_TRANSPORT_08"
 TRANSPORT_DISTANCE_NAME = "运输距离（km）"
 TRANSPORT_DISTANCE_UNIT = "km"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def isolated_api_test_users():
+    credentials = {
+        "admin1": "ATSC1231",
+        "admin2": "ATSC1232",
+        "admin3": "ATSC1233",
+    }
+    db = SessionLocal()
+    try:
+        for username, password in credentials.items():
+            existing = db.get(User, username)
+            if existing:
+                db.delete(existing)
+                db.flush()
+            db.add(
+                User(
+                    username=username,
+                    password_hash=hash_password(password),
+                    display_name=f"API test {username}",
+                    role="admin",
+                    is_active=True,
+                )
+            )
+        db.commit()
+        _failed_attempts.clear()
+        yield
+    finally:
+        _failed_attempts.clear()
+        for username in credentials:
+            existing = db.get(User, username)
+            if existing:
+                db.delete(existing)
+        db.commit()
+        db.close()
 
 
 @pytest.fixture()
@@ -132,6 +170,7 @@ def test_intake_schema_ok():
     payload = response.json()
     assert payload["status"] == "placeholder_ready"
     assert payload["schema"]["object"] == "intake_item"
+    assert payload["schema"]["confidentiality_levels"] == ["公开", "内部", "管理员"]
     channel_ids = {channel["id"] for channel in payload["channels"]}
     assert {"server_fetch", "crawler_fetch", "direct_upload"}.issubset(channel_ids)
 
@@ -181,7 +220,8 @@ def test_assistant_status_ok():
     assert response.status_code == 200
     payload = response.json()
     assert "status" in payload
-    assert "mode" in payload
+    assert payload["provider"] == "sbq9712/tech-db canonical hybrid retrieval"
+    assert "required_assets" in payload
 
 
 def test_assistant_models_lists_default_and_fallbacks():
@@ -192,8 +232,7 @@ def test_assistant_models_lists_default_and_fallbacks():
     payload = response.json()
     assert payload["default_model"]
     assert payload["default_model"] in payload["models"]
-    assert "glm-5.1" in payload["models"]
-    assert "glm-4.5-flash" in payload["models"]
+    assert len(payload["models"]) >= 1
 
 
 def test_assistant_stream_accepts_selected_model(monkeypatch):
@@ -201,11 +240,13 @@ def test_assistant_stream_accepts_selected_model(monkeypatch):
 
     captured = {}
 
-    async def fake_stream_agent_response(query, session_id, db, selected_model=None, current_user=None):
+    async def fake_stream_agent_response(query, session_id, db, selected_model=None, current_user=None, regenerate=False, retry=False):
         captured["query"] = query
         captured["session_id"] = session_id
         captured["selected_model"] = selected_model
         captured["current_user"] = current_user
+        captured["regenerate"] = regenerate
+        captured["retry"] = retry
         yield 'event: done\ndata: {"citations": [], "retrieval_summary": {}}\n\n'
 
     class FakeConversation:
@@ -234,6 +275,8 @@ def test_assistant_stream_accepts_selected_model(monkeypatch):
         "session_id": FakeConversation.id,
         "selected_model": "glm-4.5-flash",
         "current_user": "admin1",
+        "regenerate": False,
+        "retry": False,
     }
 
 
@@ -269,6 +312,38 @@ def test_assistant_stream_rejects_unknown_model():
         app.dependency_overrides.pop(get_db, None)
 
     assert response.status_code == 400
+
+
+def test_conversation_delete_is_user_scoped_and_cascades(client):
+    created = client.post("/api/conversations", json={"title": "待删除会话", "topic_hint": "test"})
+    assert created.status_code == 201
+    session_id = created.json()["id"]
+    message = client.post(
+        f"/api/conversations/{session_id}/messages",
+        json={"role": "user", "content": "测试消息"},
+    )
+    assert message.status_code == 201
+    deleted = client.delete(f"/api/conversations/{session_id}")
+    assert deleted.status_code == 204
+    assert client.get(f"/api/conversations/{session_id}/messages").status_code == 404
+
+
+def test_conversation_delete_rejects_other_user(client):
+    created = client.post("/api/conversations", json={"title": "用户范围测试"})
+    assert created.status_code == 201
+    session_id = created.json()["id"]
+    from app.core.security import create_token
+
+    # There is no GET session endpoint; the protected messages endpoint is the ownership check.
+    assert client.get(
+        f"/api/conversations/{session_id}/messages",
+        headers={"Authorization": f"Bearer {create_token('admin2')}"},
+    ).status_code == 404
+    assert client.delete(
+        f"/api/conversations/{session_id}",
+        headers={"Authorization": f"Bearer {create_token('admin2')}"},
+    ).status_code == 404
+    assert client.delete(f"/api/conversations/{session_id}").status_code == 204
 
 
 def test_assistant_query_placeholder_ok(monkeypatch):

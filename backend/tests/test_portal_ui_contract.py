@@ -61,14 +61,13 @@ def test_answer_contains_inline_resource_slots_and_enter_send():
     assert "background:var(--brand-bg)" in emphasis
     assert ".conversation-history .assistant-msg > strong" in css
     assert "function renderInlineResources" in js
-    assert "检索：${stats.knowledge_base||0} 篇知识库" in js
-    assert "stats.sources||0" not in js
-    assert "stats.parameters||0" not in js
-    assert "回答实际引用" in js
-    assert "K=知识库文档" in js
-    assert "参数边界" in js
-    assert "预警情报" in js
-    assert "相关仪表盘" in js
+    assert "检索 ${count} 条索引记录" in js
+    assert "qa-citations-block" in js
+    assert "qa-citation-ref" in js
+    assert "data-citation-card" in js
+    assert "data-qa-action=\"copy\"" in js
+    assert "data-qa-action=\"regenerate\"" in js
+    assert "data-qa-action=\"export\"" in js
     assert "home_query_draft" in js
     assert "keydown" in js and "Enter" in js
     assert ".inline-resources" in css
@@ -95,8 +94,11 @@ def test_home_exposes_persisted_conversation_controls():
     assert "/api/conversations" in js
     assert "sessionSelect" in js
     assert "newConversationBtn" in js
+    assert "deleteConversationBtn" in js
+    assert "method:'DELETE'" in js
     assert "loadConversationMessages" in js
-    assert "panel_recommendations:data.panel_recommendations" in js
+    assert "TECHDB_QA_SERVICE_URL" not in js
+    assert "regenerate,retry" in js
 
 
 def test_industry_map_page_uses_server_tree():

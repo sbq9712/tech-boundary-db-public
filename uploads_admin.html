@@ -1,0 +1,197 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>上传资料</title>
+  <link rel="stylesheet" href="app.css" />
+  <style>
+    body{ overflow:auto; }
+    .up-wrap{ max-width:900px; margin:0 auto; padding:24px 20px 60px; }
+    .up-wrap h1{ font-size:22px; font-weight:600; margin:0 0 4px; }
+    .muted{ color:var(--text-tertiary); font-size:13px; }
+    .card{ background:var(--bg-canvas); border:1px solid var(--border-subtle); border-radius:var(--radius-lg); padding:18px; margin-top:16px; }
+    label{ display:block; font-size:12px; color:var(--text-tertiary); margin:12px 0 5px; font-weight:500; }
+    input[type=text], input[type=textarea], textarea, select{ width:100%; font-family:var(--sans); font-size:13px; padding:8px 11px; border:1px solid var(--border-standard); border-radius:var(--radius-md); background:var(--bg-canvas); color:var(--text-primary); }
+    textarea{ min-height:60px; resize:vertical; }
+    .row{ display:flex; gap:12px; }
+    .row > *{ flex:1; }
+    .drop{ border:2px dashed var(--border-standard); border-radius:var(--radius-lg); padding:36px 20px; text-align:center; color:var(--text-tertiary); cursor:pointer; transition:border-color .15s, background .15s; }
+    .drop:hover, .drop.drag{ border-color:var(--brand); background:var(--brand-bg); }
+    .drop strong{ color:var(--brand); }
+    .hint{ font-size:12px; color:var(--text-quaternary); margin-top:8px; }
+    .file-list{ margin-top:14px; }
+    .file-item{ display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border:1px solid var(--border-subtle); border-radius:var(--radius-md); margin-bottom:6px; font-size:13px; }
+    .file-item .nm{ font-weight:500; }
+    .file-item .sz{ color:var(--text-tertiary); font-size:12px; margin-left:8px; }
+    .file-item .rm{ cursor:pointer; color:var(--red); font-size:12px; }
+    .actions{ margin-top:18px; display:flex; gap:10px; justify-content:flex-end; }
+    .btn{ cursor:pointer; padding:9px 18px; border-radius:var(--radius-md); border:1px solid var(--border-standard); background:var(--bg-panel); color:var(--text-primary); font-size:13px; font-weight:500; }
+    .btn:hover{ background:var(--bg-hover); }
+    .btn.primary{ background:var(--brand); color:#fff; border-color:var(--brand); }
+    .btn.primary:hover{ background:var(--brand-light); }
+    .btn:disabled{ opacity:.5; cursor:not-allowed; }
+    .result{ margin-top:14px; font-size:13px; }
+    .result.ok{ color:var(--green); }
+    .result.err{ color:var(--red); }
+    .topnav a,.topnav span{ white-space:nowrap; }
+    @media(max-width:640px){
+      .topnav{ gap:10px!important; padding:10px 12px!important; }
+      .topnav .nav-separator,.topnav .nav-context{ display:none; }
+      .up-wrap{ padding:22px 20px 48px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topnav" style="display:flex;align-items:center;gap:16px;padding:10px 24px;background:var(--bg-panel);border-bottom:1px solid var(--border-subtle);font-size:13px;">
+    <a href="index.html" style="font-weight:700;color:var(--brand);text-decoration:none;">← 技术边界数据库</a>
+    <span class="nav-separator" style="color:var(--border-standard);">|</span>
+    <span class="nav-context" style="color:var(--text-tertiary);">上传资料</span>
+    <span style="flex:1;"></span>
+    <a href="uploads_library.html" style="color:var(--text-tertiary);text-decoration:none;">资料库</a>
+    <a href="index.html" style="color:var(--text-tertiary);text-decoration:none;">返回主页</a>
+  </nav>
+  <div class="up-wrap">
+    <h1>上传资料</h1>
+    <div class="muted">支持 PDF / Word / Excel / Markdown / 文本 / 图片。文件先落盘，再由后台按广度追踪分类目录逐份处理。</div>
+
+    <div class="card">
+      <div class="drop" id="drop">
+        <div><strong>点击选择</strong> 或拖拽文件到此处</div>
+        <div class="hint">PDF · DOCX · XLSX · MD · TXT · CSV · PNG · JPG</div>
+        <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.md,.markdown,.txt,.csv,.png,.jpg,.jpeg" multiple style="display:none" />
+      </div>
+      <div class="file-list" id="fileList"></div>
+    </div>
+
+    <div class="card">
+      <label>标题（可选，仅单文件上传可填写）</label>
+      <input type="text" id="title" placeholder="留空后由后台逐文件生成" />
+      <div class="row">
+        <div>
+          <label>密级（可选）</label>
+          <select id="conf">
+            <option value="">不指定</option>
+            <option>公开</option><option>内部</option><option>管理员</option>
+          </select>
+        </div>
+        <div>
+          <label>来源类型（可选）</label>
+          <select id="src">
+            <option value="">不指定</option>
+            <option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option>
+          </select>
+        </div>
+      </div>
+      <label>主分类（可选）</label>
+      <select id="category">
+        <option value="">由后台按广度追踪分类目录自动判断</option>
+      </select>
+      <label>备注（可选）</label>
+      <textarea id="note" placeholder="补充说明"></textarea>
+    </div>
+
+    <div class="actions">
+      <a class="btn" href="uploads_library.html">取消</a>
+      <button class="btn primary" id="submitBtn" disabled>上传</button>
+    </div>
+    <div class="result" id="result"></div>
+  </div>
+
+  <script src="auth.js"></script>
+  <script>
+    Auth.requireAuth();
+    const API="/api";
+    let pending=[]; // File 对象数组
+
+    function escapeHtml(value){
+      return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+    }
+
+    // 校验是否管理员
+    (async()=>{
+      try{
+        const [meRes,taxonomyRes]=await Promise.all([Auth.authFetch(API+"/auth/me"),Auth.authFetch(API+"/uploads/taxonomy")]);
+        if(!meRes||!taxonomyRes) return;
+        const me=await meRes.json();
+        if(me.role!=="admin"){
+          document.querySelector(".up-wrap").innerHTML='<div class="card" style="color:var(--red)">仅管理员可上传。</div>';
+          return;
+        }
+        const taxonomy=await taxonomyRes.json();
+        const select=document.getElementById("category");
+        for(const value of taxonomy.categories||[]){
+          const option=document.createElement("option");
+          option.value=value;
+          option.textContent=value.includes("/")?value.split("/").join(" › "):value;
+          select.appendChild(option);
+        }
+      }catch(e){ showResult("分类目录加载失败："+e.message,"err"); }
+    })();
+
+    const drop=document.getElementById("drop");
+    const fileInput=document.getElementById("fileInput");
+    const fileList=document.getElementById("fileList");
+    const ALLOWED=[".pdf",".docx",".xlsx",".md",".markdown",".txt",".csv",".png",".jpg",".jpeg"];
+    const MAX=50*1024*1024;
+
+    function addFiles(fs){
+      for(const f of fs){
+        const ext="."+f.name.split(".").pop().toLowerCase();
+        if(!ALLOWED.includes(ext)){ showResult("不支持的类型："+f.name,"err"); continue; }
+        if(f.size>MAX){ showResult("文件过大（>50MB）："+f.name,"err"); continue; }
+        if(pending.length>=20){ showResult("单批最多 20 个文件","err"); break; }
+        pending.push(f);
+      }
+      render();
+    }
+    function render(){
+      fileList.innerHTML=pending.map((f,i)=>`<div class="file-item"><span><span class="nm">${escapeHtml(f.name)}</span><span class="sz">${(f.size/1024).toFixed(0)} KB</span></span><span class="rm" data-i="${i}">移除</span></div>`).join("");
+      fileList.querySelectorAll(".rm").forEach(e=>e.onclick=()=>{ pending.splice(+e.dataset.i,1); render(); });
+      document.getElementById("submitBtn").disabled=pending.length===0;
+      const title=document.getElementById("title");
+      title.disabled=pending.length>1;
+      if(title.disabled) title.value="";
+    }
+    drop.onclick=()=>fileInput.click();
+    fileInput.onchange=()=>{ addFiles(fileInput.files); fileInput.value=""; };
+    drop.ondragover=e=>{ e.preventDefault(); drop.classList.add("drag"); };
+    drop.ondragleave=()=>drop.classList.remove("drag");
+    drop.ondrop=e=>{ e.preventDefault(); drop.classList.remove("drag"); addFiles(e.dataTransfer.files); };
+
+    function showResult(msg,cls){ const el=document.getElementById("result"); el.textContent=msg; el.className="result "+(cls||""); }
+
+    document.getElementById("submitBtn").onclick=async()=>{
+      if(pending.length===0) return;
+      const btn=document.getElementById("submitBtn");
+      btn.disabled=true; btn.textContent="正在上传并校验…";
+      const fd=new FormData();
+      pending.forEach(f=>fd.append("files",f));
+      const title=document.getElementById("title").value.trim();
+      const conf=document.getElementById("conf").value;
+      const src=document.getElementById("src").value;
+      const category=document.getElementById("category").value;
+      const note=document.getElementById("note").value.trim();
+      if(title)fd.append("title",title);
+      if(conf)fd.append("confidentiality",conf);
+      if(src)fd.append("source_type",src);
+      if(category)fd.append("primary_category",category);
+      if(note)fd.append("note",note);
+      try{
+        const token=Auth.getToken();
+        const r=await fetch(API+"/uploads",{method:"POST",headers:{Authorization:"Bearer "+token},body:fd});
+        if(r.status===401){ Auth.logout(); return; }
+        if(!r.ok){ const j=await r.json().catch(()=>({})); showResult(j.detail||("上传失败 "+r.status),"err"); btn.disabled=false; btn.textContent="上传"; return; }
+        const data=await r.json();
+        const pendingCount=data.files.filter(f=>f.classification_status==="pending").length;
+        showResult("成功落盘 "+data.count+" 个文件"+(pendingCount?"，后台正在分类":""),"ok");
+        pending=[]; render();
+        setTimeout(()=>{ location.href="uploads_library.html"; },1200);
+      }catch(e){
+        showResult("网络错误："+e.message,"err");
+        btn.disabled=false; btn.textContent="上传";
+      }
+    };
+  </script>
+</body>
+</html>

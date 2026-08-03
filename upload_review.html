@@ -207,8 +207,7 @@
         <select id="classification">
           <option value="公开">公开</option>
           <option value="内部" selected>内部</option>
-          <option value="秘密">秘密</option>
-          <option value="机密">机密</option>
+          <option value="管理员">管理员</option>
         </select>
 
         <label>是否新技术</label>
@@ -1140,7 +1139,8 @@
     $("#source_url").value = draft.source_url || "";
     $("#tags").value = (draft.tags || []).join(", ");
     $("#comment").value = draft.comment || "";
-    $("#classification").value = draft.classification || "内部";
+    $("#classification").value = ["公开", "内部", "管理员"].includes(draft.classification)
+      ? draft.classification : "内部";
     $("#is_new_tech").value = String(draft.is_new_tech ?? true);
     $("#importance_score").value = String(draft.importance_score || 4);
     document.querySelectorAll("#sourceChips .chip").forEach(ch => {

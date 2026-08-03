@@ -13,8 +13,10 @@
 | 仪表盘 | dashboards.py | GET /dashboards, GET /dashboards/{id}/content |
 | 行业图景 | industry_map.py | GET /industry-map |
 | 交付情报 | delivery_intel.py | GET /delivery-intel, GET /delivery-intel/meta |
-| 对话 | assistant_stream.py | GET/POST /assistant/stream, GET /assistant/models |
-| 对话管理 | conversations.py | GET/POST /conversations |
+| 问答状态与图谱 | assistant.py | GET /assistant/status, GET /assistant/graph, POST /assistant/query（兼容） |
+| 门户流式问答 | assistant_stream.py | GET/POST /assistant/stream, GET /assistant/models |
+| 对话管理 | conversations.py | GET/POST/DELETE /conversations, GET /conversations/{id}/messages |
+| 资料上传 | uploads.py | GET/POST /uploads, 分类重试/人工修正/下载 |
 | 用户管理 | users.py | GET/POST/PATCH/DELETE /users |
 
 除 GET /health 外，所有接口要求 Bearer Token。
@@ -687,34 +689,83 @@ GET /api/info-items?status=draft,ai_suggested
 
 ## 15. 对话门户与仪表盘接口
 
+0801 门户问答由三部分组成：门户后端负责认证和用户会话，`TECHDB_QA_SERVICE_URL` 指向的 canonical QA 服务负责既有 bge-m3 + 向量 + BM25 检索，公司 OpenAI-compatible 网关负责回答生成。当前门户不使用旧 Markdown、sources、parameters 或 Chatbot 包做检索回退。
+
 ### `GET /api/assistant/status`
 
 说明：
 
 - 需要认证
-- 客户端打开门户时调用，用于确认 `techdb-readonly` agent 和只读知识库挂载状态
-- 当前会返回知识库路径、是否挂载、Markdown 文件数量等健康信息
+- 客户端打开门户时调用，用于确认 canonical QA 服务配置与索引就绪状态
+- 未配置时仍返回 200，并以 `status=unconfigured` 明确说明；不会切换到旧知识源
 
 响应字段：
 
 | 字段 | 说明 |
 |---|---|
-| `status` | `ok` / `configured` / `error` |
-| `mode` | bridge 模式，当前为 `http` |
-| `agent` | 当前 agent 名称，预期为 `techdb-readonly` |
-| `health` | readonly agent `/health` 返回内容 |
+| `status` | `unconfigured` / `error` / `assets_missing` / `ok` |
+| `configured` | 是否配置了 `TECHDB_QA_SERVICE_URL` |
+| `ready` | 向量和 BM25 索引是否同时就绪 |
+| `provider` | 固定为 `sbq9712/tech-db canonical hybrid retrieval` |
+| `required_assets` | 服务运行所需的模型、索引和记录资产 |
+| `message` | 面向用户的状态说明 |
+| `stats` | 就绪或已连接时的记录、索引和图谱统计 |
+
+### `GET /api/assistant/models`
+
+返回门户模型选择器可用的 `default_model` 与 `models`。模型列表由 `TECHDB_AGENT_MODEL` 和 `TECHDB_AGENT_ALLOWED_MODELS` 控制。
+
+### `GET /api/assistant/graph?limit=200`
+
+代理 canonical QA 的 `/api/graph`，返回 `nodes` 和 `edges`。`limit` 范围 1-500；服务未配置、不可达或契约不兼容时返回 503。
+
+### `POST /api/assistant/stream`
+
+当前门户的正式问答入口。请求示例：
+
+```json
+{
+  "query": "固态电池最新研究进展有哪些？",
+  "session_id": null,
+  "model": "GLM-5.2",
+  "regenerate": false,
+  "retry": false
+}
+```
+
+- `session_id` 为空时，首次发送才创建当前用户的新会话，并在响应头 `X-Conversation-Id` 返回会话 ID。
+- `regenerate=true` 只重新生成当前会话最后一条成功回答；成功后替换该回答，旧 agent run 审计记录保留。
+- `retry=true` 只重试最后一条已持久化但失败的问题，不重复写入用户消息。
+- `model` 必须位于允许列表，非法值返回 400。
+
+响应为 `text/event-stream`：
+
+| 事件 | 主要字段 | 说明 |
+|---|---|---|
+| `status` | `stage`, `message` | `retrieving` / `analyzing` / `generating` / `retrying` |
+| `token` | `content` | 模型增量文本 |
+| `done` | `response`, `citations`, `session_id`, `model`, `retrieval_summary`, `regenerated` | 成功结束并持久化回答 |
+| `error` | `code`, `error`, `retryable`（可选） | 检索或模型失败；失败问题保留供重试 |
+
+`GET /api/assistant/stream` 保留同等能力，用 query string 传参；门户使用 POST，避免把问题文本放入 URL。
+
+### 会话管理
+
+| 端点 | 说明 |
+|---|---|
+| `GET /api/conversations` | 返回当前用户最近更新的 50 个会话 |
+| `POST /api/conversations` | 显式创建空会话；门户通常由首次发送自动创建 |
+| `DELETE /api/conversations/{session_id}` | 删除当前用户会话及其消息/agent runs；其他用户得到 404 |
+| `GET /api/conversations/{session_id}/messages?limit=40` | 返回当前用户会话消息，范围 1-200 |
+| `POST /api/conversations/{session_id}/messages` | 兼容性消息写入接口；正式问答由 stream 接口自动持久化 |
 
 ### `POST /api/assistant/query`
 
 说明：
 
 - 需要认证
-- 前端门户通过此接口提交对话问题
-- 后端已接入 `HermesAgentBridge` 适配层，默认通过 HTTP 调用独立 `techdb-readonly` agent 服务
-- readonly agent 只做知识库/数据库只读查询，不编辑知识库、不运行 shell、不修改数据库
-- readonly agent 当前是“检索 + LLM 生成回答”：先从只读 Markdown 知识库、情报表和仪表盘索引检索上下文，再调用 OpenAI-compatible Chat Completions 生成带引用回答
-- 模型配置通过 `TECHDB_AGENT_API_KEY`、`TECHDB_AGENT_BASE_URL`、`TECHDB_AGENT_MODEL`、`TECHDB_AGENT_AI_TIMEOUT_SECONDS` 注入；不要把密钥写入项目文件
-- 生产接入前仍需增加数据库只读账号、审计日志和更精细的检索排序
+- 这是 `HermesAgentBridge` / `readonly-agent` 的旧兼容入口，不是 0801 门户使用的正式问答接口
+- 保留它是为了避免破坏旧调用方；后续确认无调用方后可独立下线
 
 请求示例：
 
@@ -734,7 +785,7 @@ GET /api/info-items?status=draft,ai_suggested
 | `message` | bridge 状态说明 |
 | `query` | 后端接收到的问题 |
 | `response` | agent 或 bridge 返回内容 |
-| `extra` | 只读 agent 的结构化结果，包含 `confidence`、`verified_facts`、`knowledge_documents`、`related_dashboards`、`citations` 等 |
+| `extra` | 兼容 readonly-agent 的结构化结果 |
 | `suggested_next_steps` | 后续接入建议 |
 | `error` | 错误信息，正常为 `null` |
 
@@ -769,7 +820,49 @@ GET /api/info-items?status=draft,ai_suggested
 | `metrics` | 核心指标列表 |
 | `status` | 当前维护状态 |
 
-## 16. 认证失败响应
+## 16. 资料上传与分类
+
+以下接口均要求登录；上传、重试和人工修正额外要求管理员角色。
+
+### `GET /api/uploads/taxonomy`
+
+返回当前分类目录 ID、版本、77 项完整输出、75 项业务分类，以及“未分类/不相关”两个结果标签。
+
+### `POST /api/uploads`
+
+`multipart/form-data`。`files` 可重复，单批最多 20 份/200MB，单文件最多 50MB。可选字段：`title`、`confidentiality`、`source_type`、`note`、`primary_category`。批量上传不能填写共享标题。
+
+`confidentiality` 只接受 `公开`、`内部`、`管理员`。历史值（如“付费来源”“秘密”）兼容导入时归一为 `内部`；AI 自动补齐只允许 `公开` 或 `内部`，`管理员` 需要上传者明确选择。密级当前仅作元数据标签，不单独改变下载权限；“付费数据库”属于 `source_type`，不是密级。
+
+文件先持久落盘并登记 SHA-256。未手工指定分类时返回 `pending`，后台再调用内网/本地模型分类；分类失败不会删除文件。
+
+### `GET /api/uploads`
+
+查询参数：`limit`、`offset`、`source_type`、`primary_category`、`classification_status`。响应包含总数 `count` 和 `files`。
+
+### `POST /api/uploads/{id}/classification/retry`
+
+把已落盘资料重新置为 `pending` 并启动后台分类。`pending/processing` 状态下重复调用不会创建并行任务。
+
+### `PUT /api/uploads/{id}/classification`
+
+人工修正示例：
+
+```json
+{
+  "primary_category": "通用技术/催化剂",
+  "secondary_categories": [],
+  "reason": "管理员复核"
+}
+```
+
+主分类必须精确匹配 77 项目录，辅助分类最多 3 项且只能使用 75 个业务分类。
+
+### `GET /api/uploads/{id}/download`
+
+鉴权流式下载，响应使用 RFC 5987 UTF-8 文件名。实体缺失时返回 410 并把存储状态记为 `missing`。
+
+## 17. 认证失败响应
 
 当前后端认证失败常见返回包括：
 
@@ -791,7 +884,7 @@ GET /api/info-items?status=draft,ai_suggested
 }
 ```
 
-## 17. 状态流转说明
+## 18. 状态流转说明
 
 当前情报主状态流转如下：
 
@@ -808,7 +901,15 @@ GET /api/info-items?status=draft,ai_suggested
 无预警 -> active -> dismissed
 ```
 
-## 18. 联调建议
+上传资料状态流转如下：
+
+```text
+文件落盘 -> pending -> processing -> classified | unclassified | irrelevant
+                                  \-> failed -> pending（管理员重试）
+历史记录 -> legacy_unclassified -> pending（管理员重试）
+```
+
+## 19. 联调建议
 
 如果要做前后端联调，建议按以下顺序验证：
 
@@ -824,3 +925,6 @@ GET /api/info-items?status=draft,ai_suggested
 10. `PATCH /api/info-items/{id}/details`
 11. `PATCH /api/info-items/{id}/indicators`
 12. `DELETE /api/info-items/{id}`
+13. `GET /api/uploads/taxonomy`
+14. `POST /api/uploads`（手工指定分类做无模型烟雾测试）
+15. `GET /api/uploads/{id}/download`

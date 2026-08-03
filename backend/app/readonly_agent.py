@@ -22,8 +22,8 @@ KNOWLEDGE_BASE_PATH = Path(os.getenv("TECHDB_KB_PATH", "/knowledge-base"))
 CHATBOT_PACKAGE_PATH = Path(os.getenv("TECHDB_CHATBOT_PACKAGE_PATH", "/chatbot-integration-package"))
 MAX_DOC_CHARS = int(os.getenv("TECHDB_KB_MAX_DOC_CHARS", "240000"))
 AI_API_KEY = os.getenv("TECHDB_AGENT_API_KEY", "").strip()
-AI_BASE_URL = os.getenv("TECHDB_AGENT_BASE_URL", "https://api.z.ai/api/coding/paas/v4").rstrip("/")
-AI_MODEL = os.getenv("TECHDB_AGENT_MODEL", "glm-5.2")
+AI_BASE_URL = os.getenv("TECHDB_AGENT_BASE_URL", "https://aigate.catl.com/v1").rstrip("/")
+AI_MODEL = os.getenv("TECHDB_AGENT_MODEL", "GLM-5.2")
 AI_TIMEOUT_SECONDS = int(os.getenv("TECHDB_AGENT_AI_TIMEOUT_SECONDS", "90"))
 
 

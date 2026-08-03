@@ -1,0 +1,13 @@
+{
+  "snapshot_id": "industry-map-v260723",
+  "status": "legacy",
+  "runtime_classification_source": false,
+  "source_file": "../industry_map.json",
+  "snapshot_file": "industry-map-v260723.json",
+  "sha256": "4f9705353be95abc327d5a6f08c4ce273311b9806362de0bad705aefa5ff0220",
+  "declared_node_count": 115,
+  "verified_node_count": 128,
+  "verified_leaf_count": 90,
+  "frozen_at": "2026-07-31",
+  "note": "原 XMind 源文件当前不在项目中；本快照用于历史展示、解释与后续映射。"
+}

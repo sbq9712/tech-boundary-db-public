@@ -1,131 +1,84 @@
-# 技术边界数据库 — 部署说明
+# 技术边界数据库部署说明
 
-## 前提条件
+## 前提
 
-- Docker >= 24
-- Docker Compose V2（`docker compose` 命令）
-- 2GB 以上内存，10GB 以上磁盘
+- Linux 服务器，Docker 24+，Docker Compose V2
+- 2GB 以上内存；磁盘容量需覆盖广度数据、PostgreSQL、知识库和上传资料
+- 公司内网或本地 OpenAI 兼容模型端点
+- `docker-images` 分支提供的四个镜像 tar，或可访问的镜像构建环境
 
----
-
-## 快速启动（3 步）
+## 首次部署
 
 ```bash
-# 1. 解压
-tar -xzf techdb-v260723.tar.gz
-cd v260723
-
-# 2. 配置 API Key（唯一必填项）
 cp .env.example .env
-nano .env   # 或 vim .env，填入 TECHDB_AGENT_API_KEY
-
-# 3. 一键部署
+openssl rand -hex 32
+# 编辑 .env：填写 SECRET_KEY、数据库/管理员密码、模型配置和上传目录
+# canonical QA 就绪后再填写 TECHDB_QA_SERVICE_URL
 ./deploy.sh
 ```
 
-访问 http://localhost:8080
+生产环境建议：
 
----
-
-## 配置说明
-
-`.env` 中只有一项必填：
-
-| 变量 | 必填 | 说明 |
-|------|------|------|
-| `TECHDB_AGENT_API_KEY` | ✅ | AI 模型的 API Key |
-
-其余有默认值，按需修改：
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `TECHDB_AGENT_BASE_URL` | Z.AI coding endpoint | AI API 端点 |
-| `TECHDB_AGENT_MODEL` | `glm-5.2` | 模型名称 |
-| `TECHDB_AGENT_MAX_RETRIES` | `2` | 上游 429 短退避重试次数 |
-| `TECHDB_AGENT_RETRY_BASE_DELAY_SECONDS` | `2` | 重试基础等待秒数（默认等待 2、4 秒） |
-| `TECHDB_WEB_PORT` | `8080` | 前端端口 |
-| `TECHDB_KB_PATH` | `./external-data/knowledge-base` | 知识库路径 |
-| `TECHDB_DELIVERY_VIEWS_PATH` | `./external-data/delivery-views` | 交付视图路径 |
-| `TECHDB_CHATBOT_PACKAGE_PATH` | `./external-data/chatbot-package` | Chatbot 包路径 |
-
----
-
-## 数据目录
-
-部署包不含知识库数据，需另行获取，包含三个子目录：
-
-| 目录 | 内容 | 大小 |
-|------|------|------|
-| `knowledge-base/` | Obsidian 知识库全文 | 另行获取 |
-| `delivery-views/` | 交付视图与知识文档 | 另行获取 |
-| `chatbot-package/` | 索引、RAG、质检报告 | 另行获取 |
-
-如果数据放在其他位置，在 `.env` 中指定绝对路径覆盖默认值。
-
----
-
-## 服务说明
-
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| `web` | 8080 | Nginx 前端 + API 反向代理 |
-| `api` | 8000 | FastAPI 主后端 |
-| `readonly-agent` | 8765 | 只读 AI 查询服务 |
-| `db` | — | PostgreSQL 16（容器内部） |
-
-服务间通过 Docker 网络通信，`web` 通过 `api:8000` 反向代理，`api` 通过 `db:5432` 连接数据库。
-
----
-
-## 切换 AI 模型
-
-`.env` 中修改三行即可切换：
-
-**用 OpenAI**：
-```
-TECHDB_AGENT_API_KEY=sk-xxx
-TECHDB_AGENT_BASE_URL=https://api.openai.com/v1
-TECHDB_AGENT_MODEL=gpt-4o
+```env
+TECHDB_UPLOAD_HOST_PATH=/srv/techdb/data/uploads
+TECHDB_API_BIND=127.0.0.1
+TECHDB_AGENT_BIND=127.0.0.1
+TECHDB_AGENT_PORT=8766
+# 同机运行上游 QA 时可通过该地址从 API 容器访问宿主机的 8765。
+TECHDB_QA_SERVICE_URL=http://host.docker.internal:8765
 ```
 
-**用 Claude（兼容端点）**：
-```
-TECHDB_AGENT_API_KEY=sk-xxx
-TECHDB_AGENT_BASE_URL=https://api.anthropic.com/v1
-TECHDB_AGENT_MODEL=claude-sonnet-4-20250514
-```
+`deploy.sh` 会创建并检查上传目录、准备 PostgreSQL 卷、优先复用已导入的 `0801` 镜像，并执行 Alembic 迁移。只有镜像缺失或 `TECHDB_FORCE_BUILD=true` 时才从源码构建。访问入口为 `http://<服务器>:8080`。
 
-修改后运行 `docker compose restart api readonly-agent`。
+## 持久数据
 
----
+| 数据 | 位置 | 说明 |
+|---|---|---|
+| PostgreSQL | `${TECHDB_PG_VOLUME}` Docker 卷 | 元数据、分类状态、校验和 |
+| 上传对象 | `${TECHDB_UPLOAD_HOST_PATH}` | 必须是服务器持久盘目录 |
+| canonical QA 服务 | `${TECHDB_QA_SERVICE_URL}` | 独立服务，承载上游既有检索索引 |
+| 知识库 | `${TECHDB_KB_PATH}` | 只读挂载 |
+| 交付视图 | `${TECHDB_DELIVERY_VIEWS_PATH}` | 只读挂载 |
+| Chatbot 包 | `${TECHDB_CHATBOT_PACKAGE_PATH}` | 只读挂载 |
 
-## 常用操作
+代码升级不能删除 PostgreSQL 卷或上传对象目录。容器内的 `/app/uploads` 不是配置项；Compose 始终把宿主机目录挂载到这里。
+
+## 分类目录
+
+新上传使用广度追踪 77 项目录，版本记录在 `breadth/data/taxonomy-manifest.json`。旧行业图景位于 `data/legacy-taxonomy/`，仅用于历史展示，不对历史资料做全量重分类。新上传的 embedding 当前未启用；canonical QA 则只消费其既有索引，不能用旧 Markdown 或 Chatbot 包静默替代。
+
+## Canonical QA 资产边界
+
+门户问答需要独立的 `sbq9712/tech-db` QA 服务。远端上游已提供压缩向量/BM25 索引、jieba 字典和图谱导出，但 `bge-m3` 模型和 `all-records-lite.json` 仍不随 0801 应用交付；其原始 `setup.sh` 仍绑定 Z.AI，`qa.js` 仍硬编码临时 Cloudflare 地址。不要直接把这套脚本用于公司服务器。待资产所有者提供完整模型与记录集后，按公司 API 改造 QA 服务并配置 `TECHDB_QA_SERVICE_URL`。在此之前门户会返回“检索服务未配置”，不会回退到旧知识源。
+
+## 备份与恢复
 
 ```bash
-# 查看服务状态
-docker compose ps
-
-# 查看实时日志
-docker compose logs -f api
-
-# 停止服务（保留数据）
-docker compose down
-
-# 完全清除（删数据卷，谨慎）
-docker compose down -v
-
-# 重新构建
-docker compose build && docker compose up -d
+./scripts/db_backup.sh
+./scripts/db_restore.sh backup/techdb_YYYYMMDD_HHMMSS.sql.gz
 ```
 
----
+备份会同时生成匹配的 `uploads_YYYYMMDD_HHMMSS.tar.gz` 和校验清单。恢复脚本会自动寻找同时间戳文件归档、停止写入服务、恢复数据库并替换上传目录；原上传目录保留为 `.pre-restore.*`。没有匹配文件归档时会明确警告，数据库单独恢复不能保证下载可用。
 
-## 故障排查
+## 验收
 
-**端口被占用**：修改 `.env` 中的 `TECHDB_WEB_PORT`。
+```bash
+docker compose ps
+docker compose exec -T api alembic current
+curl http://localhost:8080/api/health
+curl -I http://localhost:8080/.env
+curl -I http://localhost:8080/.git/config
+curl -I http://localhost:8080/backend/app/main.py
+```
 
-**数据库迁移失败**：`docker compose exec api alembic upgrade head`
+预期迁移为 `0019_clear_legacy_conversations (head)`，健康检查返回 `{"status":"ok"}`，三个敏感路径返回 404。再使用管理员账号从上传页完成一次真实上传，检查服务器目标目录、资料库分类状态和鉴权下载。
 
-**AI 不回复**：检查 `.env` 中 API Key 和 BASE_URL 是否匹配。日志看 `docker compose logs api`。
+## 常用命令
 
-**知识库检索为空**：确认 `external-data/knowledge-base/` 非空。
+```bash
+docker compose logs -f api
+docker compose up -d --build
+docker compose down              # 保留数据
+```
+
+不要在生产环境执行 `docker compose down -v`，它会删除 PostgreSQL 数据卷。

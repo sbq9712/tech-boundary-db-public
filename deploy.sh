@@ -28,29 +28,64 @@ set -a
 source .env
 set +a
 
-# 检查 API Key（唯一必填项）
-if [ -z "$TECHDB_AGENT_API_KEY" ] || [ "$TECHDB_AGENT_API_KEY" = "your_api_key_here" ]; then
-    echo "❌ 错误：TECHDB_AGENT_API_KEY 未设置"
-    echo "   请编辑 .env 文件填写你的 API Key"
-    exit 1
-fi
+# 拒绝空值和模板占位值，避免把示例配置误当成生产配置。
+require_config() {
+    local name="$1"
+    shift
+    local value="${!name:-}"
+    if [ -z "$value" ]; then
+        echo "❌ 错误：${name} 未设置"
+        exit 1
+    fi
+    for placeholder in "$@"; do
+        if [ "$value" = "$placeholder" ]; then
+            echo "❌ 错误：${name} 仍是模板占位值"
+            exit 1
+        fi
+    done
+}
+
+require_config SECRET_KEY replace_with_a_random_64_hex_string
+require_config POSTGRES_PASSWORD replace_with_a_strong_database_password
+require_config TECHDB_INITIAL_ADMIN_PASSWORD replace_with_a_strong_admin_password
+require_config TECHDB_AGENT_API_KEY your_api_key_here replace_with_company_gateway_api_key
 
 echo "✓ API Key 已配置"
 echo "✓ 模型: $TECHDB_AGENT_MODEL"
 echo "✓ 端点: $TECHDB_AGENT_BASE_URL"
+if [ -n "${TECHDB_QA_SERVICE_URL:-}" ]; then
+    echo "✓ Canonical QA 检索服务: $TECHDB_QA_SERVICE_URL"
+else
+    echo "⚠️  TECHDB_QA_SERVICE_URL 未配置"
+    echo "   门户问答会明确显示检索服务未配置，不会回退到旧知识源。"
+fi
+echo ""
+
+# 准备上传文件持久目录。相对路径统一相对于项目根目录解析。
+UPLOAD_PATH="${TECHDB_UPLOAD_HOST_PATH:-./uploads}"
+case "$UPLOAD_PATH" in
+    /*) ;;
+    *) UPLOAD_PATH="$SCRIPT_DIR/${UPLOAD_PATH#./}" ;;
+esac
+mkdir -p "$UPLOAD_PATH"
+if [ ! -d "$UPLOAD_PATH" ] || [ ! -w "$UPLOAD_PATH" ]; then
+    echo "❌ 错误：上传目录不可写: $UPLOAD_PATH"
+    exit 1
+fi
+echo "✓ 上传目录: $UPLOAD_PATH"
 echo ""
 
 # 检查外部数据目录
 BUNDLED_DIR="$SCRIPT_DIR/external-data"
 echo "📋 检查数据目录..."
 
-# 知识库
+# 旧知识库（仅供兼容 readonly-agent/深度研究工具使用）
 KB_PATH="${TECHDB_KB_PATH:-$BUNDLED_DIR/knowledge-base}"
 if [ -d "$KB_PATH" ]; then
-    echo "  ✓ 知识库: $KB_PATH"
+    echo "  ✓ 旧知识库目录: $KB_PATH"
 else
-    echo "  ⚠️  知识库目录不存在: $KB_PATH"
-    echo "     （AI 问答仍可运行，但无法检索知识库文档）"
+    echo "  ⚠️  旧知识库目录不存在: $KB_PATH"
+    echo "     （不影响 canonical QA；仅影响兼容工具）"
 fi
 
 # 交付视图
@@ -61,13 +96,13 @@ else
     echo "  ⚠️  交付视图目录不存在: $DV_PATH"
 fi
 
-# Chatbot 包
+# 旧 Chatbot 包（不参与 0801 门户问答）
 CB_PATH="${TECHDB_CHATBOT_PACKAGE_PATH:-$BUNDLED_DIR/chatbot-package}"
 if [ -d "$CB_PATH" ]; then
-    echo "  ✓ Chatbot 集成包: $CB_PATH"
+    echo "  ✓ 旧 Chatbot 集成包目录: $CB_PATH"
 else
-    echo "  ⚠️  Chatbot 集成包不存在: $CB_PATH"
-    echo "     （readonly-agent 的检索增强功能将不可用）"
+    echo "  ⚠️  旧 Chatbot 集成包不存在: $CB_PATH"
+    echo "     （不影响 canonical QA；仅影响兼容 readonly-agent）"
 fi
 
 echo ""
@@ -99,25 +134,60 @@ else
 fi
 echo ""
 
-# 构建镜像
-echo "🔨 构建 Docker 镜像（首次约 1-2 分钟）..."
-docker compose build
+# 优先复用 docker-images 分支导入的稳定镜像。缺失时才从当前源码构建。
+APP_IMAGES=("techdb-api:0801" "techdb-readonly-agent:0801" "techdb-web:0801")
+APP_SERVICES=("api" "readonly-agent" "web")
+BUILD_SERVICES=()
+for i in "${!APP_IMAGES[@]}"; do
+    if ! docker image inspect "${APP_IMAGES[$i]}" >/dev/null 2>&1; then
+        BUILD_SERVICES+=("${APP_SERVICES[$i]}")
+    fi
+done
+
+if [ "${TECHDB_FORCE_BUILD:-false}" = "true" ]; then
+    BUILD_SERVICES=("api" "readonly-agent" "web")
+fi
+
+if [ "${#BUILD_SERVICES[@]}" -gt 0 ]; then
+    if [[ " ${BUILD_SERVICES[*]} " == *" web "* ]] && [ ! -f "$SCRIPT_DIR/breadth/data/processed/manifest-data.js" ]; then
+        echo "❌ 错误：构建 web 镜像需要已批准的 breadth/data/processed 资产"
+        echo "   请先导入 techdb-web:0801，或由资料提供方补齐广度追踪数据。"
+        exit 1
+    fi
+    echo "🔨 构建缺失镜像: ${BUILD_SERVICES[*]}"
+    docker compose build "${BUILD_SERVICES[@]}"
+else
+    echo "✓ 已找到 0801 应用镜像，跳过源码重建"
+fi
+
+if ! docker image inspect postgres:16 >/dev/null 2>&1; then
+    echo "❌ 错误：缺少 postgres:16 镜像"
+    echo "   请先从 docker-images 分支下载并执行 docker load。"
+    exit 1
+fi
 echo ""
 
 # 启动服务
 echo "🚀 启动服务..."
-docker compose up -d
+docker compose up -d --no-build
 echo ""
 
 # 等待数据库就绪
 echo "⏳ 等待服务就绪..."
+DB_READY=false
 for i in $(seq 1 30); do
-    if docker compose exec -T db pg_isready -U tech -d tech_intel &>/dev/null; then
+    if docker compose exec -T db pg_isready -U "${POSTGRES_USER:-techdb}" -d "${POSTGRES_DB:-tech_intel}" &>/dev/null; then
         echo "  ✓ 数据库已就绪"
+        DB_READY=true
         break
     fi
     sleep 2
 done
+if [ "$DB_READY" != "true" ]; then
+    echo "❌ 数据库在 60 秒内未就绪"
+    docker compose ps
+    exit 1
+fi
 
 # 检查服务状态
 echo ""
@@ -127,6 +197,7 @@ echo ""
 
 # 获取端口
 WEB_PORT="${TECHDB_WEB_PORT:-8080}"
+AGENT_PORT="${TECHDB_AGENT_PORT:-8766}"
 
 echo "========================================"
 echo "✅ 部署完成"
@@ -135,11 +206,11 @@ echo ""
 echo "访问地址："
 echo "  前端：  http://localhost:${WEB_PORT}"
 echo "  API：  http://localhost:8000"
-echo "  Agent：http://localhost:8765/health"
+echo "  兼容 Agent：http://localhost:${AGENT_PORT}/health"
 echo ""
 echo "常用命令："
 echo "  查看日志：docker compose logs -f"
 echo "  停止服务：docker compose down"
 echo "  重启服务：docker compose restart"
-echo "  完全清除：docker compose down -v"
+echo "  注意：不要在生产环境执行 docker compose down -v（会删除数据库卷）"
 echo ""

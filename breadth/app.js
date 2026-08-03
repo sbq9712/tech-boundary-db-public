@@ -1,16 +1,24 @@
 const PAGE_SIZE = 50;
 const HIDDEN_AUTHORS = '手动导入';
 
+// Fuzzy text search: matches query against haystack allowing non-contiguous keywords.
+// Strategy: exact substring first, then bigram-based fuzzy match (≥70% bigrams hit).
+function fuzzyMatch(haystack, q) {
+  if (haystack.includes(q)) return true;
+  if (q.length < 3) return false;
+  let total = 0, hit = 0;
+  for (let i = 0; i < q.length - 1; i++) {
+    total++;
+    if (haystack.includes(q.slice(i, i + 2))) hit++;
+  }
+  return hit / total >= 0.7;
+}
+
 // Theme: restore saved preference before anything renders
 (function initTheme() {
   // Always default to light, ignore any previously saved preference
   document.documentElement.setAttribute('data-theme', 'light');
 })();
-
-const requestedAlertLevel = new URLSearchParams(location.search).get('alert');
-const initialAlertLevel = ['crawl', 'filtered', 'aicurated', 'curated', 'key', 'alert'].includes(requestedAlertLevel)
-  ? requestedAlertLevel
-  : 'aicurated';
 
 const state = {
   manifest: null,
@@ -21,7 +29,7 @@ const state = {
   query: '',
   dateFrom: '',
   dateTo: '',
-  alertLevel: initialAlertLevel,
+  alertLevel: 'aicurated', // default to AI精选
   selectedTypes: { news: true, literature: true },
   selectedTags: { news: new Set(), literature: new Set() }, // empty = all
   selectedCategories: null, // null = all selected; Set = specific selection
@@ -29,10 +37,516 @@ const state = {
   collapsedGroups: new Set(),
   expandedClusters: new Set(),
   sortBy: 'date',
+  // Report view state
+  currentView: 'intelligence', // 'intelligence' | 'reports'
+  reportType: 'daily', // 'daily' | 'weekly' | 'monthly'
+  reportDate: '',
+  reportDatesCache: {}, // { daily: [...], weekly: [...], monthly: [...] }
 };
+
+// Portal integration: accept ?alert=level from parent iframe URL
+(function applyPortalAlert() {
+  try {
+    var p = new URLSearchParams(window.location.search).get('alert');
+    if (p) state.alertLevel = p;
+  } catch (e) {}
+})();
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value ?? '').replace(/[&<>"]/g, (s) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[s]));
+
+// ── On-demand body shard loading (Tier 3) ──
+// Fetches a single lite-part shard when user clicks [展开全文]
+window.__BODY_SHARDS__ = window.__BODY_SHARDS__ || {};
+window.fetchBodyShard = async function(shardIdx, dataVersion) {
+  if (window.__BODY_SHARDS__[shardIdx]) return window.__BODY_SHARDS__[shardIdx];
+  try {
+    const response = await fetch(`data/processed/lite-part-${shardIdx}.js?v=${encodeURIComponent(dataVersion || '')}`);
+    if (!response.ok) return null;
+    const text = await response.text();
+    const marker = 'window.__LITE_PARTS__.push(';
+    const start = text.indexOf(marker);
+    const end2 = text.lastIndexOf(');');
+    if (start < 0 || end2 <= start) return null;
+    const payload = text.slice(start + marker.length, end2);
+    const records = JSON.parse(payload);
+    window.__BODY_SHARDS__[shardIdx] = records;
+    return records;
+  } catch(e) { return null; }
+};
+
+// ── View switching: intelligence ↔ reports ↔ calendar ──
+function switchView(view) {
+  state.currentView = view;
+  const tabs = document.querySelectorAll('.view-tab');
+  tabs.forEach((t) => t.classList.toggle('active', t.dataset.view === view));
+  const reportView = $('reportView');
+  const calendarSidebar = $('calendarView');
+  const filterBlocks = document.querySelectorAll('.sidebar > .filter-block');
+  const contentToolbar = document.querySelector('.content-toolbar');
+  const recordList = $('recordList');
+  let reportContent = $('reportContent');
+  let calendarContent = $('calendarContent');
+
+  // Hide all special views first
+  if (reportView) reportView.style.display = 'none';
+  if (calendarSidebar) calendarSidebar.style.display = 'none';
+  if (reportContent) reportContent.style.display = 'none';
+  if (calendarContent) calendarContent.style.display = 'none';
+
+  if (view === 'reports') {
+    if (reportView) reportView.style.display = '';
+    filterBlocks.forEach((b) => { b.style.display = 'none'; });
+    if (contentToolbar) contentToolbar.style.display = 'none';
+    if (!reportContent) {
+      reportContent = document.createElement('section');
+      reportContent.id = 'reportContent';
+      reportContent.className = 'report-content';
+      recordList.parentNode.appendChild(reportContent);
+    }
+    recordList.style.display = 'none';
+    reportContent.style.display = '';
+    renderReportView();
+  } else if (view === 'calendar') {
+    if (calendarSidebar) calendarSidebar.style.display = '';
+    filterBlocks.forEach((b) => { b.style.display = 'none'; });
+    if (contentToolbar) contentToolbar.style.display = 'none';
+    if (!calendarContent) {
+      calendarContent = document.createElement('section');
+      calendarContent.id = 'calendarContent';
+      calendarContent.className = 'calendar-content';
+      recordList.parentNode.appendChild(calendarContent);
+    }
+    recordList.style.display = 'none';
+    calendarContent.style.display = '';
+    renderCalendarView();
+  } else {
+    filterBlocks.forEach((b) => { b.style.display = ''; });
+    if (contentToolbar) contentToolbar.style.display = '';
+    recordList.style.display = '';
+  }
+}
+
+// ── Report filename helpers ──
+// Daily:   YYYY-MM-DD     e.g. 2026-07-21
+// Weekly:  YYYY-W##       e.g. 2026-W30  (ISO 8601 week number)
+// Monthly: YYYY-MM        e.g. 2026-07
+function isoWeek(d) {
+  // Copy date so don't modify original
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  // Set to nearest Thursday: current date + 4 - current day number
+  // Make Sunday's day number 7 (ISO weekday)
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  // Get first day of year for week calc
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  // Calculate full weeks to nearest Thursday
+  const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  return { year: date.getUTCFullYear(), week: weekNo };
+}
+
+function reportFileName(type, key) {
+  if (type === 'weekly') return `${key}.json`;     // key already YYYY-W##
+  if (type === 'monthly') return `${key}.json`;    // key already YYYY-MM
+  return `${key}.json`;                              // daily: YYYY-MM-DD
+}
+
+// ── Report list: discover available report dates via fetch ──
+async function discoverReportDates(type) {
+  if (state.reportDatesCache[type]) return state.reportDatesCache[type];
+  const keys = [];
+  const today = new Date();
+  const candidates = [];
+  if (type === 'daily') {
+    // Scan from 2024-01-01 to today — limit to last 90 days to avoid too many HEAD requests
+    const start = new Date(today);
+    start.setDate(start.getDate() - 90);
+    for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+      candidates.push(d.toISOString().slice(0, 10));
+    }
+  } else if (type === 'weekly') {
+    // ISO week naming: YYYY-W## (zero-padded)
+    // Scan from 2024-W01 to current week
+    const { year: curYear, week: curWeek } = isoWeek(today);
+    for (let y = 2024; y <= curYear; y++) {
+      const maxWeek = (y < curYear) ? 53 : curWeek;
+      for (let w = 1; w <= maxWeek; w++) {
+        candidates.push(`${y}-W${String(w).padStart(2, '0')}`);
+      }
+    }
+  } else if (type === 'monthly') {
+    // YYYY-MM naming
+    for (let y = 2024; y <= today.getFullYear(); y++) {
+      for (let m = 0; m < 12; m++) {
+        const dt = new Date(y, m, 1);
+        if (dt > today) break;
+        candidates.push(`${y}-${String(m + 1).padStart(2, '0')}`);
+      }
+    }
+  }
+  // Probe candidates in parallel batches
+  const BATCH = 12;
+  for (let i = 0; i < candidates.length; i += BATCH) {
+    const slice = candidates.slice(i, i + BATCH);
+    await Promise.all(slice.map(async (key) => {
+      const path = `data/reports/${type}/${reportFileName(type, key)}`;
+      try {
+        const resp = await fetch(path, { method: 'HEAD' });
+        if (resp.ok) keys.push(key);
+      } catch (e) { /* ignore */ }
+    }));
+  }
+  keys.sort().reverse();
+  state.reportDatesCache[type] = keys;
+  return keys;
+}
+
+function renderReportList(dates) {
+  const list = $('reportList');
+  if (!list) return;
+  if (!dates.length) {
+    list.innerHTML = '<div class="report-list-empty">暂无可用报告</div>';
+    return;
+  }
+  if (state.reportType === 'weekly') {
+    list.innerHTML = renderWeeklyList(dates);
+  } else {
+    list.innerHTML = dates.map((d) => {
+      const isActive = d === state.reportDate ? ' active' : '';
+      return `<div class="report-list-item${isActive}" data-report-date="${esc(d)}">${esc(d)}</div>`;
+    }).join('');
+  }
+}
+
+// ── Weekly list: hierarchical by month with expand/collapse ──
+function renderWeeklyList(dates) {
+  // dates is sorted descending: ["2026-W30", "2026-W29", ...]
+  // Group by the month of each ISO week's Monday
+  const groups = {}; // { "2026年7月": [{key, label}, ...] }
+  const groupOrder = []; // preserve insertion order (newest first)
+
+  for (const key of dates) {
+    const monday = isoWeekKeyToDate(key);
+    if (!monday) continue;
+    const monthLabel = `${monday.getFullYear()}年${monday.getMonth() + 1}月`;
+    if (!groups[monthLabel]) {
+      groups[monthLabel] = [];
+      groupOrder.push(monthLabel);
+    }
+    groups[monthLabel].push(key);
+  }
+
+  // Determine which month to expand (the one containing the selected report, or the latest)
+  let expandMonth = groupOrder[0] || '';
+  if (state.reportDate) {
+    const selMonday = isoWeekKeyToDate(state.reportDate);
+    if (selMonday) {
+      const selLabel = `${selMonday.getFullYear()}年${selMonday.getMonth() + 1}月`;
+      if (groups[selLabel]) expandMonth = selLabel;
+    }
+  }
+
+  let html = '';
+  for (const monthLabel of groupOrder) {
+    const weeks = groups[monthLabel];
+    const isExpanded = monthLabel === expandMonth;
+    const arrow = isExpanded ? '▾' : '▸';
+
+    html += `<div class="report-week-group" data-month="${esc(monthLabel)}">`;
+    html += `<div class="report-week-month" data-toggle-month="${esc(monthLabel)}">${arrow} ${esc(monthLabel)}</div>`;
+    html += `<div class="report-week-items" style="display:${isExpanded ? '' : 'none'}">`;
+
+    // Label weeks within the month: 第一周 = earliest, displayed newest-first
+    // weeks[0] is newest (dates sorted descending), so label = 第N周 where N = total - idx
+    const total = weeks.length;
+    weeks.forEach((key, idx) => {
+      const weekNum = total - idx;
+      const weekLabel = `第${'一二三四五六七八九十'[weekNum - 1]}周`;
+      const isActive = key === state.reportDate ? ' active' : '';
+      html += `<div class="report-list-item${isActive}" data-report-date="${esc(key)}">${esc(weekLabel)}</div>`;
+    });
+
+    html += `</div></div>`;
+  }
+  return html;
+}
+
+// Convert ISO week key (e.g. "2026-W29") to the Monday Date
+function isoWeekKeyToDate(key) {
+  const m = key.match(/^(\d{4})-W(\d{2})$/);
+  if (!m) return null;
+  const year = parseInt(m[1]);
+  const week = parseInt(m[2]);
+  // ISO week: Jan 4 is always in week 1
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = (jan4.getDay() + 6) % 7; // 0=Monday
+  const week1Monday = new Date(jan4);
+  week1Monday.setDate(jan4.getDate() - jan4Day);
+  const monday = new Date(week1Monday);
+  monday.setDate(week1Monday.getDate() + (week - 1) * 7);
+  return monday;
+}
+
+async function renderReportView() {
+  const reportContent = $('reportContent');
+  if (!reportContent) return;
+  reportContent.innerHTML = '<div class="report-empty">正在加载报告列表…</div>';
+  const dates = await discoverReportDates(state.reportType);
+  renderReportList(dates);
+  // Auto-select latest report if none selected or selected date not available
+  if (!state.reportDate || !dates.includes(state.reportDate)) {
+    state.reportDate = dates[0] || '';
+    renderReportList(dates);
+  }
+  if (state.reportDate) {
+    await loadReport(state.reportType, state.reportDate);
+  } else {
+    reportContent.innerHTML = '<div class="report-empty"><strong>暂无报告</strong>请先生成报告文件。</div>';
+  }
+}
+
+async function loadReport(type, key) {
+  const reportContent = $('reportContent');
+  if (!reportContent) return;
+  reportContent.innerHTML = '<div class="report-empty">正在加载报告…</div>';
+  const path = `data/reports/${type}/${reportFileName(type, key)}`;
+  try {
+    const resp = await fetch(path);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    // Try JSON first (new format), fall back to markdown (old format)
+    try {
+      const report = JSON.parse(text);
+      reportContent.innerHTML = renderReportJSON(report);
+    } catch {
+      reportContent.innerHTML = renderMarkdown(text);
+    }
+    document.querySelector('.content').scrollTo({ top: 0, behavior: 'instant' });
+  } catch (e) {
+    reportContent.innerHTML = `<div class="report-error">报告加载失败：${esc(e.message)}<br><span style="color:var(--text-quaternary);font-size:12px">${esc(path)}</span></div>`;
+  }
+}
+
+// ── Render structured report JSON → beautiful HTML ──
+function renderReportJSON(report) {
+  const typeLabels = { daily: '日报', weekly: '周报', monthly: '月报' };
+  const typeBadge = typeLabels[report.type] || '报告';
+
+  // ── Header ──
+  let html = `<div class="rp-header">`;
+  html += `<h1 class="rp-title">TechDB${esc(typeBadge)}</h1>`;
+  html += `<div class="rp-date-range">${esc(report.date_label || report.date_range || '')}</div>`;
+  html += `</div>`;
+
+  // ── Main theme (weekly/monthly only) ──
+  if (report.main_theme) {
+    html += `<div class="rp-theme-card">`;
+    html += `<div class="rp-theme-label">本期主线</div>`;
+    html += `<div class="rp-theme-text">${esc(report.main_theme)}</div>`;
+    html += `</div>`;
+  }
+
+  // ── Overview (weekly/monthly only) ──
+  if (report.overview) {
+    html += `<p class="rp-overview">${esc(report.overview)}</p>`;
+  }
+
+  // ── Headlines grid ──
+  const headlines = report.headlines || {};
+  const sectors = report.sectors || [];
+  const hasHeadlines = sectors.some(s => (headlines[s.name] || []).length > 0);
+  if (hasHeadlines) {
+    html += `<div class="rp-headlines-grid">`;
+    for (const sector of sectors) {
+      const hl = headlines[sector.name] || [];
+      if (!hl.length) continue;
+      html += `<div class="rp-headlines-col">`;
+      html += `<div class="rp-headlines-sector">${esc(sector.name)}</div>`;
+      html += `<ul class="rp-headlines-list">`;
+      for (const h of hl) {
+        html += `<li>${esc(h)}</li>`;
+      }
+      html += `</ul>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // ── Sector sections with entries ──
+  for (let si = 0; si < sectors.length; si++) {
+    const sector = sectors[si];
+    if (!sector.entries || !sector.entries.length) continue;
+
+    html += `<div class="rp-sector">`;
+    html += `<div class="rp-sector-header"><span class="rp-sector-num">${String(si + 1).padStart(2, '0')}</span><span class="rp-sector-name">${esc(sector.name)}</span></div>`;
+
+    if (sector.review) {
+      html += `<p class="rp-sector-review">${esc(sector.review)}</p>`;
+    }
+
+    // Render entries as record cards
+    for (const entry of sector.entries) {
+      const card = renderReportEntry(entry);
+      if (card) html += card;
+    }
+
+    html += `</div>`;
+  }
+
+  return html;
+}
+
+// Render a single report entry — maps short keys to renderRecordCard format
+// so report entries look IDENTICAL to main table entries (and stay in sync)
+function renderReportEntry(entry) {
+  if (!entry || !entry.t) return '';
+  // Map report entry (short keys) to the long-key format renderRecordCard expects
+  const item = {
+    _idx: -1,
+    title: entry.t || '',
+    body: entry.b || '',
+    has_body: entry.hb || 0,
+    date: entry.d || '',
+    intelligence_type: entry.i === 'l' ? 'literature' : 'news',
+    url: entry.u || '',
+    category: entry.c || '未分类',
+    authors: entry.a || '',
+    tag: entry.tg || '',
+    topic: entry.tp || '',
+    key_params: entry.kp || [],
+    level: entry.lv || 0,
+    is_dup: 0,
+    full_body: '',
+    comment: entry.cm || '',
+    alert_reason: entry.wr || '',
+    ai_summary: entry.as || '',
+    score: entry.sc || 0,
+    score_dims: entry.scd || null,
+    ai_picked: entry.aip || 0,
+    cluster_id: '',
+    cluster_name: '',
+    cluster_parent: 0,
+  };
+  return renderRecordCard(item);
+}
+
+// ── Simple markdown → HTML renderer (safe: escapes HTML first) ──
+function renderMarkdown(md) {
+  // 1. Escape all HTML to prevent injection
+  let text = esc(md);
+  // 2. Code blocks (fenced ```) — extract first to protect content
+  const codeBlocks = [];
+  text = text.replace(/```([\s\S]*?)```/g, (m, code) => {
+    codeBlocks.push(code.replace(/^\n/, '').replace(/\n$/, ''));
+    return ` CODE${codeBlocks.length - 1} `;
+  });
+  // 3. Inline code `code`
+  const inlineCodes = [];
+  text = text.replace(/`([^`\n]+)`/g, (m, code) => {
+    inlineCodes.push(code);
+    return ` INLINE${inlineCodes.length - 1} `;
+  });
+  // Split into lines for block-level parsing
+  const lines = text.split('\n');
+  const out = [];
+  let i = 0;
+  let inList = false;
+  let listType = null; // 'ul' or 'ol'
+  const closeList = () => { if (inList) { out.push(`</${listType}>`); inList = false; listType = null; } };
+  while (i < lines.length) {
+    let line = lines[i];
+    // Code block placeholder (whole line)
+    if (/^ CODE\d+ $/.test(line.trim())) {
+      closeList();
+      const idx = Number(line.trim().replace(/ CODE/, '').replace(/ /, ''));
+      out.push(`<pre><code>${codeBlocks[idx]}</code></pre>`);
+      i++;
+      continue;
+    }
+    // Horizontal rule
+    if (/^---+\s*$/.test(line) || /^\*\*\*+\s*$/.test(line)) {
+      closeList();
+      out.push('<hr>');
+      i++;
+      continue;
+    }
+    // Headings
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) {
+      closeList();
+      const level = h[1].length;
+      out.push(`<h${level}>${inlineFmt(h[2])}</h${level}>`);
+      i++;
+      continue;
+    }
+    // Blockquote
+    if (/^&gt;\s?/.test(line)) {
+      closeList();
+      const quoteLines = [];
+      while (i < lines.length && /^&gt;\s?/.test(lines[i])) {
+        quoteLines.push(lines[i].replace(/^&gt;\s?/, ''));
+        i++;
+      }
+      out.push(`<blockquote>${inlineFmt(quoteLines.join(' '))}</blockquote>`);
+      continue;
+    }
+    // Unordered list
+    if (/^\s*[-*+]\s+/.test(line)) {
+      if (!inList || listType !== 'ul') { closeList(); out.push('<ul>'); inList = true; listType = 'ul'; }
+      out.push(`<li>${inlineFmt(line.replace(/^\s*[-*+]\s+/, ''))}</li>`);
+      i++;
+      continue;
+    }
+    // Ordered list
+    if (/^\s*\d+\.\s+/.test(line)) {
+      if (!inList || listType !== 'ol') { closeList(); out.push('<ol>'); inList = true; listType = 'ol'; }
+      out.push(`<li>${inlineFmt(line.replace(/^\s*\d+\.\s+/, ''))}</li>`);
+      i++;
+      continue;
+    }
+    // Blank line
+    if (line.trim() === '') {
+      closeList();
+      i++;
+      continue;
+    }
+    // Paragraph: collect consecutive non-blank, non-special lines
+    closeList();
+    const paraLines = [line];
+    let j = i + 1;
+    while (j < lines.length) {
+      const nxt = lines[j];
+      if (nxt.trim() === '') break;
+      if (/^(#{1,6})\s+/.test(nxt)) break;
+      if (/^\s*[-*+]\s+/.test(nxt)) break;
+      if (/^\s*\d+\.\s+/.test(nxt)) break;
+      if (/^&gt;\s?/.test(nxt)) break;
+      if (/^---+\s*$/.test(nxt)) break;
+      paraLines.push(nxt);
+      j++;
+    }
+    out.push(`<p>${inlineFmt(paraLines.join(' '))}</p>`);
+    i = j;
+  }
+  closeList();
+  let html = out.join('\n');
+  // Restore inline code
+  html = html.replace(/ INLINE(\d+) /g, (m, idx) => `<code>${inlineCodes[Number(idx)]}</code>`);
+  return html;
+
+  // Inline formatting: bold, italic, links
+  function inlineFmt(s) {
+    // Restore code placeholders first (already escaped), protect from bold/italic
+    // Bold **text** or __text__
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    // Italic *text* or _text_ (avoid matching ** by requiring non-* before/after)
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    s = s.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<em>$2</em>');
+    // Links [text](url)
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+    return s;
+  }
+}
 
 async function getJson(path) {
   const response = await fetch(path);
@@ -152,32 +666,39 @@ async function load() {
       raw = await getJson('./data/processed/all-records-lite.json');
     }
     const arr = Array.isArray(raw) ? raw : (raw.records || []);
-    // Expand short keys to full names
-    state.allRecords = arr.map(r => ({
-      title: r.t || '',
-      body: r.b || '',
-      date: r.d || '',
-      intelligence_type: r.i === 'l' ? 'literature' : 'news',
-      url: r.u || '',
-      category: r.c || '未分类',
-      authors: r.a || '',
-      tag: r.tg || '',
-      topic: r.tp || '',
-      key_params: r.kp || [],
-      level: r.lv || 0,
-      is_dup: r.dp || 0,
-      full_body: r.fb || '',
-      comment: r.cm || '',
-      alert_reason: r.wr || '',
-      ai_summary: r.as || '',
-      score: r.sc || 0,
-      score_dims: r.scd || null,
-      ai_picked: r.aip || 0,
-      ai_summary_pending: !r.as && r.b ? 1 : 0,
-      cluster_id: r.cl || '',
-      cluster_name: r.cln || '',
-      cluster_parent: r.cp === undefined ? 0 : r.cp,
-    }));
+    // Expand short keys to full names — optimized loop
+    state.allRecords = new Array(arr.length);
+    state._bodyMap = new Map(); // index → body text (populated in Phase 2)
+    for (let i = 0; i < arr.length; i++) {
+      const r = arr[i];
+      state.allRecords[i] = {
+        _idx: i,
+        title: r.t || '',
+        body: r.b || '',
+        has_body: r.hb || 0,
+        date: r.d || '',
+        intelligence_type: r.i === 'l' ? 'literature' : 'news',
+        url: r.u || '',
+        category: r.c || '未分类',
+        authors: r.a || '',
+        tag: r.tg || '',
+        topic: r.tp || '',
+        key_params: r.kp || [],
+        level: r.lv || 0,
+        is_dup: r.dp || 0,
+        full_body: r.fb || '',
+        comment: r.cm || '',
+        alert_reason: r.wr || '',
+        ai_summary: r.as || '',
+        score: r.sc || 0,
+        score_dims: r.scd || null,
+        ai_picked: r.aip || 0,
+        ai_summary_pending: !r.as && (r.b || r.hb) ? 1 : 0,
+        cluster_id: r.cl || '',
+        cluster_name: r.cln || '',
+        cluster_parent: r.cp === undefined ? 0 : r.cp,
+      };
+    }
   } catch (e) {
     console.error('Failed to load data:', e);
     if (loadingHint) loadingHint.textContent = '数据加载失败，请刷新页面重试。';
@@ -208,6 +729,28 @@ async function load() {
   // Set initial sort active state
   const w1 = $('sortWord1'); if (w1) w1.classList.add('active');
   applyFilters();
+
+  // Tier 2: When summary shards load in background, update AI summaries + score dims
+  document.addEventListener('summary-ready', () => {
+    const summaryParts = window.__SUMMARY_PARTS__ || [];
+    for (let i = 0; i < summaryParts.length; i++) {
+      if (!summaryParts[i]) continue;
+      for (const item of summaryParts[i]) {
+        const idx = item.i;
+        if (idx >= 0 && idx < state.allRecords.length) {
+          const rec = state.allRecords[idx];
+          if (item.as) rec.ai_summary = item.as;
+          if (item.scd) rec.score_dims = item.scd;
+          if (item.kp && item.kp.length) rec.key_params = item.kp;
+        }
+      }
+    }
+    // Re-render visible cards to show summaries
+    const list = $('recordList');
+    if (list && state.filtered.length) {
+      renderRecords();
+    }
+  });
 }
 
 const ALERT_LEVELS = [
@@ -239,13 +782,14 @@ function getAlertLevelCounts() {
 
 function renderAlertLevels() {
   const counts = getAlertLevelCounts();
+  state.alertLevelCounts = counts;
   const max = Math.max(...Object.values(counts), 1);
   const activeId = state.alertLevel;
   const html = ALERT_LEVELS.map(level => {
     const cnt = counts[level.id] || 0;
     const pct = (cnt / max * 100).toFixed(1);
     const isActive = activeId === level.id;
-    return `<div class="alert-level-row ${isActive ? 'active' : ''}" data-alert-level="${level.id}" title="${esc(level.desc)}">
+    return `<div class="alert-level-row ${isActive ? 'active' : ''}" data-alert-level="${level.id}">
       <div class="alert-level-info">
         <span class="alert-level-label">${esc(level.label)}</span>
         <span class="alert-level-tooltip">${esc(level.desc)}</span>
@@ -269,7 +813,7 @@ function isAlertLevelMatch(item) {
 // Get filtered records excluding a specific filter (for cross-filter count linking)
 // exclude: 'category' | 'type' | 'alert' | 'none'
 function getFilteredForCounts(exclude = 'none') {
-  const q = state.query.trim().toLowerCase();
+  const q = state.query.trim().toLowerCase().replace(/\s+/g, '');
   const cq = state.categoryQuery.trim().toLowerCase();
   return state.records.filter((item) => {
     if (state.dateFrom && (!item.date || item.date < state.dateFrom)) return false;
@@ -282,7 +826,8 @@ function getFilteredForCounts(exclude = 'none') {
     if (exclude !== 'type' && !isTypeSelected(item.intelligence_type, item.tag)) return false;
     if (exclude !== 'alert' && !isAlertLevelMatch(item)) return false;
     if (!q) return true;
-    return [item.title, item.body, item.category, item.authors, item.url].join(' ').toLowerCase().includes(q);
+    const haystack = [item.title, item.body, item.category, item.authors, item.url].join(' ').toLowerCase().replace(/\s+/g, '');
+    return fuzzyMatch(haystack, q);
   });
 }
 
@@ -420,7 +965,7 @@ function isTypeSelected(intelligenceType, tag) {
 }
 
 function applyFilters() {
-  const q = state.query.trim().toLowerCase();
+  const q = state.query.trim().toLowerCase().replace(/\s+/g, '');
   const cq = state.categoryQuery.trim().toLowerCase();
   state.filtered = state.records.filter((item) => {
     if (state.dateFrom && (!item.date || item.date < state.dateFrom)) return false;
@@ -428,18 +973,17 @@ function applyFilters() {
     if (state.selectedCategories && !state.selectedCategories.has(item.category || '未分类')) return false;
     if (!isTypeSelected(item.intelligence_type, item.tag)) return false;
     if (!isAlertLevelMatch(item)) return false;
-    // Hide cluster children and duplicates (matching alert level bar counts)
-    // But NOT when viewing "信息爬取" (crawl) - that shows everything
-    if (state.alertLevel !== 'crawl') {
-      if (item.cluster_parent === 1) return false;
-      if (item.is_dup) return false;
-    }
+    // Hide cluster children and duplicates in ALL modes (including crawl)
+    // But crawl mode's total count still includes them
+    if (item.cluster_parent === 1) return false;
+    if (item.is_dup) return false;
     if (cq) {
       const cat = (item.category || '未分类').toLowerCase();
       if (!cat.includes(cq)) return false;
     }
     if (!q) return true;
-    return [item.title, item.body, item.category, item.authors, item.url].join(' ').toLowerCase().includes(q);
+    const haystack = [item.title, item.body, item.category, item.authors, item.url].join(' ').toLowerCase().replace(/\s+/g, '');
+    return fuzzyMatch(haystack, q);
   });
   // Sort
   const sortBy = state.sortBy || 'date';
@@ -461,8 +1005,12 @@ function renderAll() {
 }
 
 function renderToolbar() {
-  const totalLabel = state.alertLevel === 'crawl' ? state.allRecords.length : (state._displayTotal || state.allRecords.length);
-  $('resultCount').innerHTML = `共 <strong>${state.filtered.length.toLocaleString()}</strong> 条结果`;
+  // Show the count matching the currently selected alert level (mirrors the alert level bar)
+  const levelCounts = state.alertLevelCounts || {};
+  const displayCount = levelCounts[state.alertLevel] !== undefined
+    ? levelCounts[state.alertLevel]
+    : state.filtered.length;
+  $('resultCount').innerHTML = `共 <strong>${displayCount.toLocaleString()}</strong> 条结果`;
   // Alert level clear button removed (now in top bar)
   const chips = [];
   if (state.query.trim()) chips.push({ label: '检索', value: state.query.trim(), key: 'query' });
@@ -470,10 +1018,11 @@ function renderToolbar() {
     let dv = state.dateFrom === state.dateTo ? state.dateFrom : `${state.dateFrom || '…'} ~ ${state.dateTo || '…'}`;
     chips.push({ label: '日期', value: dv, key: 'date' });
   }
-  if (state.alertLevel !== 'all') {
-    const lvl = ALERT_LEVELS.find(l => l.id === state.alertLevel);
-    if (lvl) chips.push({ label: '情报等级', value: lvl.label, key: 'alert' });
-  }
+  // Alert level chip is not shown — cannot be cleared
+  // if (state.alertLevel !== 'all') {
+  //   const lvl = ALERT_LEVELS.find(l => l.id === state.alertLevel);
+  //   if (lvl) chips.push({ label: '情报等级', value: lvl.label, key: 'alert' });
+  // }
   if (state.selectedCategories && state.selectedCategories.size < state.records.length) {
     const cnt = state.selectedCategories.size;
     chips.push({ label: '分类', value: `已选 ${cnt} 类`, key: 'category' });
@@ -558,7 +1107,10 @@ function renderRecordCard(item) {
   const isUnrelated = (item.category || '') === '不相关';
   const typeTagLabel = `${typeLabel}${item.tag ? '-' + item.tag : ''}`;
   const catStr = item.category || '未分类';
-  const topicHtml = item.topic ? `<div class="record-topic">${esc(item.topic)}</div>` : '';
+  const typeBadge = isUnrelated ? '' : `<span class="type-tag ${typeClass}">${esc(typeTagLabel)}</span>`;
+  const topicHtml = item.topic
+    ? `<div class="record-topic">${esc(item.topic)} <span class="topic-badges"><span class="type-tag cat-tag">${esc(catStr)}</span> ${typeBadge}</span></div>`
+    : `<div class="record-topic"><span class="topic-badges"><span class="type-tag cat-tag">${esc(catStr)}</span> ${typeBadge}</span></div>`;
   const lv = item.level || 0;
 
   // AI score box (score + AI精选 in one frame, before level badges)
@@ -585,9 +1137,6 @@ function renderRecordCard(item) {
   if (item.authors && item.authors !== HIDDEN_AUTHORS) metaParts.push(`<span class="meta-item">✍️&nbsp;${esc(item.authors)}</span>`);
   const metaLine = metaParts.length ? `<div class="record-meta-info">${metaParts.join('<span class="meta-sep"></span>')}</div>` : '';
 
-  // Badges
-  const typeBadge = isUnrelated ? '' : `<span class="type-tag ${typeClass}">${esc(typeTagLabel)}</span>`;
-
   let paramsHtml = '';
   if (Array.isArray(item.key_params) && item.key_params.length) {
     paramsHtml = '<div class="key-params">' +
@@ -598,26 +1147,43 @@ function renderRecordCard(item) {
   // Body: AI summary + expand full text + comment + alert reason
   let bodyHtml = '';
   const cardId = 'c' + Math.random().toString(36).slice(2, 9);
-  const aiSummary = item.ai_summary || summary;
-  const hasFullBody = item.full_body && item.full_body.length > summary.length;
+  const aiSummary = item.ai_summary || '';
+  const fullText = item.full_body || item.body || '';
+  const hasFullBody = (fullText && fullText.trim().length > 0) || item.has_body === 1;
 
-  if (lv > 0 || item.comment || item.alert_reason) {
+  // Show body block for: curated records, records with comment/alert, records with body,
+  // records with AI summary, OR any record that is not "不相关" (must show AI summary line)
+  const isNotUnrelated = (item.category || '') !== '不相关' && (item.category || '') !== '未分类' && item.category;
+  const hasNoBody = !hasFullBody && !item.has_body;
+  if (lv > 0 || item.comment || item.alert_reason || hasFullBody || isNotUnrelated) {
     bodyHtml = `<div class="record-body-wrap">`;
-    if (aiSummary && aiSummary.trim()) {
+    if (isUnrelated) {
+      // Unrelated records: no AI summary text, just show [展开全文] button
+      if (hasFullBody) {
+        bodyHtml += `<p class="record-ai-summary"><span class="expand-btn" data-target="${cardId}-full" data-idx="${item._idx ?? -1}" data-action="expand">[展开全文]</span></p>`;
+      }
+    } else if (aiSummary && aiSummary.trim()) {
       bodyHtml += `<p class="record-ai-summary"><span class="summary-label">AI摘要</span>${esc(aiSummary)}`;
-    } else if (item.ai_summary_pending) {
-      bodyHtml += `<p class="record-ai-summary record-ai-pending">AI摘要生成中…`;
-    } else {
-      bodyHtml += `<p class="record-ai-summary record-ai-pending">AI摘要生成中…`;
+      if (hasFullBody) {
+        bodyHtml += ` <span class="expand-btn" data-target="${cardId}-full" data-idx="${item._idx ?? -1}" data-action="expand">[展开全文]</span>`;
+      }
+      bodyHtml += `</p>`;
+    } else if (hasFullBody) {
+      // Has body but no AI summary yet (Tier 2 not loaded) — show [展开全文] only
+      bodyHtml += `<p class="record-ai-summary"><span class="expand-btn" data-target="${cardId}-full" data-idx="${item._idx ?? -1}" data-action="expand">[展开全文]</span></p>`;
+    } else if (hasNoBody) {
+      // Empty body: show [展开全文] button, no AI summary text at all
+      bodyHtml += `<p class="record-ai-summary"><span class="expand-btn" data-target="${cardId}-full" data-idx="${item._idx ?? -1}" data-action="expand">[展开全文]</span></p>`;
     }
-    if (hasFullBody) {
-      bodyHtml += ` <span class="expand-btn" data-target="${cardId}-full" data-action="expand">[展开全文]</span>`;
-    }
-    bodyHtml += `</p>`;
-    // Full text (hidden initially)
+    // Full text (hidden initially; may be empty if body not yet loaded)
     if (hasFullBody) {
       bodyHtml += `<div class="record-full-text" id="${cardId}-full" style="display:none">`;
-      bodyHtml += `<div class="full-text-inner">${esc(item.full_body)}</div>`;
+      bodyHtml += `<div class="full-text-inner">${fullText ? esc(fullText) : '<span class="body-loading">载入中…</span>'}</div>`;
+      bodyHtml += `</div>`;
+    } else {
+      // Empty body: placeholder for [展开全文] to show "无正文内容"
+      bodyHtml += `<div class="record-full-text" id="${cardId}-full" style="display:none">`;
+      bodyHtml += `<div class="full-text-inner"><span class="body-empty">无正文内容</span></div>`;
       bodyHtml += `</div>`;
     }
     // Comment (full, no truncation)
@@ -633,12 +1199,14 @@ function renderRecordCard(item) {
     }
     bodyHtml += `</div>`;
   } else {
-    if (aiSummary && aiSummary.trim()) {
+    if (isUnrelated) {
+      // Unrelated records without body: show nothing
+      bodyHtml = '';
+    } else if (aiSummary && aiSummary.trim()) {
       bodyHtml = `<p class="record-summary"><span class="summary-label">AI摘要</span>${esc(aiSummary)}</p>`;
-    } else if (item.ai_summary_pending) {
-      bodyHtml = `<p class="record-summary record-ai-pending">AI摘要生成中…</p>`;
     } else {
-      bodyHtml = `<p class="record-summary record-ai-pending">AI摘要生成中…</p>`;
+      // No body, no summary, not unrelated — show nothing
+      bodyHtml = '';
     }
   }
 
@@ -655,10 +1223,6 @@ function renderRecordCard(item) {
     <div class="record-title">${levelBadges}${titleHtml}${clusterHtml}</div>
     ${topicHtml}
     ${metaLine}
-    <div class="record-badges">
-      <span class="type-tag cat-tag">${esc(catStr)}</span>
-      ${typeBadge}
-    </div>
     ${bodyHtml}
     ${paramsHtml}
   </article>`;
@@ -669,7 +1233,7 @@ function clearFilter(key) {
   if (key === 'date') { state.dateFrom = ''; state.dateTo = ''; $('dateFrom').value = ''; $('dateTo').value = ''; }
   if (key === 'category') selectAllCategories();
   if (key === 'type') { state.selectedTypes = { news: true, literature: true }; state.selectedTags = { news: new Set(), literature: new Set() }; }
-  if (key === 'alert') { state.alertLevel = 'all'; }
+  if (key === 'alert') { return; } // Cannot deselect alert level
   applyFilters();
 }
 
@@ -700,6 +1264,31 @@ function bindEvents() {
       const el = document.getElementById(targetId);
       if (!el) return;
       if (action === 'expand') {
+        // On-demand body loading: fetch the shard containing this record's body
+        const idx = parseInt(e.target.dataset.idx, 10);
+        const inner = el.querySelector('.full-text-inner');
+        if (inner && (!inner.textContent.trim() || inner.querySelector('.body-loading'))) {
+          const shardIdx = Math.floor(idx / 2000); // CHUNK_SIZE
+          const localIdx = idx % 2000;
+          const dv = (state.manifest?.meta?.data_version) || '';
+          // Check if already loaded
+          if (window.__BODY_SHARDS__[shardIdx]) {
+            const bodyText = window.__BODY_SHARDS__[shardIdx][localIdx]?.b || '';
+            if (bodyText) inner.textContent = bodyText;
+          } else {
+            // Show loading state and fetch on demand
+            inner.innerHTML = '<span class="body-loading">正在加载全文…</span>';
+            window.fetchBodyShard(shardIdx, dv).then(records => {
+              if (records && records[localIdx]) {
+                const bodyText = records[localIdx].b || '';
+                if (bodyText) inner.textContent = bodyText;
+                else inner.innerHTML = '<span class="body-loading">暂无全文</span>';
+              } else {
+                inner.innerHTML = '<span class="body-loading">加载失败</span>';
+              }
+            });
+          }
+        }
         el.style.display = '';
         e.target.dataset.action = 'collapse';
         e.target.textContent = '[收起全文]';
@@ -752,11 +1341,54 @@ function bindEvents() {
   on('clearDateBtn', 'click', () => clearFilter('date'));
   on('dateFrom', 'change', (e) => { state.dateFrom = e.target.value; applyFilters(); });
   on('dateTo', 'change', (e) => { state.dateTo = e.target.value; applyFilters(); });
+
+  // ── View tabs (intelligence ↔ reports) ──
+  document.querySelectorAll('.view-tab').forEach((tab) => {
+    tab.addEventListener('click', () => switchView(tab.dataset.view));
+  });
+  // ── Report type buttons ──
+  document.querySelectorAll('.report-type-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.reportType;
+      state.reportType = type;
+      document.querySelectorAll('.report-type-btn').forEach((b) => {
+        b.classList.toggle('active', b.dataset.reportType === type);
+      });
+      state.reportDate = '';
+      renderReportView();
+    });
+  });
+  // ── Report list item click (delegated, handles weekly expand/collapse) ──
+  const reportListEl = $('reportList');
+  if (reportListEl) {
+    reportListEl.addEventListener('click', (e) => {
+      // Handle month group expand/collapse for weekly
+      const monthToggle = e.target.closest('[data-toggle-month]');
+      if (monthToggle) {
+        const month = monthToggle.dataset.toggleMonth;
+        const items = monthToggle.nextElementSibling;
+        if (items) {
+          const isHidden = items.style.display === 'none';
+          items.style.display = isHidden ? '' : 'none';
+          monthToggle.textContent = monthToggle.textContent.replace(isHidden ? '▸' : '▾', isHidden ? '▾' : '▸');
+        }
+        return;
+      }
+      // Handle report selection
+      const item = e.target.closest('.report-list-item');
+      if (!item) return;
+      state.reportDate = item.dataset.reportDate;
+      document.querySelectorAll('.report-list-item').forEach((it) => {
+        it.classList.toggle('active', it.dataset.reportDate === state.reportDate);
+      });
+      loadReport(state.reportType, state.reportDate);
+    });
+  }
   document.querySelectorAll('.date-quick button').forEach((btn) => {
     btn.addEventListener('click', () => setQuickDate(btn.dataset.quick));
   });
-  on('prevPage', 'click', () => { if (state.page > 1) { state.page -= 1; renderRecords(); } });
-  on('nextPage', 'click', () => { const pages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE)); if (state.page < pages) { state.page += 1; renderRecords(); } });
+  on('prevPage', 'click', () => { if (state.page > 1) { state.page -= 1; renderRecords(); document.querySelector('.content').scrollTo({ top: 0, behavior: 'instant' }); } });
+  on('nextPage', 'click', () => { const pages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE)); if (state.page < pages) { state.page += 1; renderRecords(); document.querySelector('.content').scrollTo({ top: 0, behavior: 'instant' }); } });
 
   // ── Global score tooltip (single floating div, not a child of score-box) ──
   const scoreTooltip = document.createElement('div');
@@ -984,3 +1616,170 @@ function renderSourcePanel() {
 load().catch((error) => {
   document.body.innerHTML = `<main class="content"><div class="empty-hint"><strong>页面载入失败</strong>${esc(error.message)}</div></main>`;
 });
+
+// ═══════════════════════════════════════════════════════════════
+// ── Conference Calendar View ──
+// ═══════════════════════════════════════════════════════════════
+
+state.calendarData = null;
+state.calendarYear = new Date().getFullYear();
+state.calendarMonth = new Date().getMonth();
+state.calendarCategories = new Set(['零碳产业', 'AI与智能科技', '通用技术']);
+
+async function loadCalendarData() {
+  if (state.calendarData) return state.calendarData;
+  try {
+    const resp = await fetch('data/processed/conferences.json?v=' + (window.__DATA_VERSION__ || '1'));
+    if (!resp.ok) return [];
+    state.calendarData = await resp.json();
+    return state.calendarData;
+  } catch(e) {
+    return [];
+  }
+}
+
+function renderCalendarView() {
+  const container = $('calendarContent');
+  if (!container) return;
+
+  // Attach sidebar event listeners (once)
+  if (!container._calInit) {
+    container._calInit = true;
+    const yearSel = $('calYear');
+    const monthPicker = $('calMonthPicker');
+    const catList = $('calCatList');
+
+    if (yearSel) yearSel.addEventListener('change', () => {
+      state.calendarYear = parseInt(yearSel.value);
+      calRender();
+    });
+    if (monthPicker) monthPicker.addEventListener('click', (e) => {
+      const btn = e.target.closest('.cal-month-btn');
+      if (!btn) return;
+      monthPicker.querySelectorAll('.cal-month-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.calendarMonth = parseInt(btn.dataset.month);
+      calRender();
+    });
+    if (catList) catList.addEventListener('change', (e) => {
+      if (e.target.type === 'checkbox') {
+        const cat = e.target.value;
+        if (e.target.checked) state.calendarCategories.add(cat);
+        else state.calendarCategories.delete(cat);
+        calRender();
+      }
+    });
+  }
+
+  container.innerHTML = `<div class="calendar-main" id="calMain"><p class="empty-hint">正在载入会议数据…</p></div>`;
+  loadCalendarData().then(() => calRender());
+}
+
+function calGetFiltered() {
+  const data = state.calendarData || [];
+  return data.filter(c => {
+    if (!state.calendarCategories.has(c.category || '通用技术')) return false;
+    if (!c.start_date) return false;
+    const d = new Date(c.start_date);
+    if (d.getFullYear() !== state.calendarYear) return false;
+    if (state.calendarMonth >= 0 && d.getMonth() !== state.calendarMonth) return false;
+    return true;
+  });
+}
+
+function calRender() {
+  const main = $('calMain');
+  if (!main) return;
+  const data = calGetFiltered();
+  if (data.length === 0) { main.innerHTML = `<p class="empty-hint">当前筛选条件下暂无会议</p>`; return; }
+
+  const byDate = {};
+  data.forEach(c => {
+    const dateKey = c.start_date;
+    if (!byDate[dateKey]) byDate[dateKey] = [];
+    byDate[dateKey].push(c);
+  });
+
+  main.innerHTML = state.calendarMonth >= 0 ? calMonthGrid(byDate) : calYearList(byDate);
+  document.querySelectorAll('.cal-event').forEach(el => {
+    el.addEventListener('click', () => calShowPopup(el.dataset.name));
+  });
+}
+
+function calMonthGrid(byDate) {
+  const year = state.calendarYear;
+  const month = state.calendarMonth;
+  const months = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startWeekday = (firstDay.getDay() + 6) % 7;
+  const daysInMonth = lastDay.getDate();
+  const weekdays = ['一','二','三','四','五','六','日'];
+
+  let html = `<div class="cal-month-header">${year}年 ${months[month]}</div><div class="cal-grid">`;
+  weekdays.forEach(w => { html += `<div class="cal-weekday">${w}</div>`; });
+  for (let i = 0; i < startWeekday; i++) html += `<div class="cal-day cal-day-empty"></div>`;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const events = byDate[dateStr] || [];
+    const isToday = (year === new Date().getFullYear() && month === new Date().getMonth() && d === new Date().getDate());
+    html += `<div class="cal-day${isToday ? ' cal-day-today' : ''}"><span class="cal-day-num">${d}</span>`;
+    events.forEach(e => {
+      const catClass = (e.category || '').startsWith('零碳') ? 'cat-zero' : (e.category || '').startsWith('AI') ? 'cat-ai' : 'cat-gen';
+      html += `<div class="cal-event ${catClass}" data-name="${esc(e.name)}" title="${esc(e.name)}">${esc(e.name.substring(0, 12))}${e.name.length > 12 ? '…' : ''}</div>`;
+    });
+    html += `</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function calYearList(byDate) {
+  const months = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+  let html = `<div class="cal-month-header">${state.calendarYear}年 会议列表</div>`;
+  let hasAny = false;
+  for (let m = 0; m < 12; m++) {
+    const monthEvents = Object.entries(byDate).filter(([date]) => parseInt(date.split('-')[1]) === m + 1).sort((a, b) => a[0].localeCompare(b[0]));
+    if (monthEvents.length === 0) continue;
+    hasAny = true;
+    html += `<div class="cal-month-section"><h3>${months[m]}</h3>`;
+    monthEvents.forEach(([date, events]) => {
+      html += `<div class="cal-list-date">${date}</div>`;
+      events.forEach(e => {
+        const catClass = (e.category || '').startsWith('零碳') ? 'cat-zero' : (e.category || '').startsWith('AI') ? 'cat-ai' : 'cat-gen';
+        html += `<div class="cal-event ${catClass}" data-name="${esc(e.name)}">${esc(e.name)}</div>`;
+      });
+    });
+    html += `</div>`;
+  }
+  if (!hasAny) html += `<p class="empty-hint">${state.calendarYear}年暂无会议</p>`;
+  return html;
+}
+
+function calShowPopup(name) {
+  const data = state.calendarData || [];
+  const conf = data.find(c => c.name === name);
+  if (!conf) return;
+  const dateRange = conf.end_date ? `${conf.start_date} ~ ${conf.end_date}` : conf.start_date;
+  let sourcesHtml = '';
+  if (conf.sources && conf.sources.length > 0) {
+    sourcesHtml = '<div class="cal-popup-sources"><strong>情报来源：</strong><ul>';
+    conf.sources.forEach(s => { sourcesHtml += `<li><a href="${esc(s.url)}" target="_blank" rel="noreferrer">${esc(s.title || s.url)}</a></li>`; });
+    sourcesHtml += '</ul></div>';
+  }
+  const overlay = document.createElement('div');
+  overlay.className = 'cal-popup-overlay';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="cal-popup">
+      <button class="cal-popup-close" onclick="this.parentElement.parentElement.remove()">×</button>
+      <h3 class="cal-popup-title">${esc(conf.name)}</h3>
+      <div class="cal-popup-row"><strong>时间：</strong> ${esc(dateRange)}</div>
+      ${conf.location ? `<div class="cal-popup-row"><strong>地点：</strong> ${esc(conf.location)}</div>` : ''}
+      ${conf.organizer ? `<div class="cal-popup-row"><strong>主办单位：</strong> ${esc(conf.organizer)}</div>` : ''}
+      ${conf.category ? `<div class="cal-popup-row"><strong>领域：</strong> ${esc(conf.category)}</div>` : ''}
+      ${sourcesHtml}
+    </div>`;
+  document.body.appendChild(overlay);
+}
