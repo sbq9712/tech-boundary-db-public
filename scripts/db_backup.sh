@@ -10,9 +10,11 @@ KEEP_COUNT="${TECHDB_BACKUP_KEEP:-30}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 DUMP_FILE="${BACKUP_DIR}/techdb_${TIMESTAMP}.sql.gz"
 UPLOAD_ARCHIVE="${BACKUP_DIR}/uploads_${TIMESTAMP}.tar.gz"
+QA_ARCHIVE="${BACKUP_DIR}/qa_incremental_${TIMESTAMP}.tar.gz"
 MANIFEST_FILE="${BACKUP_DIR}/backup_${TIMESTAMP}.sha256"
 DUMP_PART="${DUMP_FILE}.part"
 UPLOAD_PART="${UPLOAD_ARCHIVE}.part"
+QA_PART="${QA_ARCHIVE}.part"
 
 mkdir -p "$BACKUP_DIR"
 
@@ -36,7 +38,7 @@ if [ ! -d "$UPLOAD_PATH" ] || [ ! -r "$UPLOAD_PATH" ]; then
 fi
 
 cleanup_parts() {
-    rm -f -- "$DUMP_PART" "$UPLOAD_PART"
+    rm -f -- "$DUMP_PART" "$UPLOAD_PART" "$QA_PART"
 }
 trap cleanup_parts EXIT
 
@@ -57,14 +59,44 @@ if ! tar --exclude='./.incoming' -C "$UPLOAD_PATH" -czf "$UPLOAD_PART" .; then
 fi
 mv -- "$UPLOAD_PART" "$UPLOAD_ARCHIVE"
 
+# QA 增量索引卷：上传资料的 embedding/BM25 增量数据。与数据库同组备份，
+# 否则恢复后 embedding_status=ready 与空索引错配，已上传资料静默失去检索能力。
+QA_VOLUME="${TECHDB_QA_INCREMENTAL_VOLUME:-techdb_qa_incremental_0801}"
+echo "[$(date)] 开始备份 QA 增量索引卷 ${QA_VOLUME} ..."
+if docker volume inspect "$QA_VOLUME" >/dev/null 2>&1; then
+    # 用打入同卷挂载点的临时容器打包，保持与 docker compose 卷命名一致。
+    if ! docker run --rm \
+        -v "${QA_VOLUME}:/data:ro" \
+        -v "${BACKUP_DIR}:/backup" \
+        --entrypoint /bin/sh alpine:3 \
+        -c "cd /data && tar -czf /backup/$(basename "$QA_PART") ." >/dev/null; then
+        rm -f -- "$DUMP_FILE" "$UPLOAD_ARCHIVE"
+        echo "[$(date)] ERROR: QA 增量索引备份失败，已移除本组其余备份"
+        exit 1
+    fi
+    mv -- "$QA_PART" "$QA_ARCHIVE"
+else
+    echo "[$(date)] WARNING: QA 增量索引卷 ${QA_VOLUME} 不存在，跳过该项（全新部署属正常）。"
+    rm -f -- "$QA_ARCHIVE"
+fi
+
 (
     cd "$BACKUP_DIR"
-    sha256sum "$(basename "$DUMP_FILE")" "$(basename "$UPLOAD_ARCHIVE")" > "$(basename "$MANIFEST_FILE")"
+    if [ -f "$(basename "$QA_ARCHIVE")" ]; then
+        sha256sum "$(basename "$DUMP_FILE")" "$(basename "$UPLOAD_ARCHIVE")" "$(basename "$QA_ARCHIVE")" > "$(basename "$MANIFEST_FILE")"
+    else
+        sha256sum "$(basename "$DUMP_FILE")" "$(basename "$UPLOAD_ARCHIVE")" > "$(basename "$MANIFEST_FILE")"
+    fi
 )
 
 echo "[$(date)] OK: 一致性备份完成"
 echo "  数据库: ${DUMP_FILE}"
 echo "  文件对象: ${UPLOAD_ARCHIVE}"
+if [ -f "$QA_ARCHIVE" ]; then
+    echo "  QA 增量索引: ${QA_ARCHIVE}"
+else
+    echo "  QA 增量索引: 无（卷不存在，跳过）"
+fi
 echo "  校验清单: ${MANIFEST_FILE}"
 
 # 按数据库备份时间戳清理整组旧备份。
@@ -76,6 +108,7 @@ for old_dump in "${OLD_DUMPS[@]}"; do
     rm -f -- \
         "$old_dump" \
         "${BACKUP_DIR}/uploads_${old_timestamp}.tar.gz" \
+        "${BACKUP_DIR}/qa_incremental_${old_timestamp}.tar.gz" \
         "${BACKUP_DIR}/backup_${old_timestamp}.sha256"
     echo "[$(date)] 已清理旧备份组: ${old_timestamp}"
 done

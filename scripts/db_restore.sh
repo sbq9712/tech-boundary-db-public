@@ -3,8 +3,8 @@
 # 用法：./scripts/db_restore.sh backup/techdb_YYYYMMDD_HHMMSS.sql.gz [uploads_*.tar.gz]
 set -euo pipefail
 
-if [ $# -lt 1 ] || [ $# -gt 2 ]; then
-    echo "用法: $0 <数据库备份.sql.gz> [上传对象备份.tar.gz]"
+if [ $# -lt 1 ] || [ $# -gt 3 ]; then
+    echo "用法: $0 <数据库备份.sql.gz> [上传对象备份.tar.gz] [QA增量索引备份.tar.gz]"
     exit 1
 fi
 
@@ -38,10 +38,21 @@ if [ $# -eq 2 ]; then
 else
     UPLOAD_ARCHIVE="$(dirname "$DUMP_FILE")/uploads_${timestamp}.tar.gz"
 fi
+if [ $# -eq 3 ]; then
+    QA_ARCHIVE="$(cd "$(dirname "$3")" 2>/dev/null && pwd)/$(basename "$3")"
+else
+    QA_ARCHIVE="$(dirname "$DUMP_FILE")/qa_incremental_${timestamp}.tar.gz"
+fi
+QA_VOLUME="${TECHDB_QA_INCREMENTAL_VOLUME:-techdb_qa_incremental_0801}"
 
 RESTORE_UPLOADS=true
 if [ ! -f "$UPLOAD_ARCHIVE" ]; then
     RESTORE_UPLOADS=false
+fi
+
+RESTORE_QA=true
+if [ ! -f "$QA_ARCHIVE" ]; then
+    RESTORE_QA=false
 fi
 
 case "$UPLOAD_PATH" in
@@ -58,7 +69,7 @@ cleanup() {
         rm -rf -- "$STAGE_DIR"
     fi
     if [ "$SERVICES_STOPPED" = "true" ]; then
-        docker compose --project-directory "$PROJECT_DIR" up -d api readonly-agent >/dev/null || true
+        docker compose --project-directory "$PROJECT_DIR" up -d api readonly-agent canonical-qa >/dev/null || true
     fi
 }
 trap cleanup EXIT
@@ -91,6 +102,15 @@ else
     echo "  WARNING: 未找到匹配的上传对象备份，将只恢复数据库。"
     echo "  恢复后可能出现数据库记录存在但实体文件缺失。"
 fi
+if [ "$RESTORE_QA" = "true" ]; then
+    echo "  QA 增量索引备份: ${QA_ARCHIVE}"
+    echo "  QA 增量索引卷: ${QA_VOLUME}"
+else
+    echo "  WARNING: 未找到匹配的 QA 增量索引备份 (${QA_ARCHIVE})"
+    echo "  恢复后数据库中 embedding_status=ready 的上传资料在增量索引中将不存在，"
+    echo "  检索会静默丢失这些资料。补救：管理员对受影响资料逐个调用"
+    echo "  POST /api/uploads/{id}/embedding/retry 重嵌（upsert 按 document_id 幂等替换）。"
+fi
 echo ""
 if [ "$RESTORE_UPLOADS" = "true" ]; then
     echo "  WARNING: 此操作会覆盖现有数据库，并替换上传对象目录。"
@@ -121,6 +141,26 @@ if [ "$RESTORE_UPLOADS" = "true" ]; then
     fi
     mv -- "$STAGE_DIR" "$UPLOAD_PATH"
     STAGE_DIR=""
+fi
+
+if [ "$RESTORE_QA" = "true" ]; then
+    echo "[$(date)] 恢复 QA 增量索引卷 ${QA_VOLUME} ..."
+    # 校验成员路径，再经临时容器解包进卷；canonical-qa 重启时从卷加载索引。
+    if tar -tzf "$QA_ARCHIVE" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+        echo "ERROR: QA 增量索引备份包含越界路径，拒绝恢复"
+        exit 1
+    fi
+    docker compose --project-directory "$PROJECT_DIR" stop canonical-qa
+    if ! docker run --rm \
+        -v "${QA_VOLUME}:/data" \
+        -v "$(dirname "$QA_ARCHIVE"):/backup:ro" \
+        --entrypoint /bin/sh alpine:3 \
+        -c "cd /data && find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && tar -xzf /backup/$(basename "$QA_ARCHIVE")"; then
+        echo "[$(date)] ERROR: QA 增量索引恢复失败"
+        exit 1
+    fi
+    docker compose --project-directory "$PROJECT_DIR" up -d canonical-qa
+    echo "[$(date)] QA 增量索引卷已恢复，canonical-qa 重启中"
 fi
 
 docker compose --project-directory "$PROJECT_DIR" up -d api readonly-agent
