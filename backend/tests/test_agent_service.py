@@ -6,6 +6,8 @@ from app.services import agent_service, github_qa
 from app.services.agent_service import (
     _build_prompt,
     _build_retrieval_query,
+    _clean_history_content,
+    _merge_citations,
     _normalize_citations,
     _used_citations,
     resolve_model,
@@ -79,6 +81,52 @@ def test_referential_follow_up_reuses_previous_user_topic():
     assert "液冷数据中心" in rewritten
     assert rewritten.endswith("这些边界里优先验证哪两个？")
     assert _build_retrieval_query("请介绍固态电池", history) == "请介绍固态电池"
+
+
+def test_short_follow_up_uses_persisted_topic_hint():
+    history = [
+        {"role": "user", "content": "钠电硬碳负极主要从什么原料生产得到？"},
+        {"role": "assistant", "content": "硬碳可由木质素和煤基前驱体制备。"},
+    ]
+    rewritten = _build_retrieval_query(
+        "详细说说",
+        history,
+        "钠电硬碳负极主要从什么原料生产得到？",
+    )
+    assert rewritten == "钠电硬碳负极主要从什么原料生产得到？"
+
+    meta_rewritten = _build_retrieval_query(
+        "第一波索引怎么没有继承？",
+        history,
+        "钠电硬碳负极主要从什么原料生产得到？",
+    )
+    assert meta_rewritten == "钠电硬碳负极主要从什么原料生产得到？"
+
+
+def test_citation_merge_deduplicates_and_reindexes():
+    current = [sample_citation(id=9, record_id=1), sample_citation(id=10, record_id=2)]
+    previous = [sample_citation(id=1, record_id=2), sample_citation(id=2, record_id=3)]
+    merged = _merge_citations(current, previous)
+    assert [item["record_id"] for item in merged] == [1, 2, 3]
+    assert [item["id"] for item in merged] == [1, 2, 3]
+
+
+def test_citation_merge_reserves_space_for_previous_results():
+    current = [sample_citation(record_id=index, url=f"https://current/{index}") for index in range(25)]
+    previous = [sample_citation(record_id=100 + index, url=f"https://previous/{index}") for index in range(10)]
+    merged = _merge_citations(current, previous)
+    assert len(merged) == 25
+    assert [item["record_id"] for item in merged[-10:]] == list(range(100, 110))
+
+
+def test_prior_numeric_citations_are_removed_from_history_prompt():
+    assert _clean_history_content("assistant", "事实见 [1] 和 [23]") == "事实见  和 "
+
+
+def test_display_citations_fall_back_to_first_evidence_without_explicit_refs():
+    candidates = [sample_citation(id=index) for index in range(1, 12)]
+    selected = agent_service._used_citations("没有显式引用", candidates) or candidates[:8]
+    assert [item["id"] for item in selected] == list(range(1, 9))
 
 
 def test_first_question_title_matches_github_rule():
