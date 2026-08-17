@@ -1,5 +1,18 @@
+# 运行时源码和配置统一 LF，防止 Windows autocrlf 静默改变字节内容，
+# 干扰交付物 SHA-256 校验和"本机文件 == 服务器文件"比对。
 *.sh text eol=lf
 Dockerfile text eol=lf
+Dockerfile.* text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.json text eol=lf
 .env.example text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.toml text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
