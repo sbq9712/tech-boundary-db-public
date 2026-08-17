@@ -926,13 +926,21 @@ async function submitQuery(options={}){
             assistantMsg.status='';
             refreshConversationSurface();
 
+          }else if(currentEvent==="replace"){
+            // The backend may have emitted a partial stream before switching
+            // to a complete non-streaming response. Replace the partial text
+            // so the persisted answer and the visible answer stay identical.
+            assistantMsg.text=String(data.content||'');
+            assistantMsg.status='';
+            refreshConversationSurface();
+
           }else if(currentEvent==="done"){
             const stats=data.retrieval_summary||{};
             assistantMsg.text=data.response||assistantMsg.text;
             assistantMsg.streaming=false;
-            assistantMsg.status='';
+            assistantMsg.status=data.truncated?'回答达到输出上限，内容可能未完。':'';
             activeSessionId=data.session_id||activeSessionId;
-            assistantMsg.extra={citations:data.citations||[],retrieval_summary:stats,panel_recommendations:{}};
+            assistantMsg.extra={citations:data.citations||[],retrieval_summary:stats,panel_recommendations:{},truncated:Boolean(data.truncated),finish_reason:data.finish_reason||null,fallback_used:Boolean(data.fallback_used)};
             streamCompleted=true;
             refreshConversationSurface();
 

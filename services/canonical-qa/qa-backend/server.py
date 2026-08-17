@@ -68,6 +68,35 @@ RETRIEVAL_TOP_K = 50  # candidates per route
 FINAL_TOP_K = 25     # max records after fusion
 RELEVANCE_FLOOR = 0.3  # vector similarity floor for "honest answer" trigger
 
+# Generic follow-up language adds noise to BM25 and can overpower the domain
+# terms in short queries. Keep compact domain atoms because jieba sometimes
+# segments Chinese technical names into one-character tokens.
+BM25_STOPWORDS = {
+    "请", "请问", "问", "回答", "答复", "介绍", "说明", "解释", "分析", "概述",
+    "详细", "具体", "简单", "展开", "继续", "补充", "深入", "一下", "现在", "目前",
+    "前面", "刚才", "这些", "那些", "上述", "其中", "这个", "那个", "相关", "主要",
+    "什么", "怎么", "如何", "为什么", "是否", "能否", "可以", "能够", "帮我", "告诉",
+    "内容", "问题", "信息", "资料", "数据", "数据库", "检索", "搜索", "结果", "第一波", "第二波",
+}
+BM25_SINGLE_CHAR_KEEP = {"钠", "锂", "硅", "碳", "氢", "氧", "氮", "氨", "钙", "钾", "铝", "镁"}
+
+
+def _bm25_query_tokens(query: str) -> list[str]:
+    import jieba
+
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for raw in jieba.cut_for_search(query):
+        token = str(raw).strip().lower()
+        if not token or token in BM25_STOPWORDS or re.fullmatch(r"[\W_]+", token, flags=re.UNICODE):
+            continue
+        if len(token) == 1 and token not in BM25_SINGLE_CHAR_KEEP and not token.isascii():
+            continue
+        if token not in seen:
+            seen.add(token)
+            tokens.append(token)
+    return tokens
+
 
 def load_vector_index():
     """Load the pre-built vector index."""
@@ -213,8 +242,7 @@ async def vector_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
 
 def bm25_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
     """Search the BM25 index for keyword matches."""
-    import jieba
-    tokens = list(jieba.cut_for_search(query))
+    tokens = _bm25_query_tokens(query)
     if not tokens and _bm25_index is None:
         return []
 
@@ -227,7 +255,7 @@ def bm25_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
             for idx in top_indices
             if float(scores[int(idx)]) > 0
         )
-    incremental_results = _incremental_index.bm25_search(query, top_k)
+    incremental_results = _incremental_index.bm25_search(" ".join(tokens), top_k) if tokens else []
     # BM25 scores from separately built corpora are not numerically comparable.
     # Interleave their ranked lists before the outer RRF fusion.
     results = []
@@ -685,6 +713,7 @@ async def search(q: str, top_k: int = 10):
         "query": q,
         "results": citations,
         "total": len(citations),
+        "is_relevant": is_relevant,
     }
 
 

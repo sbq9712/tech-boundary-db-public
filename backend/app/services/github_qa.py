@@ -89,6 +89,10 @@ async def search_canonical(query: str, top_k: int = 25) -> list[dict[str, Any]]:
     results = payload.get("results")
     if not isinstance(results, list):
         raise QAServiceError("qa_contract_error", "检索服务响应格式不兼容。")
+    # A low-confidence lexical/vector hit should not become answer evidence.
+    # Older canonical services omit this field, so preserve compatibility.
+    if payload.get("is_relevant") is False:
+        return []
     return [item for item in results if isinstance(item, dict)]
 
 
