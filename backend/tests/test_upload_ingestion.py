@@ -204,3 +204,111 @@ def test_incremental_index_request_contains_durable_metadata(monkeypatch):
     assert captured["json"]["primary_category"] == "通用技术/催化剂"
     assert captured["json"]["checksum_sha256"] == "a" * 64
     assert captured["json"]["chunks"] == [{"chunk_id": "0", "text": "可索引文本"}]
+
+
+def test_representative_sample_returns_small_whole():
+    assert upload_ingestion.representative_sample(None, 100) == ""
+    assert upload_ingestion.representative_sample("短文本", 100) == "短文本"
+
+
+def test_representative_sample_covers_head_middle_tail():
+    big = "H" * 50000 + "M" * 50000 + "T" * 50000
+    sample = upload_ingestion.representative_sample(big, 40000)
+
+    assert len(sample) <= 40000
+    assert "H" in sample and "M" in sample and "T" in sample
+    assert "…" in sample  # 头/中/尾分隔标记
+
+
+def test_parse_json_response_recovers_from_prose_and_fences():
+    assert upload_ingestion._parse_json_response('{"a": 1}') == {"a": 1}
+    assert upload_ingestion._parse_json_response('```json\n{"a": 1}\n```') == {"a": 1}
+    assert upload_ingestion._parse_json_response('结果如下：{"a": 1} 完成') == {"a": 1}
+    with pytest.raises(ValueError):
+        upload_ingestion._parse_json_response("[1, 2, 3]")
+
+
+def test_match_category_accepts_exact_normalized_and_fuzzy():
+    taxonomy = upload_ingestion.load_taxonomy()
+    target = taxonomy.business_categories[0]
+    assert upload_ingestion._match_category(target, taxonomy.categories) == target
+    assert upload_ingestion._match_category(f'"{target}"', taxonomy.categories) == target
+    assert upload_ingestion._match_category(target + "。", taxonomy.categories) == target
+    # 长路径上单字符 typo 的比率 >= 0.9，应模糊命中
+    typo = target[:-1] + ("X" if target[-1] != "X" else "Y")
+    assert upload_ingestion._match_category(typo, taxonomy.categories) == target
+    assert upload_ingestion._match_category("一个根本不存在的分类", taxonomy.categories) is None
+
+
+def test_classification_retries_on_transient_then_succeeds(monkeypatch):
+    taxonomy = upload_ingestion.load_taxonomy()
+    category = taxonomy.business_categories[0]
+    calls = {"n": 0}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": f'{{"primary_category":"{category}","secondary_categories":[]}}'}}]}
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def post(self, *_args, **_kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise upload_ingestion.httpx.TimeoutException("timeout")
+            return FakeResponse()
+
+    monkeypatch.setenv("TECHDB_AGENT_API_KEY", "test-key")
+    monkeypatch.setenv("TECHDB_AGENT_MAX_RETRIES", "2")
+    monkeypatch.setattr(upload_ingestion.time, "sleep", lambda *_a: None)
+    monkeypatch.setattr(upload_ingestion.httpx, "Client", FakeClient)
+
+    result = upload_ingestion.request_ai_classification("资料文本", taxonomy)
+    assert result["primary_category"] == category
+    assert calls["n"] == 2
+
+
+def test_classification_does_not_retry_on_client_error(monkeypatch):
+    taxonomy = upload_ingestion.load_taxonomy()
+    calls = {"n": 0}
+
+    class FakeResponse:
+        status_code = 400
+
+        def raise_for_status(self):
+            raise upload_ingestion.httpx.HTTPStatusError(
+                "bad request", request=None, response=self
+            )
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def post(self, *_args, **_kwargs):
+            calls["n"] += 1
+            return FakeResponse()
+
+    monkeypatch.setenv("TECHDB_AGENT_API_KEY", "test-key")
+    monkeypatch.setenv("TECHDB_AGENT_MAX_RETRIES", "2")
+    monkeypatch.setattr(upload_ingestion.time, "sleep", lambda *_a: None)
+    monkeypatch.setattr(upload_ingestion.httpx, "Client", FakeClient)
+
+    with pytest.raises(upload_ingestion.httpx.HTTPStatusError):
+        upload_ingestion.request_ai_classification("资料文本", taxonomy)
+    assert calls["n"] == 1

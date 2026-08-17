@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import logging
 import os
+import re
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -29,7 +32,8 @@ MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_BATCH_FILES = 20
 MAX_BATCH_BYTES = 200 * 1024 * 1024
 STREAM_CHUNK_BYTES = 1024 * 1024
-MAX_CLASSIFICATION_TEXT_CHARS = 12_000
+# 分类输入取整篇代表性采样（头/中/尾），而非只截前若干字，避免封面/目录主导模型判断。
+CLASSIFICATION_BUDGET_CHARS = 40_000
 MAX_INDEX_TEXT_CHARS = 500_000
 INDEX_CHUNK_CHARS = 2_000
 INDEX_CHUNK_OVERLAP = 200
@@ -209,7 +213,7 @@ def classification_status_for(category: str) -> str:
     return "classified"
 
 
-def _append_limited(parts: list[str], text: str, max_chars: int = MAX_CLASSIFICATION_TEXT_CHARS) -> bool:
+def _append_limited(parts: list[str], text: str, max_chars: int = CLASSIFICATION_BUDGET_CHARS) -> bool:
     if not text:
         return False
     current = sum(len(item) for item in parts)
@@ -222,7 +226,7 @@ def _append_limited(parts: list[str], text: str, max_chars: int = MAX_CLASSIFICA
 def extract_text(
     path: Path,
     original_filename: str,
-    max_chars: int = MAX_CLASSIFICATION_TEXT_CHARS,
+    max_chars: int = CLASSIFICATION_BUDGET_CHARS,
 ) -> str | None:
     ext = file_extension(original_filename)
     try:
@@ -268,8 +272,26 @@ def extract_text(
         return None
 
 
+def representative_sample(text: str | None, budget: int) -> str:
+    """Return up to ``budget`` chars representing the whole document.
+
+    小文档原样返回；长文档按头/中/尾 4:3:3 采样，避免分类被封面、目录、引言主导。
+    """
+    if not text:
+        return ""
+    if len(text) <= budget:
+        return text
+    overhead = 6  # 三处 "\n…\n" 分隔标记
+    target = max(1, budget - overhead)
+    head = int(target * 0.4)
+    tail = int(target * 0.3)
+    mid = target - head - tail
+    mid_start = (len(text) - mid) // 2
+    return f"{text[:head]}\n…\n{text[mid_start:mid_start + mid]}\n…\n{text[-tail:]}"
+
+
 def _parse_json_response(content: str) -> dict:
-    content = content.strip()
+    content = (content or "").strip()
     if content.startswith("```"):
         lines = content.splitlines()
         if lines and lines[0].startswith("```"):
@@ -277,10 +299,44 @@ def _parse_json_response(content: str) -> dict:
         if lines and lines[-1].strip() == "```":
             lines = lines[:-1]
         content = "\n".join(lines).strip()
-    parsed = json.loads(content)
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        # 模型可能把 JSON 包在散文里或只吐了片段：抠出最外层 {...} 再试一次。
+        match = re.search(r"\{.*\}", content, flags=re.S)
+        if match is None:
+            raise
+        parsed = json.loads(match.group(0))
     if not isinstance(parsed, dict):
         raise ValueError("AI 返回值不是 JSON 对象")
     return parsed
+
+
+_CATEGORY_STRIP_CHARS = "\"'`·。.、，,；;：:（）()[]【】「」『』 \t\r\n"
+
+
+def _normalize_category(value: str) -> str:
+    """去掉包裹引号/标点和空白后用于比对，避免模型返回 ``"煤化工"`` / ``煤化工。`` 判失败。"""
+    cleaned = value.translate(str.maketrans("", "", _CATEGORY_STRIP_CHARS))
+    return re.sub(r"\s+", "", cleaned)
+
+
+def _match_category(value: str, categories: tuple[str, ...]) -> str | None:
+    """把模型返回的类目解析到规范分类路径。
+
+    顺序：精确命中 → 归一化命中（去引号/标点/空白）→ 高阈值模糊命中（difflib≥0.9）。
+    都不满足返回 None，交由上层判失败。
+    """
+    if not value:
+        return None
+    if value in categories:
+        return value
+    by_normalized = {_normalize_category(category): category for category in categories}
+    normalized = _normalize_category(value)
+    if normalized in by_normalized:
+        return by_normalized[normalized]
+    candidates = difflib.get_close_matches(value, list(categories), n=1, cutoff=0.9)
+    return candidates[0] if candidates else None
 
 
 def request_ai_classification(text: str, taxonomy: Taxonomy) -> dict:
@@ -289,7 +345,9 @@ def request_ai_classification(text: str, taxonomy: Taxonomy) -> dict:
         raise RuntimeError("TECHDB_AGENT_API_KEY 未配置")
     base_url = os.getenv("TECHDB_AGENT_BASE_URL", "https://aigate.catl.com/v1").rstrip("/")
     model = os.getenv("TECHDB_AGENT_MODEL", "GLM-5.2")
-    timeout = int(os.getenv("TECHDB_AGENT_AI_TIMEOUT_SECONDS", "90"))
+    timeout = int(os.getenv("TECHDB_AGENT_AI_TIMEOUT_SECONDS", "180"))
+    max_retries = max(0, int(os.getenv("TECHDB_AGENT_MAX_RETRIES", "2")))
+    base_delay = float(os.getenv("TECHDB_AGENT_RETRY_BASE_DELAY_SECONDS", "2"))
 
     category_json = json.dumps(taxonomy.categories, ensure_ascii=False)
     prompt = (
@@ -302,7 +360,7 @@ def request_ai_classification(text: str, taxonomy: Taxonomy) -> dict:
         '"source_type":"论文|专利|研报|网页快照|同事材料|付费数据库|其他",'
         '"primary_category":"候选目录中的精确值","secondary_categories":[],"confidence":0.0,"reason":"简短依据"}\n'
         f"分类目录版本：{taxonomy.version}\n候选目录：{category_json}\n\n"
-        f"资料文本：\n{text[:MAX_CLASSIFICATION_TEXT_CHARS]}"
+        f"资料文本（可能为整篇代表性采样）：\n{text[:CLASSIFICATION_BUDGET_CHARS]}"
     )
     payload = {
         "model": model,
@@ -311,24 +369,50 @@ def request_ai_classification(text: str, taxonomy: Taxonomy) -> dict:
         "temperature": 0.1,
         "max_tokens": 1600,
     }
-    with httpx.Client(timeout=timeout) as client:
-        response = client.post(
-            f"{base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json=payload,
-        )
-        response.raise_for_status()
-        data = response.json()
-    result = _parse_json_response(data["choices"][0]["message"]["content"])
+    result: dict | None = None
+    raw_content: str | None = None
+    last_error: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                response = client.post(
+                    f"{base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+            raw_content = str(data["choices"][0]["message"]["content"])
+            result = _parse_json_response(raw_content)
+            break
+        except httpx.HTTPStatusError as exc:
+            # 仅重试瞬时错误（429/5xx）；其余 4xx 是请求本身问题，重试无意义。
+            if exc.response.status_code not in {429, 500, 502, 503, 504}:
+                raise
+            last_error = exc
+        except (httpx.TimeoutException, json.JSONDecodeError, KeyError, IndexError, ValueError) as exc:
+            # 超时、坏 JSON、响应形状异常 —— 都值得再试一次。
+            last_error = exc
+        if attempt < max_retries:
+            time.sleep(base_delay * (2 ** attempt))
+    else:
+        raise RuntimeError(
+            f"分类模型调用失败（重试 {max_retries} 次后仍不可用）：{last_error}"
+        ) from last_error
+    if result is None:
+        raise RuntimeError("分类结果不可用")
 
-    primary = str(result.get("primary_category") or "").strip()
-    if primary not in taxonomy.categories:
-        raise ValueError("AI 返回了目录之外的主分类")
+    primary_raw = str(result.get("primary_category") or "").strip()
+    primary = _match_category(primary_raw, taxonomy.categories)
+    if primary is None:
+        raise ValueError(
+            f"AI 返回了目录之外的主分类：{primary_raw!r}（原始返回：{(raw_content or '')[:300]!r}）"
+        )
     secondary: list[str] = []
     for item in result.get("secondary_categories") or []:
-        value = str(item).strip()
-        if value in taxonomy.business_categories and value != primary and value not in secondary:
-            secondary.append(value)
+        resolved = _match_category(str(item).strip(), taxonomy.business_categories)
+        if resolved and resolved != primary and resolved not in secondary:
+            secondary.append(resolved)
         if len(secondary) == 3:
             break
 
@@ -508,7 +592,9 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
                     classified_at=datetime.now(timezone.utc),
                 )
             else:
-                result = request_ai_classification(text[:MAX_CLASSIFICATION_TEXT_CHARS], taxonomy)
+                result = request_ai_classification(
+                    representative_sample(text, CLASSIFICATION_BUDGET_CHARS), taxonomy
+                )
                 db.refresh(record)
                 values = {
                     "taxonomy_version": taxonomy.version,
