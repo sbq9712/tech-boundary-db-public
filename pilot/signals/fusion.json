@@ -7,7 +7,7 @@
    "name": "SPARC Q_plasma 实测",
    "type": "event",
    "watching": "SPARC 首放电后的 Q 实测值及与 2020 模拟的偏差",
-   "baseline": "未运行（目标 2027 首放电；CFS 内部模拟预测 Q~10）",
+   "baseline": "装配中：首块 TF 磁体 2026-01 安装，18 块夏末装完；首放电目标 2026，Q>1 目标 2026 末-2027 初（2026-08-18 核实，较文档提前）",
    "threshold": "Q>2（正面）；偏差 >30%（负面信号）",
    "linked_bottleneck": "bottle-plasma-control",
    "meaning": "磁约束物理可行性确认或 ARC 设计风险暴露",
@@ -28,7 +28,7 @@
    "name": "聚变级超导磁体进展",
    "type": "trend",
    "watching": "20T 级磁体的制造、集成、长运行记录",
-   "baseline": "CFS 20T 单磁体（2021）；观测：能量奇点 26.7T 无液氦（2026-06）、CRAFT 14.5T（2026-06）",
+   "baseline": "CFS 20T 单磁体（2021）；能量奇点 26.7T 无液氦绝缘磁体+洪荒70 120 秒稳态长脉冲（2026-06，已核实：全球首台全高温超导托卡马克）；CRAFT TF 线圈 14.5T（服务 CFETR，已核实）",
    "threshold": "20T 级在聚变装置集成运行 >1000h 无失超",
    "linked_bottleneck": "bottle-plasma-control",
    "meaning": "紧凑路线的硬件前提从单体验证走向运行验证；磁场纪录刷新（26.7T）显示中国侧活跃度上升"
@@ -38,10 +38,10 @@
    "name": "氚增殖比实验验证",
    "type": "event",
    "watching": "聚变中子源下的 TBR 实测与闭环实验",
-   "baseline": "无聚变级数据（文档时点）；观测：BABY 1L 首批增殖实验结果（2026-07，8.1 分）",
+   "baseline": "BABY 1L（MIT LIBRA）：DT 中子发生器+1L FLiBe，TBR 与 OpenMC 吻合、较 100mL 提升 6 倍（2026-08-18 核实；小规模基准，非聚变通量，TBR<1）",
    "threshold": "任何聚变中子源下 TBR>1.0 实测",
    "linked_bottleneck": "bottle-tritium",
-   "meaning": "最高风险工程卡点从零验证进入有数据阶段——BABY 1L 是否达阈待核实（列入 V 清单）"
+   "meaning": "卡点从零验证进入有基准数据阶段；阈值（聚变中子源 TBR>1.0）未达，BABY 平台 2026-06 第 3 轮 FLiBe-1L 实验计划中"
   },
   {
    "id": "sig-first-wall",
@@ -93,6 +93,17 @@
    "threshold": "主要监管辖区确立聚变专属许可框架",
    "linked_bottleneck": "bottle-regulatory-path",
    "meaning": "系统侧时钟启动——文档未覆盖，观测中最高分事件，竖井反向新增"
+  },
+  {
+   "id": "sig-ai-plasma-control",
+   "name": "AI 等离子体控制（认知论卡点的黑箱路线）",
+   "type": "event",
+   "watching": "DeepMind Torax/CFS 合作、NVIDIA 数字孪生在 SPARC 的实际应用；AI 控制方案在真实装置的稳定约束演示",
+   "baseline": "CFS-DeepMind 合作官宣（2025-10）；CFS-NVIDIA/Siemens SPARC 数字孪生（2026-01 报道）——已核实",
+   "threshold": "AI 控制器在 SPARC 实际放电中实现破裂规避或稳定约束增益的同行评审报告",
+   "linked_bottleneck": "bottle-plasma-control",
+   "meaning": "认知论限制的两种解法之一（另一为更长实验积累）；若 AI 控制有效，\"无模型\"卡点的突破形态被改写——epistemic 定性的实证检验",
+   "note": "2026-08-18 联网核实新增：文档（07-03）完全未覆盖此方向"
   }
  ]
 }

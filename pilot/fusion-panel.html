@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8"><title>核聚变 · 认知面板</title><style>
+:root { --bg:#0f1419; --panel:#161d27; --card:#1c2530; --border:#2a3644; --text:#d8e1ea; --muted:#8b9bab;
+        --accent:#4f9cf9; --tech:#7dd3fc; --sys:#f0abfc; --ok:#34d399; --warn:#fbbf24; --bad:#f87171; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; padding:24px; line-height:1.65; }
+.wrap { max-width:1180px; margin:0 auto; }
+h1 { font-size:22px; margin-bottom:4px; }
+.sub { color:var(--muted); font-size:13px; margin-bottom:20px; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:18px; }
+.card.full { grid-column:1 / -1; }
+.card h2 { font-size:15px; color:var(--accent); margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+.verdict { font-size:15px; line-height:1.8; }
+.meta-row { display:flex; gap:16px; margin-top:10px; font-size:13px; color:var(--muted); flex-wrap:wrap; }
+.meta-row b { color:var(--text); }
+.pill { display:inline-block; padding:2px 10px; border-radius:99px; font-size:12px; margin:2px 4px 2px 0; }
+.pill.tech { background:rgba(125,211,252,.15); color:var(--tech); border:1px solid rgba(125,211,252,.3); }
+.pill.sys { background:rgba(240,171,252,.12); color:var(--sys); border:1px solid rgba(240,171,252,.3); }
+.pill.binding { background:rgba(251,191,36,.15); color:var(--warn); border:1px solid rgba(251,191,36,.4); font-weight:600; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:left; color:var(--muted); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--border); }
+td { padding:8px; border-bottom:1px solid rgba(42,54,68,.5); vertical-align:top; }
+tr:last-child td { border-bottom:none; }
+.small { font-size:12px; color:var(--muted); }
+.small b { color: var(--text); }
+.verified { color:var(--ok); }
+.pending { color:var(--warn); }
+.miss { color:var(--bad); }
+.kw { background:rgba(79,156,249,.12); border:1px solid rgba(79,156,249,.25); border-radius:4px; padding:0 4px; font-size:11px; }
+ul { list-style:none; }
+li { padding:4px 0 4px 14px; position:relative; font-size:13px; }
+li:before { content:"\25B8"; position:absolute; left:0; color:var(--accent); }
+.footer { color:var(--muted); font-size:12px; margin-top:20px; text-align:center; }
+@media (max-width:900px){ .grid{grid-template-columns:1fr} }
+</style></head>
+<body><div class="wrap">
+<h1>核聚变 — 行业认知面板</h1>
+<div class="sub">源: 核聚变商业化进展 v1.0 + 广度观测 + 2026-08-18 联网核实 · 证据截至 2026-08-18（联网核实后更新）</div>
+<div class="grid">
+
+<div class="card full"><h2>行业判断</h2>
+<div class="verdict">尚未有任何装置实现持续净能量输出并发电。NIF 惯性约束实现 Q_plasma&gt;1（2022，科学盈亏平衡，非工程），磁约束纪录 JET 69MJ/6s（Q~0.33，2024）。私营路线（CFS/SPARC 2027 验证 Q&gt;1 → ARC 2030s 并网 400MWe）是最乐观时间线；ITER Q≥10 推迟至 2044。'经济可行'的商业聚变更远。行业时钟由技术侧卡点走（等离子体验证→材料→氚自持），系统侧（氚供应链、监管许可）开始进入视野但不是当前约束。</div>
+<div class="meta-row">
+<span>置信度 <b class="pending">medium</b></span>
+<span>约束性卡点 <b>等离子体约束与控制</b></span>
+<span class="small">核实：2026-08-18 联网核实: BABY 1L / Helion 许可 / Proxima 融资 / SPARC 进度 / 中国磁体 / ITER 基线 / Helion 燃料策略</span>
+</div></div>
+
+<div class="card"><h2>拐点标准（5 条）</h2>
+<table><tr><th>条件</th><th>含义</th><th>当前基线</th></tr><tr><td style='width:40%'>SPARC 实测 Q_plasma &gt; 2，或实验值与 2020 模拟偏差 &lt;20%</td><td>磁约束物理可行性确认，ARC 设计风险显著下降，私营时间线可信度质变</td><td class='small'>装配中：首块 TF 磁体 2026-01 安装，18 块夏末装完；首放电目标 2026，Q&gt;1 目标 2026 末-20…</td></tr><tr><td style='width:40%'>托卡马克稳态运行 &gt;100 秒且 Q&gt;1</td><td>从脉冲物理验证迈向工程可用运行</td><td class='small'>JET 6s（Q~0.33）；EAST 403s（Q&lt;1）</td></tr><tr><td style='width:40%'>任何聚变级中子源下 TBR &gt;1.0 实测，或完整氚增殖-提取-回充闭环实验完成</td><td>氚自持从'零验证'变为'有数据'——最高风险工程卡点开始闭合，DT 路线的资源前提成立</td><td class='small'>BABY 1L（MIT LIBRA）：DT 中子发生器+1L FLiBe，TBR 与 OpenMC 吻合、较 100mL…</td></tr><tr><td style='width:40%'>材料在 14 MeV 等效 &gt;20 dpa 下延展性保持 &gt;50% 的公开报道</td><td>第一壁从'物理极限硬约束'开始松动，电站寿命可设计</td><td class='small'>实验室小样品 &lt;5 dpa</td></tr><tr><td style='width:40%'>任何非托卡马克路线（仿星器/FRC/Z箍缩/惯性约束）实现 Q_plasma&gt;1</td><td>路线竞争格局重估（私营仿星器融资已连破纪录，技术验证若跟上将分流托卡马克叙事）</td><td class='small'>Helion 目标 2028 发电（已获运行许可，观测 2026-06）；Proxima 稳态仿星器融资纪录（2026-…</td></tr></table></div>
+
+<div class="card"><h2>技术路线（4 条）</h2>
+<table><tr><th>路线 · 成熟度 · 判断</th></tr><tr><td><b>磁约束·托卡马克</b> <span class='small'>· 示范前（装配中，首放电目标 2026）</span><div class='small' style='margin-top:4px'>主流路线：数十年运行经验与数据积累，ITER 和几乎所有私营企业选择。当前纪录 JET 69MJ/6s（Q~0.33）。CFS 用 REBCO 高温超导 20T 磁体走紧凑路线（B⁴ 定律：磁场翻倍体积可降一个量级，自洽性验证通过）——这是私营聚变商业逻辑的物理基础。SPARC 2027 目标 Q&gt;1。 【2026-08-18 核实】SP…</div></td></tr><tr><td><b>磁约束·仿星器</b> <span class='small'>· 实验室验证（参数远低于聚变所需）</span><div class='small' style='margin-top:4px'>无内部电流→无破裂灾难，理论更稳定；但线圈制造极端复杂、约束效率低于托卡马克。W7-X 已验证长时约束但参数远低于聚变所需。作为托卡马克风险对冲持续发展——2026 年私营融资连破纪录（Proxima Fusion 4.11 亿欧，欧洲私营聚变最大融资）。</div></td></tr><tr><td><b>惯性约束（ICF）</b> <span class='small'>· 实验室验证（距发电极远）</span><div class='small' style='margin-top:4px'>NIF 2022 实现 Q_plasma~1.5（科学盈亏平衡），但其 Q 只计激光到燃料，不计全链路——全系统 Q 远低于 1。重复频率、靶丸制造、热量提取与发电需求差距极大。2026-07 LLNL 与 Pacific Fusion 天狼星原型机 3000 脉冲验证 95% 效率（观测补充，文档未含）。</div></td></tr><tr><td><b>私营替代构型（FRC/Z箍缩/球马克等）</b> <span class='small'>· 部分调研（2026-08-18 联网核实）</span><div class='small' style='margin-top:4px'>Helion（FRC+脉冲直接能量转换）：Polaris 2025 投运，2026-02 宣布 1.5 亿度纪录+可测量 D-T 聚变【重要转变：Helion 原目标 D-He3 无中子路线，现先用 D-T 点火过渡（官方博客 2026-02-13）——氚自持卡点从"DT 路线专属"扩大到含 Helion】；获华盛顿州 RML+RAEL …</div></td></tr></table></div>
+
+<div class="card full"><h2>卡点（技术侧 4 + 系统侧 1）</h2>
+<table><tr><th>卡点</th><th>现状</th><th>突破形态</th></tr><tr><td style='width:24%'><b>等离子体约束与控制</b><br><span class="pill binding">⚑ 约束性</span><div style='margin-top:4px'><span class='pill tech'>技术侧·认知论</span></div></td><td class='small'>等离子体是高度非线性系统，多种不稳定性模式（MHD/湍流输运/ELM）任一失控导致破裂。基本物理不禁止（Lawson 判据已部分验证），但实际行为远比理想模型复杂——边界物理、杂质输运、破裂预测的经验性参数大量存在，模拟不能替代实验（Hammer：'模拟必须由按设计运行的聚变反应堆证明正确'）。必须在真实聚变级装置上验证，此前最大 DT 装置（JET）远小于电站规模。文档原分类'engineering bottleneck'——竖井改判 epistemic（见提取决定）。AI 黑箱控制（DeepMind 式）是这条卡点的潜在突破形态：不建模型直接控。</td><td style='width:26%' class='small'>事件型：SPARC Q_plasma&gt;2（物理可行性）；稳态 &gt;100s 且 Q&gt;1（工程可用性）；或 AI 控制方案在真实装置上实现某种持续时间的稳定约束（黑箱路线）</td></tr><tr><td style='width:24%'><b>第一壁材料与中子辐照</b><br><div style='margin-top:4px'><span class='pill tech'>技术侧·物理限制</span></div></td><td class='small'>D-T 聚变 80% 能量以 14.1 MeV 中子释放，对任何已知材料的损伤不可避免（位移损伤+氦脆化+高热负荷）。目标：10-20 dpa 下保持机械性能+可更换模块设计。候选 RAFM 钢/钨/ODS 钢，但聚变级中子环境长期数据几乎不存在——没有 14 MeV 中子源能模拟（IFMIF-DONES 在建）。文档标注 physical limit（不可消除）+ engineering（材料与设计可改善）双属性——竖井按'约束性最强的属性'归 physical，工程改善面写入 statement。</td><td style='width:26%' class='small'>材料事件：&gt;20 dpa 下延展性 &gt;50%（14MeV 等效）；设施事件：IFMIF-DONES 投运（测试能力出现）</td></tr><tr><td style='width:24%'><b>氚自持增殖（DT 路线专属）</b><br><div style='margin-top:4px'><span class='pill tech'>技术侧·工程</span></div><div class='small'>条件性：route-tokamak/route-icf（DT 燃料路线）</div></td><td class='small'>条件性卡点：仅在氘氚路线下成立（文档本体即挂氘氚语境）。全球民用氚库存 &lt;30kg（半衰期 12.3 年自然衰减，来源重水堆副产），单个 400MW 电站年耗 50-100kg——必须堆内增殖（⁶Li+n→T），TBR≥1.05-1.1。物理基础清楚但工程验证为零：没有任何装置在聚变级通量下测过完整增殖-提取-循环回路。ITER TBM 要 2039 年后；ARC 论文对此空白（Nature News 明确指出）。因果链下追（拷问 session 的案例）：供应链表象→缺氚原因（半衰期短+存量少）→解决路线（月球采矿=远期/自产=增殖包层）→落回工程问题。观测补充：2026-07 出现首批氚增…</td><td style='width:26%' class='small'>事件：任何聚变中子源下 TBR&gt;1.0 实测；闭环实验完成；CFS 公开 ARC 包层设计并过同行评审</td></tr><tr><td style='width:24%'><b>热量提取与发电集成</b><br><div style='margin-top:4px'><span class='pill tech'>技术侧·工程</span></div></td><td class='small'>第一壁热负荷 1-5 MW/m²（裂变 ~5 倍），冷却剂强辐照下长期运行，包层热分布极不均匀。裂变经验可参考但条件更极端。CFS-Siemens 合作中，验证需到 ARC 建造阶段。</td><td style='width:26%' class='small'>事件：ARC 或任何聚变原型完成满功率热交换闭环</td></tr><tr><td style='width:24%'><b>监管许可路径（新增，观测发现）</b><br><div style='margin-top:4px'><span class='pill sys'>系统侧·准入审批</span></div></td><td class='small'>文档未建此卡点，但观测显示 2026-06 出现'全球首座聚变能工厂获美国监管批准'（评分 9.6）与 Helion 获运行许可——监管侧在文档日期后开始实质动作。聚变的许可框架（NRC 对聚变装置的监管类别）是行业时钟的新变量。竖井提取决定：为观测中强度 ≥9 的制度事件建立系统侧卡点占位，待人工调研补充。 【2026-08-18 核实】"全球首座聚变能工厂获美国监管批准"= Helion 2026-06-16 获华盛顿州卫生部 RML+RAEL 两证（Orion 电站，Malaga/Wenatchee）——全球首批聚变电站监管许可，但属州级放射性物质许可而非 NRC 建设许可，与 ARC/…</td><td style='width:26%' class='small'>制度事件：主要监管辖区（美/英/中）确立聚变专属许可框架；首座商业电站拿到建设+运行许可</td></tr></table></div>
+
+<div class="card"><h2>指标边界（6 项）</h2>
+<table><tr><th>指标</th><th>当前</th><th>需求</th><th>状态</th></tr><tr><td><b>Lawson 判据（三重积 n·T·τ_E）</b></td><td class='small'>JET DT 最终实验约 0.9×10²¹ keV·s/m³；NIF 超过点火判据（用 ρR 等效）</td><td class='small'>商业电站需 Q_plasma&gt;10-20 对应的更高三重积</td><td class='verified'>✓ 已验证</td></tr><tr><td><b>Q_plasma（科学盈亏平衡）</b></td><td class='small'>NIF ~1.5（激光口径）；JET ~0.33（加热功率口径）</td><td class='small'>Q_engineering&gt;1（无装置达到）；Q_economic（框架刚提出）</td><td class='verified'>✓ 已验证</td></tr><tr><td><b>一次放电持续时间</b></td><td class='small'>JET 6 秒（69MJ）；EAST 403 秒（1.2 亿度 H 模，Q&lt;1）</td><td class='small'>连续运行（电站级）</td><td class='verified'>✓ 已验证</td></tr><tr><td><b>高温超导磁体磁场强度</b></td><td class='small'>CFS 20T 级 REBCO 磁体测试通过（2021，公司自报独立验证不明）；观测补充：能量奇点 26.7T 无液氦磁体（2026-06）、CRAFT 14.5T（2026-06…</td><td class='small'>20T 级在聚变装置集成运行 &gt;1000h 无失超</td><td class='pending'>⚠ 已披露</td></tr><tr><td><b>氚增殖比 TBR</b></td><td class='small'>无聚变级实验数据（观测补充：BABY 1L 首批增殖实验结果 2026-07）</td><td class='small'>TBR ≥1.05-1.1（含衰变与提取损失）</td><td class='miss'>? 缺数据</td></tr><tr><td><b>ARC 电站投资成本</b></td><td class='small'>CFS 估算 &gt;$25 亿（&gt;¥180 亿，首台机）</td><td class='small'>降至与裂变竞争（约 ¥1.5-2 万/kW）才可规模化</td><td class='pending'>⚠ 已披露</td></tr></table></div>
+
+<div class="card"><h2>信号规格（10 条）</h2>
+<table><tr><th>信号</th><th>基线</th><th>阈值</th><th>挂载</th></tr><tr><td style='width:17%'><b>SPARC Q_plasma 实测</b><br><span class='kw'>event</span></td><td class='small'>装配中：首块 TF 磁体 2026-01 安装，18 块夏末装完；首放电目标 2026，Q&gt;1 目标 2026 末-2027 初（2026-08-18 核实，较文档提前）</td><td class='small'>Q&gt;2（正面）；偏差 &gt;30%（负面信号）</td><td class='small'>bottle-plasma-control</td></tr><tr><td colspan='4' class='small' style='color:var(--muted)'>└ 观测 0 命中——正确，SPARC 未运行，此信号为纯未来事件</td></tr><tr><td style='width:17%'><b>托卡马克稳态运行时长</b><br><span class='kw'>event</span></td><td class='small'>JET 6s（Q~0.33）；EAST 403s（Q&lt;1）</td><td class='small'>&gt;100 秒且 Q&gt;1</td><td class='small'>bottle-plasma-control</td></tr><tr><td style='width:17%'><b>聚变级超导磁体进展</b><br><span class='kw'>trend</span></td><td class='small'>CFS 20T 单磁体（2021）；能量奇点 26.7T 无液氦绝缘磁体+洪荒70 120 秒稳态长脉冲（2026-06，已核实：全球首台全高温超导托卡马克）；CRAFT TF 线圈 14.5T（服务 CFETR，已核实…</td><td class='small'>20T 级在聚变装置集成运行 &gt;1000h 无失超</td><td class='small'>bottle-plasma-control</td></tr><tr><td style='width:17%'><b>氚增殖比实验验证</b><br><span class='kw'>event</span></td><td class='small'>BABY 1L（MIT LIBRA）：DT 中子发生器+1L FLiBe，TBR 与 OpenMC 吻合、较 100mL 提升 6 倍（2026-08-18 核实；小规模基准，非聚变通量，TBR&lt;1）</td><td class='small'>任何聚变中子源下 TBR&gt;1.0 实测</td><td class='small'>bottle-tritium</td></tr><tr><td style='width:17%'><b>第一壁材料抗辐照</b><br><span class='kw'>event</span></td><td class='small'>实验室小样品 &lt;5 dpa</td><td class='small'>&gt;20 dpa 下延展性 &gt;50%；或 IFMIF-DONES 投运</td><td class='small'>bottle-first-wall</td></tr><tr><td style='width:17%'><b>私营聚变融资</b><br><span class='kw'>event</span></td><td class='small'>全行业累计 ~$100 亿（2026 估计）</td><td class='small'>单笔 &gt;$10 亿新融资轮或 IPO；观测：Proxima 4.11 亿欧（欧洲私营最大，2026-07）已接近但未达阈</td><td class='small'>industry_judgment（行业级前置指标，不挂具体卡点）</td></tr><tr><td colspan='4' class='small' style='color:var(--muted)'>└ 文档 §7 有此信号但未建对应系统侧卡点——竖井以隐式卡点处理，正式版需补 economic/生态配套归属</td></tr><tr><td style='width:17%'><b>ARC/Fall Line 建设里程碑</b><br><span class='kw'>event</span></td><td class='small'>选址完成（弗吉尼亚）；PJM 互联申请 2026-04 提交</td><td class='small'>正式开工/建设许可获批</td><td class='small'>bottle-regulatory-path</td></tr><tr><td style='width:17%'><b>非托卡马克路线突破</b><br><span class='kw'>event</span></td><td class='small'>Helion 目标 2028 发电（已获运行许可，观测 2026-06）；Proxima 稳态仿星器融资纪录（2026-07）</td><td class='small'>任何非托卡马克路线 Q_plasma&gt;1</td><td class='small'>route-stellarator</td></tr><tr><td style='width:17%'><b>监管批准事件（观测反哺新增）</b><br><span class='kw'>event</span></td><td class='small'>全球首座聚变能工厂获美监管批准（2026-06-18，评分 9.6）</td><td class='small'>主要监管辖区确立聚变专属许可框架</td><td class='small'>bottle-regulatory-path</td></tr><tr><td style='width:17%'><b>AI 等离子体控制（认知论卡点的黑箱路线）</b><br><span class='kw'>event</span></td><td class='small'>CFS-DeepMind 合作官宣（2025-10）；CFS-NVIDIA/Siemens SPARC 数字孪生（2026-01 报道）——已核实</td><td class='small'>AI 控制器在 SPARC 实际放电中实现破裂规避或稳定约束增益的同行评审报告</td><td class='small'>bottle-plasma-control</td></tr><tr><td colspan='4' class='small' style='color:var(--muted)'>└ 2026-08-18 联网核实新增：文档（07-03）完全未覆盖此方向</td></tr></table></div>
+
+<div class="card"><h2>待核实清单（9 条）</h2>
+<ul><li>V01: CFS ARC 五篇论文定量结论（1.1GW→400MWe 推导、假设、不确定性）— P0，OA 可下载</li><li>V02: SPARC '75% 完工'独立验证 — P1</li><li>V03: 20T 磁体测试独立验证（IEEE TAS）— P1</li><li>V04: ARC 包层/氚增殖设计细节 — P0（Nature News 指出论文空白）</li><li>V05: ARC &gt;$25 亿成本构成细分 — P1</li><li>V06: 全球氚库存最新确切数字 — P2</li><li>V07: 私营替代路线（Helion/TAE/Tokamak Energy）调研 — P2（已建占位节点）</li><li>V08: NIF 全系统 Q 值（含激光器效率）— P2</li><li>竖井新增: 2026-06 监管批准事件的具体内容与许可框架含义 — P0（bottle-regulatory-path 依据）</li></ul></div>
+
+<div class="card"><h2>权威文档（ADR-0009：判断的 single source of truth）</h2>
+<ul><li>核电/核电_核聚变商业化进展_技术边界.md (v1.0, 2026-07-03)</li></ul>
+<div class="small" style="margin-top:8px">本面板为判断树的可视化投影；判断变更须经人审后写入文档，再重新提取。</div></div>
+
+</div>
+<div class="footer">竖井认知面板 v2 · 2026-08-18 · 判断树数据: pilot/judgments/fusion.json</div>
+</div></body></html>

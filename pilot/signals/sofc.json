@@ -7,10 +7,10 @@
    "name": "AEP 框架转交付",
    "type": "event",
    "watching": "AEP-Bloom 框架的交付进度",
-   "baseline": "首单 100MW、最高 1GW 框架",
+   "baseline": "2026-01-08 已锁定 $2.65B/20 年承购协议（最高 1GW）；首批 100MW 2025Q3 投运（2026-08-18 核实）",
    "threshold": "累计交付 ≥500MW 且跨多个项目运行",
    "linked_bottleneck": "bottle-financing-concentration",
-   "meaning": "数据中心由需求叙事升级为规模市场"
+   "meaning": "数据中心由需求叙事升级为规模市场——承购锁定是框架→合同的关键一步，阈值（交付≥500MW）未达但信号从\"叙事\"进入\"合同\"阶段"
   },
   {
    "id": "sig-life-database",
@@ -47,7 +47,7 @@
    "name": "第二梯队产能利用",
    "type": "trend",
    "watching": "Doosan/Elcogen 工厂利用率",
-   "baseline": "工厂已建/投产",
+   "baseline": "Doosan 50MW 2025-07 量产、Elcogen 360MW 2025-09 投产（2026-08-18 核实与文档一致）；利用率未公开",
    "threshold": "任一连续两年利用率 >60%",
    "linked_bottleneck": "bottle-manufacturing-yield",
    "meaning": "多供应商市场开始形成"
@@ -67,7 +67,7 @@
    "name": "五年堆寿命验证",
    "type": "event",
    "watching": "真实工况寿命实绩与输出保证",
-   "baseline": "企业目标值（Ceres 5 年目标）",
+   "baseline": "Ceres 5 年目标；Bloom 称更换周期约 5 年（企业口径 2026-07）；第三方横评仍缺",
    "threshold": "真实工况达到 5 年且输出保证可执行",
    "linked_bottleneck": "bottle-degradation-multi",
    "meaning": "堆更换成本不确定性显著下降"
