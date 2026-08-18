@@ -1,0 +1,98 @@
+{
+ "domain": "核聚变",
+ "description": "信号规格（从 §7 突破预警表提取，8→7 条合并 + 观测反哺 1 条）。认知论/物理类卡点信号 = 事件型（无指标阈值可设）；工程类 = 趋势型；系统类 = 制度事件。",
+ "signals": [
+  {
+   "id": "sig-sparc-q",
+   "name": "SPARC Q_plasma 实测",
+   "type": "event",
+   "watching": "SPARC 首放电后的 Q 实测值及与 2020 模拟的偏差",
+   "baseline": "未运行（目标 2027 首放电；CFS 内部模拟预测 Q~10）",
+   "threshold": "Q>2（正面）；偏差 >30%（负面信号）",
+   "linked_bottleneck": "bottle-plasma-control",
+   "meaning": "磁约束物理可行性确认或 ARC 设计风险暴露",
+   "note": "观测 0 命中——正确，SPARC 未运行，此信号为纯未来事件"
+  },
+  {
+   "id": "sig-steady-state",
+   "name": "托卡马克稳态运行时长",
+   "type": "event",
+   "watching": "长脉冲/稳态放电记录（H 模，Q>1）",
+   "baseline": "JET 6s（Q~0.33）；EAST 403s（Q<1）",
+   "threshold": ">100 秒且 Q>1",
+   "linked_bottleneck": "bottle-plasma-control",
+   "meaning": "从脉冲验证迈向工程可用运行"
+  },
+  {
+   "id": "sig-hts-magnet",
+   "name": "聚变级超导磁体进展",
+   "type": "trend",
+   "watching": "20T 级磁体的制造、集成、长运行记录",
+   "baseline": "CFS 20T 单磁体（2021）；观测：能量奇点 26.7T 无液氦（2026-06）、CRAFT 14.5T（2026-06）",
+   "threshold": "20T 级在聚变装置集成运行 >1000h 无失超",
+   "linked_bottleneck": "bottle-plasma-control",
+   "meaning": "紧凑路线的硬件前提从单体验证走向运行验证；磁场纪录刷新（26.7T）显示中国侧活跃度上升"
+  },
+  {
+   "id": "sig-tbr",
+   "name": "氚增殖比实验验证",
+   "type": "event",
+   "watching": "聚变中子源下的 TBR 实测与闭环实验",
+   "baseline": "无聚变级数据（文档时点）；观测：BABY 1L 首批增殖实验结果（2026-07，8.1 分）",
+   "threshold": "任何聚变中子源下 TBR>1.0 实测",
+   "linked_bottleneck": "bottle-tritium",
+   "meaning": "最高风险工程卡点从零验证进入有数据阶段——BABY 1L 是否达阈待核实（列入 V 清单）"
+  },
+  {
+   "id": "sig-first-wall",
+   "name": "第一壁材料抗辐照",
+   "type": "event",
+   "watching": "14MeV 等效辐照下的材料性能数据；IFMIF-DONES 进度",
+   "baseline": "实验室小样品 <5 dpa",
+   "threshold": ">20 dpa 下延展性 >50%；或 IFMIF-DONES 投运",
+   "linked_bottleneck": "bottle-first-wall",
+   "meaning": "物理硬约束开始松动，电站寿命可设计"
+  },
+  {
+   "id": "sig-fusion-funding",
+   "name": "私营聚变融资",
+   "type": "event",
+   "watching": "单笔融资规模与 IPO",
+   "baseline": "全行业累计 ~$100 亿（2026 估计）",
+   "threshold": "单笔 >$10 亿新融资轮或 IPO；观测：Proxima 4.11 亿欧（欧洲私营最大，2026-07）已接近但未达阈",
+   "meaning": "资本对时间线的信心变化（经济前置指标）",
+   "note": "文档 §7 有此信号但未建对应系统侧卡点——竖井以隐式卡点处理，正式版需补 economic/生态配套归属",
+   "linked": "industry_judgment（行业级前置指标，不挂具体卡点）"
+  },
+  {
+   "id": "sig-arc-milestone",
+   "name": "ARC/Fall Line 建设里程碑",
+   "type": "event",
+   "watching": "建设许可、开工、PJM 互联审批",
+   "baseline": "选址完成（弗吉尼亚）；PJM 互联申请 2026-04 提交",
+   "threshold": "正式开工/建设许可获批",
+   "linked_bottleneck": "bottle-regulatory-path",
+   "meaning": "首座商业电站从规划进入实体建设"
+  },
+  {
+   "id": "sig-alt-route",
+   "name": "非托卡马克路线突破",
+   "type": "event",
+   "watching": "仿星器/FRC/Z箍缩/惯性约束的 Q 与发电进展",
+   "baseline": "Helion 目标 2028 发电（已获运行许可，观测 2026-06）；Proxima 稳态仿星器融资纪录（2026-07）",
+   "threshold": "任何非托卡马克路线 Q_plasma>1",
+   "linked_route": "route-stellarator",
+   "meaning": "路线竞争格局重估；观测显示此信号簇 39 条命中为全部信号最活跃——文档 V07 盲区的权重应上调"
+  },
+  {
+   "id": "sig-regulatory-approval",
+   "name": "监管批准事件（观测反哺新增）",
+   "type": "event",
+   "watching": "主要辖区聚变设施许可",
+   "baseline": "全球首座聚变能工厂获美监管批准（2026-06-18，评分 9.6）",
+   "threshold": "主要监管辖区确立聚变专属许可框架",
+   "linked_bottleneck": "bottle-regulatory-path",
+   "meaning": "系统侧时钟启动——文档未覆盖，观测中最高分事件，竖井反向新增"
+  }
+ ]
+}

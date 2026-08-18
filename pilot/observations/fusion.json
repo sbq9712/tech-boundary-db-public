@@ -1,0 +1,775 @@
+{
+ "domain": "核聚变",
+ "extracted_from": "all-records-lite.json, category=核电, fusion-keyword filter",
+ "extracted_at": "2026-08-18",
+ "note": "广度分类\"核电\"混含裂变(183条)与聚变(250条)——分类→领域过滤层的第二个实证",
+ "monthly_counts": {
+  "2026-01": 5,
+  "2026-02": 4,
+  "2026-03": 4,
+  "2026-04": 5,
+  "2026-05": 4,
+  "2026-06": 118,
+  "2026-07": 110
+ },
+ "signal_hits": {
+  "sig-sparc-q": {
+   "count": 0,
+   "recent": 0,
+   "top": []
+  },
+  "sig-steady-state": {
+   "count": 14,
+   "recent": 11,
+   "top": [
+    {
+     "id": "https://interestingengineering.com/energy/proxima-fusion-google-capital-boost",
+     "title": "Proxima Fusion获谷歌注资，推进净能量稳态恒星器",
+     "date": "2026-07-12",
+     "score": 8.6,
+     "type": "news",
+     "url": "https://interestingengineering.com/energy/proxima-fusion-google-capital-boost",
+     "kp": [
+      "融资额[Proxima Fusion]: €411M($468M)",
+      "[技术路线]: 净能量恒星器(stellarator)",
+      "估值[Proxima Fusion]: €2.4B"
+     ],
+     "body_head": "Proxima Fusion has secured €411 million ($468 million) in a new financing round, raising its valuation to €2.4 billion ($2.7 billion). The capital injection makes the Max Planck Institute for Plasma P"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/frMFucSGzrOzhDG0trtyeg",
+     "title": "等离子体所首件仿星器高温超导三维Dummy线圈研制完成等离子体所",
+     "date": "2026-06-24",
+     "score": 7.8,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/frMFucSGzrOzhDG0trtyeg",
+     "kp": [
+      "导线材料[仿星器线圈]: 高温超导",
+      "研制成果[仿星器]: 首件三维Dummy线圈"
+     ],
+     "body_head": "等离子体所首件仿星器高温超导三维Dummy线圈研制完成等离子体所 等离子体所 等离子体所 可控核聚变 每天与你一起 近日，中国科学院合肥物质科学研究院等离子体物理研究所（以下简称“等离子体所”）联合合肥曦合超导科技有限公司（以下简称“曦合超导”）在先进仿星器高温超导三维线圈研制方面取得重要突破。该研究完成了先进仿星器的物理设计与高温超导三维线圈关键技术研发与制造工艺全流程验证，打通了先进仿星器装置"
+    },
+    {
+     "id": "https://doi.org/10.1126/sciadv.adz3040",
+     "title": "合肥等离子体所基于EAST装置证实了托卡马克密度自由区的存在并突破传统理论密度极限",
+     "date": "2026-01-01",
+     "score": 7.6,
+     "type": "news",
+     "url": "https://doi.org/10.1126/sciadv.adz3040",
+     "kp": null,
+     "body_head": "根据衡量核聚变能否发生点火及实现能量净增益的“劳森判据”（Lawson Criterion），聚变反应的发生条件取决于等离子体密度、温度以及能量约束时间的乘积。由于聚变输出功率密度与等离子体密度的平方成正比，提高等离子体密度对于实现燃烧等离子体（Burning Plasma）显得尤为关键。但对于磁约束聚变所需的托卡马克装置，等离子体密度存在格林沃尔德密度极限（Greenwald density l"
+    },
+    {
+     "id": "https://www.science.org/doi/abs/10.1126/sciadv.adz3040?af=R",
+     "title": "EAST装置上通过ECRH辅助欧姆启动进入无密度约束区",
+     "date": "2026-01-02",
+     "score": 7.2,
+     "type": "literature",
+     "url": "https://www.science.org/doi/abs/10.1126/sciadv.adz3040?af=R",
+     "kp": [
+      "[密度极限]: Greenwald密度极限nG",
+      "[加热方式]: ECRH辅助欧姆启动突破密度极限",
+      "[装置]: EAST托卡马克"
+     ],
+     "body_head": "High plasma density operation is crucial for a tokamak to achieve energy breakeven and burning plasma. However, there is often an empirical upper limit of electron density in tokamak operation, namely"
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae81c8",
+     "title": "面向钨等离子体的组件对 EAST 中 H 模式操作空间的影响，以支持 ITER 新基准",
+     "date": "2026-07-17",
+     "score": 7.1,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae81c8",
+     "kp": [
+      "等离子体[实验条件]: 6.0"
+     ],
+     "body_head": "Recent experiments in EAST have demonstrated the compatibility of tungsten (W) as main wall plasma facing material with high confinement H-mode with low or no boron coverage. The experiments were cond"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/zjxr7BymDq4V9HvUaUAtgw",
+     "title": "能量奇点称其全高温超导托卡马克装置洪荒70实现1337s稳态长脉冲等离子体运行",
+     "date": "2026-02-02",
+     "score": 6.8,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/zjxr7BymDq4V9HvUaUAtgw",
+     "kp": null,
+     "body_head": "2月2日，能量奇点在其官方公众号发文称，洪荒70高温超导托卡马克装置成功实现了1337秒稳态长脉冲等离子体运行。文中称，该技术得益于基于AI的等离子体反馈控制技术的不断优化，其宣传解决了长时间尺度下的等离子体与壁相互作用、基于AI的实时诊断、高功率射频波电流驱动、等离子体位形控制等物理和工程问题；并通过改进了装置的壁处理方式，进一步降低等离子体杂质，使得运行脉冲长度稳步提升。"
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae70c0",
+     "title": "基于深度学习的EAST装置三维外加磁场扰动等离子体响应模型",
+     "date": "2026-06-10",
+     "score": 6.8,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae70c0",
+     "kp": [
+      "模型[等离子体响应预测]: iTransformer优于FNN和CNN-LSTM"
+     ],
+     "body_head": "The real-time response monitoring model and the physics feature based response optimization model are proposed on EAST using three deep learning models. Compared with the widely used fully connected n"
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae6f2c",
+     "title": "DIII-D和KSTAR装置中面向钨兼容长脉冲运行的混合模式开发",
+     "date": "2026-06-10",
+     "score": 6.3,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae6f2c",
+     "kp": [
+      "[聚变运行]: DIII-D/KSTAR联合验证高混合场景与钨偏滤器兼容"
+     ],
+     "body_head": "Long-pulse, high-performance operation with tungsten plasma-facing components is a crucial challenge for achieving steady-state (SS) goals in ITER and future fusion devices. This paper presents a join"
+    }
+   ]
+  },
+  "sig-hts-magnet": {
+   "count": 21,
+   "recent": 18,
+   "top": [
+    {
+     "id": "https://mp.weixin.qq.com/s/JHqU5O5yKYSUoyzG6yYXfw",
+     "title": "我国CRAFT聚变堆最高磁场14.5特斯拉的超导磁体生产下线",
+     "date": "2026-06-27",
+     "score": 8.9,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/JHqU5O5yKYSUoyzG6yYXfw",
+     "kp": null,
+     "body_head": "6月27日，中科院合肥等离子体所在官方公众号发文称，聚变堆主机关键系统综合研究设施（CRAFT）最大的部件——环向场（TF）磁体完成最后制备工艺，成功下线并通过专业组内部测试验收。文中称，该超导磁体体积是国际热核聚变堆ITER TF磁体的1.3倍，储能为3倍，是目前世界上最大的聚变堆超导磁体；单个磁体尺寸为21米×12米×3.3米，重达582.4吨，运行电流98千安，总储能120吉焦，最高磁场14"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/dCDZfaQzvyeXLRapAp9HIg",
+     "title": "刷新两项世界纪录！能量奇点成功研制26.7T无液氦高温超导绝缘磁体",
+     "date": "2026-06-18",
+     "score": 8.8,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/dCDZfaQzvyeXLRapAp9HIg",
+     "kp": [
+      "磁场强度[高温超导磁体]: 26.7T",
+      "[超导磁体]: 无液氦"
+     ],
+     "body_head": "刷新两项世界纪录！能量奇点成功研制26.7T无液氦高温超导绝缘磁体 可控核聚变 以下文章来源于能量奇点FusionEnergy ，作者能量奇点 **能量奇点FusionEnergy** . 能量奇点致力于推动聚变能源商业化发展，加速实现能源自由。我们研发的全球首台全高温超导托卡马克洪荒70于2024年6月获得第一等离子体，这标志着能量奇点成为全球首个建成运行全高温超导托卡马克的团队，和全球首个建成"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/ylbfoeuQtjNzH0cQqWqQ2w",
+     "title": "星环聚能全尺寸高温超导环向场磁体20K低温励磁电流达4.5 kA",
+     "date": "2026-06-11",
+     "score": 8.6,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/ylbfoeuQtjNzH0cQqWqQ2w",
+     "kp": null,
+     "body_head": "6月11日，星环聚能在其官方公众号发文称，其研发的全尺寸高温超导环向场磁体通过20K（-253.15℃）低温励磁测试，成功励磁至4.5 kA。该磁体高4米、宽2米，与聚变堆装置尺寸完全一致（非缩比模型），宣传是全球首个面向球形托卡马克聚变堆的全尺寸高温超导环向场磁体；含线圈盒工程电流密度超过40 A/mm²，绕组电流密度达375 A/mm²，等效装置中心磁场达到3.06 T、等效装置最大磁场达到1"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/16ey35WN0vgN_AI6Kyx6Jg",
+     "title": "中国人造太阳再创纪录，全球最大核聚变磁体通过验收，离无限能源又近一大步",
+     "date": "2026-07-04",
+     "score": 8.2,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/16ey35WN0vgN_AI6Kyx6Jg",
+     "kp": null,
+     "body_head": "中国人造太阳再创纪录，全球最大核聚变磁体通过验收，离无限能源又近一大步 原创 小艾 小艾 世界先进制造技术论坛 2026年6月27日，中国科学院合肥物质科学研究院等离子体物理研究所传出一个重磅消息。 **两套核聚变堆关键超导磁体——环向场超"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/xub5aHgBV1bUol7Mfstpnw",
+     "title": "“人造太阳”连攻两大核心技术，中国核聚变产业的“临界点”到了？",
+     "date": "2026-06-29",
+     "score": 8.0,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/xub5aHgBV1bUol7Mfstpnw",
+     "kp": [
+      "尺寸[环向场超导磁体]: 21m×12m×3.3m",
+      "重量[环向场超导磁体]: 582吨",
+      "对比[vs ITER同型号]: 体积1.3倍储能3倍",
+      "[关键器件]: 高温超导中心螺管线圈"
+     ],
+     "body_head": "“人造太阳”连攻两大核心技术，中国核聚变产业的“临界点”到了？ 原创 小艾 小艾 世界先进制造技术论坛 2026年6月27日，合肥科学岛传来两条重磅消息。 中国科学院合肥物质科学研究院等离子体物理研究所宣布，**两款自主研制的核聚变堆超导磁体，同一天分别完成技术验收和满工况参数测试**。 一条是关于“大”的——**全球尺寸最大的聚变堆超导磁体**正式通过验收。另一条是关于“精”的——**高温超导中"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/bex4ly9MfFnUBR3qgGvOlQ",
+     "title": "德国发布《核聚变技术路线图》",
+     "date": "2026-06-29",
+     "score": 7.8,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/bex4ly9MfFnUBR3qgGvOlQ",
+     "kp": null,
+     "body_head": "德国发布《核聚变技术路线图》 CASEnergy CASEnergy 先进能源科技战略情报研究中心 5月20日，德国联邦内阁公布了德国“高科技议程“（Hightech Agenda Deutschland）6个关键技术领域的路线图，其中包括《核聚变技术路线图》。该路线图将聚变技术定位为“未来碳中和、安全、资源节约且具备基荷能力的能源供应核心支柱”，明确了发展路径和目标。关键要点如下： **一、发展"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/frMFucSGzrOzhDG0trtyeg",
+     "title": "等离子体所首件仿星器高温超导三维Dummy线圈研制完成等离子体所",
+     "date": "2026-06-24",
+     "score": 7.8,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/frMFucSGzrOzhDG0trtyeg",
+     "kp": [
+      "导线材料[仿星器线圈]: 高温超导",
+      "研制成果[仿星器]: 首件三维Dummy线圈"
+     ],
+     "body_head": "等离子体所首件仿星器高温超导三维Dummy线圈研制完成等离子体所 等离子体所 等离子体所 可控核聚变 每天与你一起 近日，中国科学院合肥物质科学研究院等离子体物理研究所（以下简称“等离子体所”）联合合肥曦合超导科技有限公司（以下简称“曦合超导”）在先进仿星器高温超导三维线圈研制方面取得重要突破。该研究完成了先进仿星器的物理设计与高温超导三维线圈关键技术研发与制造工艺全流程验证，打通了先进仿星器装置"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/VM2Qka6jNDgCx2PyuFGC_w",
+     "title": "美国《科学：新黄金时代》锚定2030中期实现商业聚变发电示范；Genesis Mission首批聚变项目落地",
+     "date": "2026-07-25",
+     "score": 7.7,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/VM2Qka6jNDgCx2PyuFGC_w",
+     "kp": null,
+     "body_head": "美国《科学：新黄金时代》锚定2030中期实现商业聚变发电示范；Genesis Mission首批聚变项目落地 可控核聚变 每天与你一起 2026年7月21日，白宫科技政策办公室（OSTP）主任Michael Kratsios向特朗普总统提交报告《Science:A New Golden Age》（《科学：新黄金时代》），把\"2030年代中期实现美国商业聚变发电示范\"明确写入6大国家任务之一，与Ge"
+    }
+   ]
+  },
+  "sig-tbr": {
+   "count": 12,
+   "recent": 11,
+   "top": [
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae6f31",
+     "title": "BABY 1L：首批氚增殖实验结果",
+     "date": "2026-07-01",
+     "score": 8.1,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae6f31",
+     "kp": [
+      "[增殖剂]: 熔盐增殖剂",
+      "[实验规模]: 增殖剂体积扩大10倍至1L",
+      "[辐照源]: D-T中子",
+      "项目[聚变]: MIT LIBRA项目BABY 1L"
+     ],
+     "body_head": "Achieving tritium self-sufficiency is a critical challenge for future fusion power plants. The BABY 1 L experiment, part of the LIBRA project at MIT, aims to benchmark tritium breeding and release in "
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae6f31",
+     "title": "BABY 1L：首次氚增殖实验结果",
+     "date": "2026-07-02",
+     "score": 8.0,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae6f31",
+     "kp": [
+      "[增殖剂]: 熔盐增殖剂",
+      "[实验规模]: 增殖剂体积扩大10倍至1L",
+      "[辐照源]: D-T中子",
+      "项目[聚变]: MIT LIBRA项目BABY 1L"
+     ],
+     "body_head": "Achieving tritium self-sufficiency is a critical challenge for future fusion power plants. The BABY 1 L experiment, part of the LIBRA project at MIT, aims to benchmark tritium breeding and release in "
+    },
+    {
+     "id": "https://interestingengineering.com/energy/general-atomic-for-fusion-energy-test-facility",
+     "title": "加州支持通用原子公司建设聚变能测试设施",
+     "date": "2026-06-24",
+     "score": 7.4,
+     "type": "news",
+     "url": "https://interestingengineering.com/energy/general-atomic-for-fusion-energy-test-facility",
+     "kp": [
+      "[全尺寸聚变包层测试]: 获2000万美元加州税收抵免，测试全尺寸包层组件"
+     ],
+     "body_head": "General Atomics has received a $20 million California Competes Tax Credit to advance the development of a Blanket Component Test Facility (BCTF).\nThe American energy and defense corporation claims thi"
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae773a",
+     "title": "ST-E1的氚生产与处理系统",
+     "date": "2026-07-11",
+     "score": 6.5,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae773a",
+     "kp": [
+      "氚增殖包层[ST-E1聚变堆]: 氦冷液态锂",
+      "燃料循环架构[ST-E1]: 集成氚提取/排热/库存控制一体化"
+     ],
+     "body_head": "An integrated tritium fuel-cycle architecture has been developed for ST-E1, a low-aspect-ratio, high-power fusion power plant. The approach couples a helium-cooled liquid-lithium breeder blanket with "
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/FkzwYy5bKNt-fcAkvS4bvg",
+     "title": "美国聚变包层测试设施BCTF启动设计，为聚变“点火台”铸造精密实验室",
+     "date": "2026-06-22",
+     "score": 6.5,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/FkzwYy5bKNt-fcAkvS4bvg",
+     "kp": [
+      "[测试设施]: 聚变包层测试设施BCTF"
+     ],
+     "body_head": "美国聚变包层测试设施BCTF启动设计，为聚变“点火台”铸造精密实验室 刘智宇 刘智宇 可控核聚变 每天与你一起 2026年6月11日，General Atomics公司宣布，正与美国能源部（DOE）合作开发聚变包层部件测试设施（Fusion Blanket Component Test Facility，**BCTF**）。这是全球首个专**为测试全尺寸聚变电厂****的****“****包层”*"
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae70a1",
+     "title": "MCINO：聚变反应堆氚增殖包层多物理耦合与中子学智能优化程序",
+     "date": "2026-06-16",
+     "score": 6.2,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae70a1",
+     "kp": [
+      "[中子学模型]: 22.5°环向扇区CFETR高保真模型",
+      "[优化目标]: 最大化氚增殖比TBR"
+     ],
+     "body_head": "Tritium self-sufficiency is a critical prerequisite for future fusion reactors. The tritium breeding blanket, as the component responsible for in-vessel tritium generation, requires coordinated neutro"
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae773a",
+     "title": "ST-E1的氚生产与处理系统",
+     "date": "2026-07-10",
+     "score": 6.1,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae773a",
+     "kp": [
+      "增殖包层[ST-E1聚变]: 氦冷液态锂",
+      "[氚循环架构]: 集成提取-除热-存量控制"
+     ],
+     "body_head": "An integrated tritium fuel-cycle architecture has been developed for ST-E1, a low-aspect-ratio, high-power fusion power plant. The approach couples a helium-cooled liquid-lithium breeder blanket with "
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/Ko7VaLn4Myk1C9TdsL_0Ng",
+     "title": "美国能源部发布新版《核聚变科学与技术路线图》",
+     "date": "2026-06-29",
+     "score": 6.1,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/Ko7VaLn4Myk1C9TdsL_0Ng",
+     "kp": null,
+     "body_head": "美国能源部发布新版《核聚变科学与技术路线图》 双碳情报 由中国科学院文献情报系统双碳战略研究团队运营的“**双碳情报**”公众号正式上线！重点跟踪报道主要国家和重要组织双碳相关战略规划、政策法规、发展路线图、重大计划、重点项目等动态讯息，监测分析双碳领域国际前沿科技热点和发展态势。 **美国能源部发布新版《核聚变科学与技术路线图》** 6月9日，美国能源部发布最新版《核聚变科学与技术路线图》，目标"
+    }
+   ]
+  },
+  "sig-first-wall": {
+   "count": 4,
+   "recent": 3,
+   "top": [
+    {
+     "id": "https://nachrichten.idw-online.de/2026/04/02/neuartige-beschichtungstechnologie-fuer-fusionskraftwerke-elektrochemisches-verfahren-fuer-wolframschichten",
+     "title": "弗劳恩霍夫制造与自动化研究所将开发基于离子液体和有机溶剂的聚变装置内壁钨涂层制备技术",
+     "date": "2026-04-02",
+     "score": 6.7,
+     "type": "news",
+     "url": "https://nachrichten.idw-online.de/2026/04/02/neuartige-beschichtungstechnologie-fuer-fusionskraftwerke-elektrochemisches-verfahren-fuer-wolframschichten",
+     "kp": null,
+     "body_head": "4月2日，德国Informationsdienst Wissenschaft发文称，由马克斯普朗克等离子体物理研究所（IPP）、特种电解液制造商IoLiTec及弗劳恩霍夫制造技术与自动化研究所（IPA）组成的研究团队，正在依托名为“GalvanoFusion”的项目，开发一种纯钨涂层电化学沉积技术，旨在提供一种聚变反应堆内壁（即第一壁）钨防护层易于加工制备的方法。其认为，钨作为面向等离子体表面的材"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/A0mRWsTA79O90CNQ2x7p1A",
+     "title": "聚变工业协会（FIA）发布核聚变供应链2026年度报告",
+     "date": "2026-06-25",
+     "score": 6.6,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/A0mRWsTA79O90CNQ2x7p1A",
+     "kp": null,
+     "body_head": "聚变工业协会（FIA）发布核聚变供应链2026年度报告 可控核聚变 以下文章来源于核聚变与等离子体物理 ，作者NFPP **核聚变与等离子体物理** . 由核工业西南物理研究院主办，原子能技术类核心期刊，被CA、JST、SCOPUS、CSCD等数据库收录。分享行业最新动态，介绍最新科研成果，促进学术交流、成果推广、人才培养，提高科学技术水平。 **2026年6月23日，美国聚变产业协会（FIA）发"
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae8607",
+     "title": "使用 NSGA-II 的基于替代的热机械优化框架，用于 CFETR COOL 毯子的第一壁",
+     "date": "2026-07-26",
+     "score": 6.0,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae8607",
+     "kp": null,
+     "body_head": "The supercritical carbon dioxide (S-CO2) cOoled Lithium-Lead (COOL) blanket is under development for China Fusion Engineering Test Reactor (CFETR). As a key component of the blanket, the first wall (F"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/TASK1a-xzhSK7nUE1eCCJA",
+     "title": "\"核\"力聚变！高能所与合肥物质科学研究院携手共建聚变堆材料辐照与评估联合实验室",
+     "date": "2026-07-03",
+     "score": 5.2,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/TASK1a-xzhSK7nUE1eCCJA",
+     "kp": [],
+     "body_head": "\"核\"力聚变！高能所与合肥物质科学研究院携手共建聚变堆材料辐照与评估联合实验室 可控核聚变 每天与你一起 6月30日，由中国科学院高能物理研究所与中国科学院合肥物质科学研究院携手共建的聚变堆材料辐照与评估联合实验室正式在高能所东莞研究部揭牌"
+    }
+   ]
+  },
+  "sig-fusion-funding": {
+   "count": 27,
+   "recent": 24,
+   "top": [
+    {
+     "id": "https://interestingengineering.com/energy/proxima-fusion-google-capital-boost",
+     "title": "Proxima Fusion获谷歌注资，推进净能量稳态恒星器",
+     "date": "2026-07-12",
+     "score": 8.6,
+     "type": "news",
+     "url": "https://interestingengineering.com/energy/proxima-fusion-google-capital-boost",
+     "kp": [
+      "融资额[Proxima Fusion]: €411M($468M)",
+      "[技术路线]: 净能量恒星器(stellarator)",
+      "估值[Proxima Fusion]: €2.4B"
+     ],
+     "body_head": "Proxima Fusion has secured €411 million ($468 million) in a new financing round, raising its valuation to €2.4 billion ($2.7 billion). The capital injection makes the Max Planck Institute for Plasma P"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/AEGF_dZdJQPGBPno8efzMA",
+     "title": "仿星器融资连破纪录：德国Proxima Fusion 4.11亿欧，拿下欧洲私营聚变最大规模融资",
+     "date": "2026-07-08",
+     "score": 8.5,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/AEGF_dZdJQPGBPno8efzMA",
+     "kp": [],
+     "body_head": "仿星器融资连破纪录：德国Proxima Fusion 4.11亿欧，拿下欧洲私营聚变最大规模融资 原创 点这里关注 → 点这里关注 → 可控核聚变 每天与你一起 7月7日，德国仿星器企业Proxima Fusion宣布完成总额4.11亿欧元"
+    },
+    {
+     "id": "https://www.ithome.com/0/973/791.htm",
+     "title": "谷歌投资核聚变初创企业，助力打造欧洲首座商用核聚变发电站",
+     "date": "2026-07-08",
+     "score": 8.2,
+     "type": "news",
+     "url": "https://www.ithome.com/0/973/791.htm",
+     "kp": [
+      "[目标]: 打造欧洲首座商用聚变电站",
+      "融资规模[Proxima Fusion]: 4.11亿欧元"
+     ],
+     "body_head": "7 月 7 日消息，德国聚变能源企业 Proxima Fusion 公司周二宣布，已完成一轮规模 4.11 亿欧元（IT之家注：现汇率约合 31.94 亿元人民币）的融资，谷歌参与了本次投资。该企业目标打造欧洲首座商用聚变电站。 核聚变，是..."
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/IpMyvoy553ujehFvUGrWCQ",
+     "title": "国内首家Z箍缩聚变企业安东聚变再获数亿元融资",
+     "date": "2026-06-30",
+     "score": 7.7,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/IpMyvoy553ujehFvUGrWCQ",
+     "kp": [],
+     "body_head": "6月29日，有消息报道国内首家专注于Z箍缩惯性约束聚变商业化企业安东聚变已完成数亿元新一轮融资。本轮投资由泓润资本旗下太仓金泓谷创业投资合伙企业（有限合伙）领投，深圳华控、深圳高新投、梁溪科创等机构联合投资。"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/FJXlDNpd-0GsfkO0AVssGA",
+     "title": "8.3亿首轮融资破纪录！星核聚变押注仿星器，补齐合肥商业聚变又一块拼图",
+     "date": "2026-06-30",
+     "score": 7.6,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/FJXlDNpd-0GsfkO0AVssGA",
+     "kp": [],
+     "body_head": "8.3亿首轮融资破纪录！星核聚变押注仿星器，补齐合肥商业聚变又一块拼图 原创 点这里关注 → 点这里关注 → 可控核聚变 每天与你一起 8.3亿元，投后估值近30亿元！近日合肥科大硅谷片区企业合肥星核聚变能源科技有限公司（以下简称星核聚变）"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/FvAvY2a_XW4TZxEgS8MTOQ",
+     "title": "合肥星能玄光称其场反磁镜聚变装置FLAME完成搭建并进行了等离子体放电",
+     "date": "2026-01-29",
+     "score": 7.3,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/FvAvY2a_XW4TZxEgS8MTOQ",
+     "kp": null,
+     "body_head": "1月29日，合肥星能玄光在其官方公众号发文称，其研发的先进场反磁镜聚变装置FLAME完成搭建，并进行了首次等离子体放电演示。\n据相关报道称，星能玄光由中科大孙玄教授（曾任职于从事开发先进束流驱动场反位构型（FRC）氢硼聚变技术的TAE Technologies公司）成立于2024年3月，获得来自蚂蚁集团、紫金矿业、招商局创投等机构数亿元融资；其选择直线型场反位形（Field-Reversed Co"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/auRUnSYh0Jl9BJKm2vQcSQ",
+     "title": "上海发文：扩大第五套上市标准适用范围，力挺核聚变等新兴产业和未来产业领域企业登陆科创板",
+     "date": "2026-07-24",
+     "score": 7.3,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/auRUnSYh0Jl9BJKm2vQcSQ",
+     "kp": null,
+     "body_head": "上海发文：扩大第五套上市标准适用范围，力挺核聚变等新兴产业和未来产业领域企业登陆科创板 点这里关注 → 点这里关注 → 可控核聚变 每天与你一起 7月23日，上海金融官微公众号消息，中共上海市委金融委员会办公室、上海市发展和改革委员会等部门印发《上海市充分发挥直接融资功能 进一步加强科技金融服务的若干措施》(简称《措施》)。 其中指出，推动科创板持续深化改革。推动出台科创板人工智能、低空经济等企业"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/L2-sfPOupIlT18rzn1qwDw",
+     "title": "Focused Energy获聚变行业最大A轮融资纪录2.4亿美元",
+     "date": "2026-06-26",
+     "score": 7.0,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/L2-sfPOupIlT18rzn1qwDw",
+     "kp": [
+      "融资[激光核聚变]: 2.4亿美元A轮",
+      "[技术路线]: 激光核聚变(唯一验证净能量增益)"
+     ],
+     "body_head": "Focused Energy获聚变行业最大A轮融资纪录2.4亿美元 双碳情报 由中国科学院文献情报系统双碳战略研究团队运营的“**双碳情报**”公众号正式上线！重点跟踪报道主要国家和重要组织双碳相关战略规划、政策法规、发展路线图、重大计划、重点项目等动态讯息，监测分析双碳领域国际前沿科技热点和发展态势。 **Focused Energy获聚变行业最大A轮融资纪录2.4亿美元** 5月27日，全球领"
+    }
+   ]
+  },
+  "sig-arc-milestone": {
+   "count": 17,
+   "recent": 15,
+   "top": [
+    {
+     "id": "https://www.nature.com/articles/d41586-026-01795-z",
+     "title": "核聚变公司声称电站将向电网输电，但重大问题仍存",
+     "date": "2026-06-10",
+     "score": 8.3,
+     "type": "literature",
+     "url": "https://www.nature.com/articles/d41586-026-01795-z",
+     "kp": [
+      "[聚变装置]: CFS ARC聚变电站",
+      "[当前状态]: 设计论文已发表",
+      "[宣称目标]: 向电网供电(存疑)"
+     ],
+     "body_head": "Commonwealth Fusion Systems published several papers detailing the design of its ARC fusion power plant. Commonwealth Fusion Systems published several papers detailing the design of its ARC fusion pow"
+    },
+    {
+     "id": "https://interestingengineering.com/energy/nuclear-fusion-durability-breakthrough-scan",
+     "title": "美国实验室首次拍摄氢-铀扫描图像，用于核聚变耐久性研究",
+     "date": "2026-06-01",
+     "score": 8.0,
+     "type": "literature",
+     "url": "https://interestingengineering.com/energy/nuclear-fusion-durability-breakthrough-scan",
+     "kp": [
+      "[氢-铀腐蚀]: 首次观测表征初始阶段",
+      "[应用背景]: 聚变能/氢储存/核燃料"
+     ],
+     "body_head": "Researchers at Lawrence Livermore National Laboratory (LLNL) have observed and characterized the initial stages of hydrogen-uranium corrosion for the first time.\n“Critical advanced energy initiatives "
+    },
+    {
+     "id": "https://www.nature.com/articles/d41586-026-01795-z",
+     "title": "核聚变公司称电站将向电网供电——但重大疑问犹存",
+     "date": "2026-06-09",
+     "score": 7.0,
+     "type": "literature",
+     "url": "https://www.nature.com/articles/d41586-026-01795-z",
+     "kp": [
+      "[聚变装置]: CFS ARC聚变电站",
+      "[当前状态]: 设计论文已发表",
+      "[宣称目标]: 向电网供电(存疑)"
+     ],
+     "body_head": "Commonwealth Fusion Systems published several papers detailing the design of its ARC fusion power plant. Commonwealth Fusion Systems published several papers detailing the design of its ARC fusion pow"
+    },
+    {
+     "id": "https://interestingengineering.com/energy/nuclear-fusion-plasma-magnetic-field-mystery",
+     "title": "美国实验室解开聚变等离子体谜团以保护反应堆热流",
+     "date": "2026-06-07",
+     "score": 7.0,
+     "type": "literature",
+     "url": "https://interestingengineering.com/energy/nuclear-fusion-plasma-magnetic-field-mystery",
+     "kp": [
+      "研究对象[聚变等离子体]: 膨胀等离子体自发磁场形成"
+     ],
+     "body_head": "Designing predictable nuclear fusion reactors requires highly accurate computer models, yet existing simulations often overlook a chaotic variable: spontaneous magnetic fields.\nA study conducted by re"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/Vvzpdu7Jzx3y8qwdNFO-lg",
+     "title": "中科清能5.2亿项目开工，破解深低温领域“卡脖子”难题",
+     "date": "2026-06-28",
+     "score": 6.9,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/Vvzpdu7Jzx3y8qwdNFO-lg",
+     "kp": [
+      "应用领域[深低温装备]: 核聚变/航天/量子计算"
+     ],
+     "body_head": "中科清能5.2亿项目开工，破解深低温领域“卡脖子”难题 点这里关注 → 点这里关注 → 可控核聚变 每天与你一起 合肥高新发布6月26日披露消息，近日，中科清能深低温装备研发生产基地项目在**合肥高新区**正式开工，项目迈入实质性建设阶段。 中科清能深低温装备研发生产基地项目效果图 预计2027年竣工，达产后年产值5亿元 项目位于菖蒲路与石莲南路交口，**总投资5.2亿元**，**占地约30亩**"
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae773a",
+     "title": "ST-E1的氚生产与处理系统",
+     "date": "2026-07-11",
+     "score": 6.5,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae773a",
+     "kp": [
+      "氚增殖包层[ST-E1聚变堆]: 氦冷液态锂",
+      "燃料循环架构[ST-E1]: 集成氚提取/排热/库存控制一体化"
+     ],
+     "body_head": "An integrated tritium fuel-cycle architecture has been developed for ST-E1, a low-aspect-ratio, high-power fusion power plant. The approach couples a helium-cooled liquid-lithium breeder blanket with "
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae773a",
+     "title": "ST-E1的氚生产与处理系统",
+     "date": "2026-07-10",
+     "score": 6.1,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae773a",
+     "kp": [
+      "增殖包层[ST-E1聚变]: 氦冷液态锂",
+      "[氚循环架构]: 集成提取-除热-存量控制"
+     ],
+     "body_head": "An integrated tritium fuel-cycle architecture has been developed for ST-E1, a low-aspect-ratio, high-power fusion power plant. The approach couples a helium-cooled liquid-lithium breeder blanket with "
+    },
+    {
+     "id": "https://iopscience.iop.org/article/10.1088/1741-4326/ae71eb",
+     "title": "大型螺旋装置等离子体控制与物理研究新进展",
+     "date": "2026-06-29",
+     "score": 6.1,
+     "type": "literature",
+     "url": "https://iopscience.iop.org/article/10.1088/1741-4326/ae71eb",
+     "kp": [
+      "[等离子体温度控制]: 数据同化实时预测",
+      "[诊断系统]: 实时Thomson散射测量"
+     ],
+     "body_head": "The Large Helical Device (LHD), the largest superconducting helical system in the world, is equipped with advanced heating and diagnostic tools, facilitating plasma control and physics research. Data "
+    }
+   ]
+  },
+  "sig-alt-route": {
+   "count": 46,
+   "recent": 40,
+   "top": [
+    {
+     "id": "https://interestingengineering.com/energy/worlds-first-fusion-power-plant-washington",
+     "title": "全球首座聚变能工厂获美国监管批准",
+     "date": "2026-06-18",
+     "score": 9.6,
+     "type": "news",
+     "url": "https://interestingengineering.com/energy/worlds-first-fusion-power-plant-washington",
+     "kp": [
+      "[聚变电站]: 全球首个获监管许可(Helion)"
+     ],
+     "body_head": "US-based fusion energy company Helion has received the regulatory clearances to build the world’s first fusion energy power plant. The company has received a Radioactive Materials License (RML) and a "
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/L7a1NY5yAbey9qbi8_jUJA",
+     "title": "3000次脉冲验证95%效率：LLNL与Pacific Fusion合作研发的天狼星原型机为惯性约束提供新爆点",
+     "date": "2026-07-24",
+     "score": 8.8,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/L7a1NY5yAbey9qbi8_jUJA",
+     "kp": null,
+     "body_head": "3000次脉冲验证95%效率：LLNL与Pacific Fusion合作研发的天狼星原型机为惯性约束提供新爆点 原创 刘智宇 刘智宇 可控核聚变 每天与你一起 美国劳伦斯利弗莫尔国家实验室（LLNL）设计建造的“天狼星”（Sirius）脉冲功率原型装置近日完成超过3000次测试实验。这一里程碑由商业聚变公司Pacific Fusion与其通过合作研发协议共同完成，标志着该技术从概念验证迈入更成熟的"
+    },
+    {
+     "id": "https://interestingengineering.com/energy/proxima-fusion-google-capital-boost",
+     "title": "Proxima Fusion获谷歌注资，推进净能量稳态恒星器",
+     "date": "2026-07-12",
+     "score": 8.6,
+     "type": "news",
+     "url": "https://interestingengineering.com/energy/proxima-fusion-google-capital-boost",
+     "kp": [
+      "融资额[Proxima Fusion]: €411M($468M)",
+      "[技术路线]: 净能量恒星器(stellarator)",
+      "估值[Proxima Fusion]: €2.4B"
+     ],
+     "body_head": "Proxima Fusion has secured €411 million ($468 million) in a new financing round, raising its valuation to €2.4 billion ($2.7 billion). The capital injection makes the Max Planck Institute for Plasma P"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/AEGF_dZdJQPGBPno8efzMA",
+     "title": "仿星器融资连破纪录：德国Proxima Fusion 4.11亿欧，拿下欧洲私营聚变最大规模融资",
+     "date": "2026-07-08",
+     "score": 8.5,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/AEGF_dZdJQPGBPno8efzMA",
+     "kp": [],
+     "body_head": "仿星器融资连破纪录：德国Proxima Fusion 4.11亿欧，拿下欧洲私营聚变最大规模融资 原创 点这里关注 → 点这里关注 → 可控核聚变 每天与你一起 7月7日，德国仿星器企业Proxima Fusion宣布完成总额4.11亿欧元"
+    },
+    {
+     "id": "https://www.ithome.com/0/973/791.htm",
+     "title": "谷歌投资核聚变初创企业，助力打造欧洲首座商用核聚变发电站",
+     "date": "2026-07-08",
+     "score": 8.2,
+     "type": "news",
+     "url": "https://www.ithome.com/0/973/791.htm",
+     "kp": [
+      "[目标]: 打造欧洲首座商用聚变电站",
+      "融资规模[Proxima Fusion]: 4.11亿欧元"
+     ],
+     "body_head": "7 月 7 日消息，德国聚变能源企业 Proxima Fusion 公司周二宣布，已完成一轮规模 4.11 亿欧元（IT之家注：现汇率约合 31.94 亿元人民币）的融资，谷歌参与了本次投资。该企业目标打造欧洲首座商用聚变电站。 核聚变，是..."
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/bex4ly9MfFnUBR3qgGvOlQ",
+     "title": "德国发布《核聚变技术路线图》",
+     "date": "2026-06-29",
+     "score": 7.8,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/bex4ly9MfFnUBR3qgGvOlQ",
+     "kp": null,
+     "body_head": "德国发布《核聚变技术路线图》 CASEnergy CASEnergy 先进能源科技战略情报研究中心 5月20日，德国联邦内阁公布了德国“高科技议程“（Hightech Agenda Deutschland）6个关键技术领域的路线图，其中包括《核聚变技术路线图》。该路线图将聚变技术定位为“未来碳中和、安全、资源节约且具备基荷能力的能源供应核心支柱”，明确了发展路径和目标。关键要点如下： **一、发展"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/frMFucSGzrOzhDG0trtyeg",
+     "title": "等离子体所首件仿星器高温超导三维Dummy线圈研制完成等离子体所",
+     "date": "2026-06-24",
+     "score": 7.8,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/frMFucSGzrOzhDG0trtyeg",
+     "kp": [
+      "导线材料[仿星器线圈]: 高温超导",
+      "研制成果[仿星器]: 首件三维Dummy线圈"
+     ],
+     "body_head": "等离子体所首件仿星器高温超导三维Dummy线圈研制完成等离子体所 等离子体所 等离子体所 可控核聚变 每天与你一起 近日，中国科学院合肥物质科学研究院等离子体物理研究所（以下简称“等离子体所”）联合合肥曦合超导科技有限公司（以下简称“曦合超导”）在先进仿星器高温超导三维线圈研制方面取得重要突破。该研究完成了先进仿星器的物理设计与高温超导三维线圈关键技术研发与制造工艺全流程验证，打通了先进仿星器装置"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/IpMyvoy553ujehFvUGrWCQ",
+     "title": "国内首家Z箍缩聚变企业安东聚变再获数亿元融资",
+     "date": "2026-06-30",
+     "score": 7.7,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/IpMyvoy553ujehFvUGrWCQ",
+     "kp": [],
+     "body_head": "6月29日，有消息报道国内首家专注于Z箍缩惯性约束聚变商业化企业安东聚变已完成数亿元新一轮融资。本轮投资由泓润资本旗下太仓金泓谷创业投资合伙企业（有限合伙）领投，深圳华控、深圳高新投、梁溪科创等机构联合投资。"
+    }
+   ]
+  },
+  "sig-regulatory-approval": {
+   "count": 10,
+   "recent": 10,
+   "top": [
+    {
+     "id": "https://interestingengineering.com/energy/worlds-first-fusion-power-plant-washington",
+     "title": "全球首座聚变能工厂获美国监管批准",
+     "date": "2026-06-18",
+     "score": 9.6,
+     "type": "news",
+     "url": "https://interestingengineering.com/energy/worlds-first-fusion-power-plant-washington",
+     "kp": [
+      "[聚变电站]: 全球首个获监管许可(Helion)"
+     ],
+     "body_head": "US-based fusion energy company Helion has received the regulatory clearances to build the world’s first fusion energy power plant. The company has received a Radioactive Materials License (RML) and a "
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/id5Jz6IzhEkukDFfUJxyaw",
+     "title": "美国聚变企业American Fusion获德州辐射安全注册，Texatron引擎月底启动5兆瓦级测试",
+     "date": "2026-07-28",
+     "score": 7.8,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/id5Jz6IzhEkukDFfUJxyaw",
+     "kp": null,
+     "body_head": "美国聚变企业American Fusion获德州辐射安全注册，Texatron引擎月底启动5兆瓦级测试 原创 点这里关注 → 点这里关注 → 可控核聚变 每天与你一起 7月20日，美国聚变能源企业American Fusion宣布，其自主研发的Texatron™聚变引擎已获得德克萨斯州卫生服务部（DSHS）颁发的工业辐射机器注册证书。此次颁发的证书有效期至2034年2月28日，涵盖了America"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/W5rJe5uzcv5nz4rc_t7Rqw",
+     "title": "【动向】Helion Energy获运行聚变电厂监管许可，商业化再进一步！",
+     "date": "2026-06-25",
+     "score": 7.6,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/W5rJe5uzcv5nz4rc_t7Rqw",
+     "kp": [
+      "[监管许可]: 放射性材料+空气排放许可证"
+     ],
+     "body_head": "【动向】Helion Energy获运行聚变电厂监管许可，商业化再进一步！ E Small Data E Small Data 国际能源小数据 6月16日，美国聚变初创公司Helion Energy宣布，已获得华盛顿州卫生部颁发的两份关键监管许可证——放射性材料许可证与放射性空气排放许可证。这意味着Helion可以在华盛顿州Malaga建设并运营其第一座聚变发电厂\"Orion\"，而这座电厂也是目前"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/SktvRHBftIb-X8iawK_Yjg",
+     "title": "田纳西州率先实施美国首部州级核聚变装置监管框架",
+     "date": "2026-06-15",
+     "score": 7.1,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/SktvRHBftIb-X8iawK_Yjg",
+     "kp": [
+      "[监管框架]: 美国首部州级核聚变装置监管规章（第0400-20-14章）"
+     ],
+     "body_head": "田纳西州率先实施美国首部州级核聚变装置监管框架 原创 点这里关注 → 点这里关注 → 可控核聚变 每天与你一起 2026年6月9日，美国田纳西州《田纳西州有效法律法规汇编》（Effective Rules and Regulations of the State of Tennessee）《第0400-20-14章核聚变》（CHAPTER 0400-20-14 FUSION）规章正式生效（以下简称"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/V4PwOhOwZloStRAgwgbCCw",
+     "title": "F4E发布首份《全球聚变能源趋势》报告：中美等五方对比下的全球聚变新格局",
+     "date": "2026-07-23",
+     "score": 6.7,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/V4PwOhOwZloStRAgwgbCCw",
+     "kp": null,
+     "body_head": "F4E发布首份《全球聚变能源趋势》报告：中美等五方对比下的全球聚变新格局 原创 点这里关注 → 点这里关注 → 可控核聚变 每天与你一起 2026年7月15日，欧洲聚变能源组织（F4E）发布首份《全球聚变能源趋势》报告。报告由F4E聚变观察站编制，围绕资金、装置性能、科研产出、知识产权和监管框架等维度，对中国、欧盟、日本、英国和美国五个主要聚变参与方进行了比较分析。 资金：203.5亿欧元格局 2"
+    },
+    {
+     "id": "https://www.helionenergy.com/newsroom/helion-clears-key-regulatory-milestone-on-the-path-to-building-and-operating-the-worlds-first-fusion-power-plant",
+     "title": "Helion Energy获聚变发电厂放射性材料、放射性空气排放监管许可证",
+     "date": "2026-06-16",
+     "score": 6.5,
+     "type": "news",
+     "url": "https://www.helionenergy.com/newsroom/helion-clears-key-regulatory-milestone-on-the-path-to-building-and-operating-the-worlds-first-fusion-power-plant",
+     "kp": null,
+     "body_head": "6月16日，美国聚变初创公司Helion Energy在官网宣布，其已获得华盛顿州卫生部（DOH）颁发的放射性材料许可证（RML）与放射性空气排放许可证（RAEL），成为全球首家获得聚变发电厂运营监管许可的公司。文中称，这两份许可证确认了其在马拉加的Orion设施具备符合严格安全标准的设施、受训人员和安全管理体系，允许该厂址继续建设并运营全球首座聚变发电厂。目前，Orion的装配大楼和办公楼已完工"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/mixM3nqPO6HnZK-SaM7K6A",
+     "title": "持证启航！瀚海聚能获辐射安全许可证，夯实FRC聚变合规基石",
+     "date": "2026-07-28",
+     "score": 6.4,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/mixM3nqPO6HnZK-SaM7K6A",
+     "kp": null,
+     "body_head": "持证启航！瀚海聚能获辐射安全许可证，夯实FRC聚变合规基石 点这里关注 → 点这里关注 → 可控核聚变 每天与你一起 在聚变能从实验室走向工程化的关键进程中，合规是装置运行的“通行证”。瀚海聚能深谙安全合规之于聚变研发的生命线意义。2025年7月，随着HHMAX-901主机建设完工，公司在紧锣密鼓推进配套电源、诊断系统和磁体线圈升级的同时，为确保装置全面建成后第一时间合规运行，**同步启动《辐射安"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/Oid_rqaERmynll-i-4g13w",
+     "title": "美国威斯康星州5500万美元撬动Realta磁镜聚变总部",
+     "date": "2026-07-18",
+     "score": 5.4,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/Oid_rqaERmynll-i-4g13w",
+     "kp": [
+      "融资金额[Realta磁镜聚变总部]: 5500万美元"
+     ],
+     "body_head": "美国威斯康星州5500万美元撬动Realta磁镜聚变总部 原创 刘智宇 刘智宇 可控核聚变 每天与你一起 2026年7月15日，磁镜聚变能源公司Realta Fusion宣布，威斯康星州政府与麦迪逊市政府将联合提供最高5500万美元的激励资金，支持其在麦迪逊市OM Station（原奥斯卡·梅耶工厂旧址）建设公司总部与聚变研究设施。该项目名为“Realta Forge”，预计将创造超过600个技术"
+    }
+   ]
+  }
+ }
+}

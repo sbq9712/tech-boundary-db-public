@@ -1,0 +1,218 @@
+{
+  "domain": "核聚变",
+  "source_docs": [
+    "核电/核电_核聚变商业化进展_技术边界.md (v1.0, 2026-07-03)"
+  ],
+  "as_of": "2026-07-03（文档日期）；观测挂载至 2026-07-24",
+  "industry_judgment": {
+    "conclusion": "尚未有任何装置实现持续净能量输出并发电。NIF 惯性约束实现 Q_plasma>1（2022，科学盈亏平衡，非工程），磁约束纪录 JET 69MJ/6s（Q~0.33，2024）。私营路线（CFS/SPARC 2027 验证 Q>1 → ARC 2030s 并网 400MWe）是最乐观时间线；ITER Q≥10 推迟至 2044。'经济可行'的商业聚变更远。行业时钟由技术侧卡点走（等离子体验证→材料→氚自持），系统侧（氚供应链、监管许可）开始进入视野但不是当前约束。",
+    "supporting_refs": ["route-tokamak", "route-stellarator", "route-icf", "bottle-plasma-control", "bottle-first-wall", "bottle-tritium", "bottle-heat-extraction"],
+    "inflection_criteria": [
+      {
+        "condition": "SPARC 实测 Q_plasma > 2，或实验值与 2020 模拟偏差 <20%",
+        "meaning": "磁约束物理可行性确认，ARC 设计风险显著下降，私营时间线可信度质变",
+        "signal_ref": "sig-sparc-q"
+      },
+      {
+        "condition": "托卡马克稳态运行 >100 秒且 Q>1",
+        "meaning": "从脉冲物理验证迈向工程可用运行",
+        "signal_ref": "sig-steady-state"
+      },
+      {
+        "condition": "任何聚变级中子源下 TBR >1.0 实测，或完整氚增殖-提取-回充闭环实验完成",
+        "meaning": "氚自持从'零验证'变为'有数据'——最高风险工程卡点开始闭合，DT 路线的资源前提成立",
+        "signal_ref": "sig-tbr"
+      },
+      {
+        "condition": "材料在 14 MeV 等效 >20 dpa 下延展性保持 >50% 的公开报道",
+        "meaning": "第一壁从'物理极限硬约束'开始松动，电站寿命可设计",
+        "signal_ref": "sig-first-wall"
+      },
+      {
+        "condition": "任何非托卡马克路线（仿星器/FRC/Z箍缩/惯性约束）实现 Q_plasma>1",
+        "meaning": "路线竞争格局重估（私营仿星器融资已连破纪录，技术验证若跟上将分流托卡马克叙事）",
+        "signal_ref": "sig-alt-route"
+      }
+    ],
+    "confidence": "medium",
+    "binding_constraint": "bottle-plasma-control"
+  },
+  "routes": [
+    {
+      "id": "route-tokamak",
+      "name": "磁约束·托卡马克",
+      "judgment": "主流路线：数十年运行经验与数据积累，ITER 和几乎所有私营企业选择。当前纪录 JET 69MJ/6s（Q~0.33）。CFS 用 REBCO 高温超导 20T 磁体走紧凑路线（B⁴ 定律：磁场翻倍体积可降一个量级，自洽性验证通过）——这是私营聚变商业逻辑的物理基础。SPARC 2027 目标 Q>1。",
+      "maturity": "示范前（ITER 建设中；SPARC 2027 首放电）",
+      "bottleneck_refs": ["bottle-plasma-control", "bottle-first-wall", "bottle-tritium"],
+      "doc_anchor": "§1 路线表第1行；§2.3 B⁴推算"
+    },
+    {
+      "id": "route-stellarator",
+      "name": "磁约束·仿星器",
+      "judgment": "无内部电流→无破裂灾难，理论更稳定；但线圈制造极端复杂、约束效率低于托卡马克。W7-X 已验证长时约束但参数远低于聚变所需。作为托卡马克风险对冲持续发展——2026 年私营融资连破纪录（Proxima Fusion 4.11 亿欧，欧洲私营聚变最大融资）。",
+      "maturity": "实验室验证（参数远低于聚变所需）",
+      "bottleneck_refs": ["bottle-plasma-control"],
+      "doc_anchor": "§1 路线表第2行",
+      "note": "观测补充：文档后一个月内仿星器融资与 HTS 线圈研制情报活跃（sig-alt-route 39 条命中）"
+    },
+    {
+      "id": "route-icf",
+      "name": "惯性约束（ICF）",
+      "judgment": "NIF 2022 实现 Q_plasma~1.5（科学盈亏平衡），但其 Q 只计激光到燃料，不计全链路——全系统 Q 远低于 1。重复频率、靶丸制造、热量提取与发电需求差距极大。2026-07 LLNL 与 Pacific Fusion 天狼星原型机 3000 脉冲验证 95% 效率（观测补充，文档未含）。",
+      "maturity": "实验室验证（距发电极远）",
+      "bottleneck_refs": [],
+      "doc_anchor": "§1 路线表第3行；V08"
+    },
+    {
+      "id": "route-private-alternative",
+      "name": "私营替代构型（FRC/Z箍缩/球马克等）",
+      "judgment": "Helion（FRC，目标 2028 发电，已获运行监管许可）、TAE 等走差异化路线。文档明确未覆盖（V07），观测显示活跃度上升。作为树节点保留但判断标'未调研'——这是文档的已知盲区。",
+      "maturity": "未调研（文档 V07 盲区）",
+      "bottleneck_refs": [],
+      "doc_anchor": "V07",
+      "note": "提取决定：为'文档明示未覆盖但观测显示活跃'的路线建立占位节点，状态显式标注，防止跨领域扫描漏看"
+    }
+  ],
+  "bottlenecks": [
+    {
+      "id": "bottle-plasma-control",
+      "name": "等离子体约束与控制",
+      "side": "technical",
+      "nature": "epistemic",
+      "statement": "等离子体是高度非线性系统，多种不稳定性模式（MHD/湍流输运/ELM）任一失控导致破裂。基本物理不禁止（Lawson 判据已部分验证），但实际行为远比理想模型复杂——边界物理、杂质输运、破裂预测的经验性参数大量存在，模拟不能替代实验（Hammer：'模拟必须由按设计运行的聚变反应堆证明正确'）。必须在真实聚变级装置上验证，此前最大 DT 装置（JET）远小于电站规模。文档原分类'engineering bottleneck'——竖井改判 epistemic（见提取决定）。AI 黑箱控制（DeepMind 式）是这条卡点的潜在突破形态：不建模型直接控。",
+      "breakthrough_form": "事件型：SPARC Q_plasma>2（物理可行性）；稳态 >100s 且 Q>1（工程可用性）；或 AI 控制方案在真实装置上实现某种持续时间的稳定约束（黑箱路线）",
+      "evidence_refs": ["§2.1 物理指标表", "N01", "JET 2024", "CFS 2020 七篇论文"],
+      "doc_anchor": "§3 卡点1",
+      "status": "active",
+      "binding": true
+    },
+    {
+      "id": "bottle-first-wall",
+      "name": "第一壁材料与中子辐照",
+      "side": "technical",
+      "nature": "physical",
+      "statement": "D-T 聚变 80% 能量以 14.1 MeV 中子释放，对任何已知材料的损伤不可避免（位移损伤+氦脆化+高热负荷）。目标：10-20 dpa 下保持机械性能+可更换模块设计。候选 RAFM 钢/钨/ODS 钢，但聚变级中子环境长期数据几乎不存在——没有 14 MeV 中子源能模拟（IFMIF-DONES 在建）。文档标注 physical limit（不可消除）+ engineering（材料与设计可改善）双属性——竖井按'约束性最强的属性'归 physical，工程改善面写入 statement。",
+      "breakthrough_form": "材料事件：>20 dpa 下延展性 >50%（14MeV 等效）；设施事件：IFMIF-DONES 投运（测试能力出现）",
+      "evidence_refs": ["§3 卡点2", "EUROFER97/F82H", "IFMIF-DONES"],
+      "doc_anchor": "§3 卡点2",
+      "status": "active",
+      "binding": false
+    },
+    {
+      "id": "bottle-tritium",
+      "name": "氚自持增殖（DT 路线专属）",
+      "side": "technical",
+      "nature": "engineering",
+      "statement": "条件性卡点：仅在氘氚路线下成立（文档本体即挂氘氚语境）。全球民用氚库存 <30kg（半衰期 12.3 年自然衰减，来源重水堆副产），单个 400MW 电站年耗 50-100kg——必须堆内增殖（⁶Li+n→T），TBR≥1.05-1.1。物理基础清楚但工程验证为零：没有任何装置在聚变级通量下测过完整增殖-提取-循环回路。ITER TBM 要 2039 年后；ARC 论文对此空白（Nature News 明确指出）。因果链下追（拷问 session 的案例）：供应链表象→缺氚原因（半衰期短+存量少）→解决路线（月球采矿=远期/自产=增殖包层）→落回工程问题。观测补充：2026-07 出现首批氚增殖实验结果报道（BABY 1L）——此卡点开始有第一批数据。",
+      "breakthrough_form": "事件：任何聚变中子源下 TBR>1.0 实测；闭环实验完成；CFS 公开 ARC 包层设计并过同行评审",
+      "evidence_refs": ["§3 卡点3", "IAEA 氚库存", "N01", "观测: BABY 1L 2026-07"],
+      "doc_anchor": "§3 卡点3；§2.2 氚行",
+      "status": "active",
+      "binding": false,
+      "conditional_on": "route-tokamak/route-icf（DT 燃料路线）"
+    },
+    {
+      "id": "bottle-heat-extraction",
+      "name": "热量提取与发电集成",
+      "side": "technical",
+      "nature": "engineering",
+      "statement": "第一壁热负荷 1-5 MW/m²（裂变 ~5 倍），冷却剂强辐照下长期运行，包层热分布极不均匀。裂变经验可参考但条件更极端。CFS-Siemens 合作中，验证需到 ARC 建造阶段。",
+      "breakthrough_form": "事件：ARC 或任何聚变原型完成满功率热交换闭环",
+      "evidence_refs": ["§3 卡点4"],
+      "doc_anchor": "§3 卡点4",
+      "status": "active",
+      "binding": false
+    },
+    {
+      "id": "bottle-regulatory-path",
+      "name": "监管许可路径（新增，观测发现）",
+      "side": "system",
+      "nature": "regulatory",
+      "statement": "文档未建此卡点，但观测显示 2026-06 出现'全球首座聚变能工厂获美国监管批准'（评分 9.6）与 Helion 获运行许可——监管侧在文档日期后开始实质动作。聚变的许可框架（NRC 对聚变装置的监管类别）是行业时钟的新变量。竖井提取决定：为观测中强度 ≥9 的制度事件建立系统侧卡点占位，待人工调研补充。",
+      "breakthrough_form": "制度事件：主要监管辖区（美/英/中）确立聚变专属许可框架；首座商业电站拿到建设+运行许可",
+      "evidence_refs": ["观测: 9.6分监管批准 2026-06-18", "观测: Helion 运行许可 2026-06-25", "§5 Fall Line 建设许可"],
+      "doc_anchor": "（无文档锚点——观测反哺）",
+      "status": "active",
+      "binding": false,
+      "note": "提取决定 4：观测驱动的反向新增，文档未覆盖"
+    }
+  ],
+  "indicators": [
+    {
+      "id": "ind-triple-product",
+      "name": "Lawson 判据（三重积 n·T·τ_E）",
+      "current": "JET DT 最终实验约 0.9×10²¹ keV·s/m³；NIF 超过点火判据（用 ρR 等效）",
+      "theoretical_limit": "点火判据约 3×10²¹；科学盈亏平衡约 0.5-1×10²¹",
+      "commercial_requirement": "商业电站需 Q_plasma>10-20 对应的更高三重积",
+      "gap_nature": "磁约束距点火判据约 3 倍（物理标尺，非经济）",
+      "data_status": "verified",
+      "doc_anchor": "§2.1 行2"
+    },
+    {
+      "id": "ind-q-plasma",
+      "name": "Q_plasma（科学盈亏平衡）",
+      "current": "NIF ~1.5（激光口径）；JET ~0.33（加热功率口径）",
+      "theoretical_limit": "Q=∞ 为点火；商业需 >10-20",
+      "commercial_requirement": "Q_engineering>1（无装置达到）；Q_economic（框架刚提出）",
+      "gap_nature": "三层 Q 值不可互换——NIF 口径与磁约束口径分母不同",
+      "data_status": "verified",
+      "doc_anchor": "§1 三层 Q 值表"
+    },
+    {
+      "id": "ind-pulse-duration",
+      "name": "一次放电持续时间",
+      "current": "JET 6 秒（69MJ）；EAST 403 秒（1.2 亿度 H 模，Q<1）",
+      "theoretical_limit": "稳态运行（数百到数千秒）才可发电",
+      "commercial_requirement": "连续运行（电站级）",
+      "gap_nature": "脉冲记录与稳态运行是不同能力（非感应电流驱动额外耗能）",
+      "data_status": "verified",
+      "doc_anchor": "§2.1 行4"
+    },
+    {
+      "id": "ind-hts-field",
+      "name": "高温超导磁体磁场强度",
+      "current": "CFS 20T 级 REBCO 磁体测试通过（2021，公司自报独立验证不明）；观测补充：能量奇点 26.7T 无液氦磁体（2026-06）、CRAFT 14.5T（2026-06）",
+      "theoretical_limit": "ARC 设计 ~20T 线圈最高点",
+      "commercial_requirement": "20T 级在聚变装置集成运行 >1000h 无失超",
+      "gap_nature": "单磁体验证→装置集成长运行之间差距大；B⁴ 定律使磁场成为体积/成本的主杠杆",
+      "data_status": "disclosed",
+      "doc_anchor": "§2.2 行1；观测补充"
+    },
+    {
+      "id": "ind-tbr",
+      "name": "氚增殖比 TBR",
+      "current": "无聚变级实验数据（观测补充：BABY 1L 首批增殖实验结果 2026-07）",
+      "theoretical_limit": "物理上 TBR>1 允许（截面已知）",
+      "commercial_requirement": "TBR ≥1.05-1.1（含衰变与提取损失）",
+      "gap_nature": "验证为零→刚有第一批小实验数据",
+      "data_status": "missing",
+      "doc_anchor": "§2.2 氚行；§7 TBR 行"
+    },
+    {
+      "id": "ind-arc-cost",
+      "name": "ARC 电站投资成本",
+      "current": "CFS 估算 >$25 亿（>¥180 亿，首台机）",
+      "theoretical_limit": "—（经济指标）",
+      "commercial_requirement": "降至与裂变竞争（约 ¥1.5-2 万/kW）才可规模化",
+      "gap_nature": "首台机成本远高于规模化成本；构成细分未知（V05）",
+      "data_status": "disclosed",
+      "doc_anchor": "§2.2 ARC 行"
+    }
+  ],
+  "cross_domain_tech": [
+    { "name": "高温超导磁体（REBCO）", "sofc_specific": "聚变拉动 20T 级需求与产能，反哺 MRI/超导电缆降本", "linked_domains": ["超导材料", "医疗影像", "电网"] },
+    { "name": "抗辐照结构材料", "sofc_specific": "14MeV 比 4 代裂变中子更硬；测试设施与评估方法共享", "linked_domains": ["核电（裂变）", "先进材料"] },
+    { "name": "氚处理与同位素分离", "sofc_specific": "封闭回路安全性要求远高于民用氢", "linked_domains": ["氢基能源"] }
+  ],
+  "to_verify": [
+    "V01: CFS ARC 五篇论文定量结论（1.1GW→400MWe 推导、假设、不确定性）— P0，OA 可下载",
+    "V02: SPARC '75% 完工'独立验证 — P1",
+    "V03: 20T 磁体测试独立验证（IEEE TAS）— P1",
+    "V04: ARC 包层/氚增殖设计细节 — P0（Nature News 指出论文空白）",
+    "V05: ARC >$25 亿成本构成细分 — P1",
+    "V06: 全球氚库存最新确切数字 — P2",
+    "V07: 私营替代路线（Helion/TAE/Tokamak Energy）调研 — P2（已建占位节点）",
+    "V08: NIF 全系统 Q 值（含激光器效率）— P2",
+    "竖井新增: 2026-06 监管批准事件的具体内容与许可框架含义 — P0（bottle-regulatory-path 依据）"
+  ]
+}
