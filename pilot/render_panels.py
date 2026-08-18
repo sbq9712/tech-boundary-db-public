@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""竖井认知面板 HTML 渲染器 v3 — 叙事结构：整体总结 + 逻辑推导 → 卡点 → 拐点 → 路线 → 指标 → 信号 → 边界"""
+"""竖井认知面板 HTML 渲染器 v4 — 问题驱动的叙事（开场+问题链）→ 卡点 → 拐点 → 路线 → 指标 → 信号 → 边界"""
 import json, html
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from narrative import SOFC_NARRATIVE, FUSION_NARRATIVE
 
 def esc(s):
     return html.escape(str(s), quote=False)
@@ -47,6 +51,10 @@ h1 { font-size:23px; margin-bottom:2px; }
   background:var(--card); border:1px solid var(--accent); color:var(--accent); font-size:13px; font-weight:600;
   display:flex; align-items:center; justify-content:center; }
 .step b { color:var(--tech); }
+.opening { font-size:14.5px; line-height:1.9; padding:2px 0 10px 0; }
+.qa .q { font-size:14.5px; font-weight:600; color:var(--tech); margin:18px 0 6px 0; padding-left:12px; border-left:3px solid var(--tech); }
+.qa .a { font-size:14px; line-height:1.9; }
+.qa .a b { color:var(--warn); font-weight:600; }
 table { width:100%; border-collapse:collapse; font-size:13px; margin-top:4px; }
 th { text-align:left; color:var(--muted); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--border); }
 td { padding:8px; border-bottom:1px solid rgba(42,54,68,.5); vertical-align:top; }
@@ -64,11 +72,16 @@ li:before { content:"\\25B8"; position:absolute; left:0; color:var(--accent); }
 .flow .arr { color:var(--accent); }
 """
 
-def reasoning_html(steps):
-    out = ''
-    for i, s in enumerate(steps, 1):
-        out += f'<div class="step" data-n="{i}">{esc(s)}</div>'
-    return out
+def narrative_html(narr):
+    """开场陈述 + 问题链：每个回答被前一个问题逼出来。"""
+    def fmt(t):
+        paras = [p.strip() for p in t.split("\n\n") if p.strip()]
+        return ''.join(f"<p style='margin:0 0 10px 0'>{esc(p).replace(chr(10), '<br>')}</p>" for p in paras)
+    out = f"<div class='opening'>{fmt(narr['opening'])}</div><div class='qa'>"
+    for item in narr['questions']:
+        out += f"<div class='q'>{esc(item['q'])}</div>"
+        out += f"<div class='a'>{fmt(item['a'])}</div>"
+    return out + '</div>'
 
 def render(domain_file, title, subtitle, out_path):
     j = json.load(open(f'pilot/judgments/{domain_file}', encoding='utf-8'))
@@ -135,7 +148,7 @@ def render(domain_file, title, subtitle, out_path):
 
     to_verify = ''.join(f'<li>{esc(v)}</li>' for v in j.get('to_verify', [])[:10])
     doc_list = ''.join(f'<li>{esc(d)}</li>' for d in j.get('source_docs', []))
-    reasoning = ij.get('reasoning', [])
+    narr = SOFC_NARRATIVE if domain_file == 'sofc.json' else FUSION_NARRATIVE
 
     # 逻辑链流程条（卡片2顶部）
     flow_nodes = ['行业结构'] + [f"<span class='node'>约束性卡点<br><b>{esc(binding_name[:14])}</b></span>"]
@@ -160,8 +173,8 @@ def render(domain_file, title, subtitle, out_path):
 <span class="small">核实记录：{vlog_html}</span>
 </div></div>
 
-<div class="card" id="s2"><h2>② 判断链推导</h2><div class="h2sub">从行业结构到约束性卡点到拐点——每一步的"为什么"</div>
-{reasoning_html(reasoning)}
+<div class="card" id="s2"><h2>② 判断链推导</h2><div class="h2sub">问题驱动：每个结论被前一个问题逼出来；每个选择写明排除了什么</div>
+{narrative_html(narr)}
 </div>
 
 <div class="card" id="s3"><h2>③ 卡点全景</h2><div class="h2sub">约束性卡点置顶（⚑）；侧·类型决定突破形态与监测方式</div>
