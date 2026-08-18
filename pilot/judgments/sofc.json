@@ -25,31 +25,43 @@
    {
     "condition": "AEP 框架累计交付 ≥500MW 且跨多个项目运行",
     "meaning": "数据中心从需求叙事升级为规模市场",
-    "signal_ref": "sig-aep-delivery"
+    "signal_ref": "sig-aep-delivery",
+    "bottleneck_ref": "bottle-financing-concentration"
    },
    {
     "condition": "≥3 家厂商、≥40,000 小时、同口径退化与更换的独立寿命数据库出现",
     "meaning": "可完成跨厂商寿命比较，TCO 从推断升级为可验证（经济性判断质变）",
-    "signal_ref": "sig-life-database"
+    "signal_ref": "sig-life-database",
+    "bottleneck_ref": "bottle-opaque-tco"
    },
    {
     "condition": "≥3 个项目公开全边界 $/kW 及 $/MWh",
     "meaning": "经济性由推断升级为可验证",
-    "signal_ref": "sig-tco-transparent"
+    "signal_ref": "sig-tco-transparent",
+    "bottleneck_ref": "bottle-opaque-tco"
    },
    {
     "condition": "中国同一标准产品跨 ≥10 个项目复用且有复购",
     "meaning": "中国从示范进入早期商业化",
-    "signal_ref": "sig-china-repeat-orders"
+    "signal_ref": "sig-china-repeat-orders",
+    "bottleneck_ref": "bottle-financing-concentration"
    },
    {
     "condition": "前三大客户收入占比持续下降 + ≥3 个授权伙伴形成持续产品销售",
     "meaning": "需求从大单驱动转为可复制市场，IP 授权模式跨过规模验证",
-    "signal_ref": "sig-customer-diversification"
+    "signal_ref": "sig-customer-diversification",
+    "bottleneck_ref": "bottle-financing-concentration"
    }
   ],
   "confidence": "medium",
-  "binding_constraint": "bottle-opaque-tco"
+  "binding_constraint": "bottle-opaque-tco",
+  "reasoning": [
+   "行业结构：SOFC 的产品是'可维护的发电系统'而非电池片——价值由高效率/连续供电/低污染物创造；商业壁垒由堆寿命/热管理/燃料处理/模块冗余/服务网络共同形成（§0）。",
+   "分层事实：大型现场发电（Bloom 千站级、$20 亿收入、可用率 99.9→99.999%）与日本住宅 CHP（55% 效率、12 年设计期）已跨过商业验证；第二梯队（Doosan 50MW 量产、Elcogen 360MW）在产能爬坡；数据中心是需求放大器而非行业定义（§0.5 行业阶段表）。",
+   "排除法定位约束：物理层无硬约束（效率/可用率已达商用区间）；工程层的多机制退化和良率是渐进改善项（有学习曲线证据）；真正的阻断在——采购方无法重建 TCO：跨厂商可比 CAPEX、堆更换费、服务费全部缺失，导致'技术合格'无法转化为'可融资资产'（§0.5 经济性行：'当前最大信息缺口不是理论效率，而是全生命周期成本'）。",
+   "推论：约束性卡点=TCO 不透明（技术侧·经济）。它与系统侧的融资/客户集中互为因果（不透明→难融资），选前者因为它在文档中被列为'最大缺口'且是后者的因。",
+   "从约束性卡点推拐点：若第三方核验的寿命/成本数据库出现（≥3 厂商 ≥40,000h 同口径），TCO 从推断变可验证→经济性判断质变；若 AEP 框架转持续交付，证明客户愿意在信息不完全下大规模下单→需求侧确认；两者叠加才构成'规模化拐点'——单一条件都不充分，所以拐点标准是'或'中带'合'。"
+  ]
  },
  "routes": [
   {

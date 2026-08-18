@@ -19,31 +19,44 @@
    {
     "condition": "SPARC 实测 Q_plasma > 2，或实验值与 2020 模拟偏差 <20%",
     "meaning": "磁约束物理可行性确认，ARC 设计风险显著下降，私营时间线可信度质变",
-    "signal_ref": "sig-sparc-q"
+    "signal_ref": "sig-sparc-q",
+    "bottleneck_ref": "bottle-plasma-control"
    },
    {
     "condition": "托卡马克稳态运行 >100 秒且 Q>1",
     "meaning": "从脉冲物理验证迈向工程可用运行",
-    "signal_ref": "sig-steady-state"
+    "signal_ref": "sig-steady-state",
+    "bottleneck_ref": "bottle-plasma-control"
    },
    {
     "condition": "任何聚变级中子源下 TBR >1.0 实测，或完整氚增殖-提取-回充闭环实验完成",
     "meaning": "氚自持从'零验证'变为'有数据'——最高风险工程卡点开始闭合，DT 路线的资源前提成立",
-    "signal_ref": "sig-tbr"
+    "signal_ref": "sig-tbr",
+    "bottleneck_ref": "bottle-tritium"
    },
    {
     "condition": "材料在 14 MeV 等效 >20 dpa 下延展性保持 >50% 的公开报道",
     "meaning": "第一壁从'物理极限硬约束'开始松动，电站寿命可设计",
-    "signal_ref": "sig-first-wall"
+    "signal_ref": "sig-first-wall",
+    "bottleneck_ref": "bottle-first-wall"
    },
    {
     "condition": "任何非托卡马克路线（仿星器/FRC/Z箍缩/惯性约束）实现 Q_plasma>1",
     "meaning": "路线竞争格局重估（私营仿星器融资已连破纪录，技术验证若跟上将分流托卡马克叙事）",
-    "signal_ref": "sig-alt-route"
+    "signal_ref": "sig-alt-route",
+    "route_ref": "route-stellarator"
    }
   ],
   "confidence": "medium",
-  "binding_constraint": "bottle-plasma-control"
+  "binding_constraint": "bottle-plasma-control",
+  "reasoning": [
+   "行业结构：聚变是'多卡点串联'的示范前行业——等离子体验证、第一壁材料、氚自持、发电集成必须全部通过，任何一个阻断则整体阻断（与 SOFC 的'多卡点并联、渐进改善'结构相反）。这决定了它的行业判断形态：不是'哪段先商业化'，而是'最弱的串联环节在哪'。",
+   "分层事实：NIF 达 Q_plasma>1（科学口径）；磁约束纪录 JET 69MJ/6s（Q~0.33）；CFS SPARC 用 20T HTS 磁体走紧凑路线（B⁴ 定律：物理定律层面的优势），首放电 2026；ITER Q≥10 推至 2044。",
+   "排除法定位约束：第一壁材料是物理限制（14MeV 中子损伤不可消除，且无测试设施）；氚自持是工程问题但验证为零；发电集成是常规工程延伸。但行业时钟当前卡在最上游——等离子体约束：一切下游验证（材料通量、氚增殖、热提取）都以'聚变级等离子体持续运行'为前提。SPARC 未运行前，下游卡点连被测试的机会都没有。",
+   "约束性卡点=等离子体约束与控制（技术侧·认知论）。注意它不是'最难解'的卡点（第一壁可能更硬），而是'最上游'的——串联结构中约束性卡点=当前阻断位置，不是最终难度。",
+   "从约束推拐点：SPARC Q>2 或与模拟偏差<20%（物理可行性+模拟工具可信）；稳态 >100s Q>1（从脉冲到可用）；AI 控制在真实装置的稳定约束演示（认知论卡点的黑箱解法——CFS×DeepMind 合作已把此路线建制化）。氚增殖 TBR>1.0 与非托卡马克 Q>1 是'下游/旁路解锁'型拐点：分别打开 DT 资源前提与路线格局重估。",
+   "系统侧补充：监管许可（Helion 州级两证）已启动但非当前约束——聚变行业的系统侧时钟通常在技术侧主卡点松动后才成为限制，故 binding 仍留技术侧（与 SOFC 相反：SOFC 系统侧时钟已与技术侧并跑）。"
+  ]
  },
  "routes": [
   {
