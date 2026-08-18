@@ -1,0 +1,22 @@
+# SOFC 竖井（Pilot）— 文件结构说明
+
+ADR-0011 的落地工作区。**文件级验证，不进生产数据库**；schema 稳定后另立 ADR 正式化。
+
+```
+pilot/
+├── README.md              ← 本文件
+├── schema.json            ← 判断树节点/观测/信号的 JSON Schema（ADR-0005/0006/0008 的代码化）
+├── judgments/             ← 判断树（按领域分文件）
+│   └── sofc.json          ← SOFC 判断树（迁移自 3 篇知识库文档）
+├── observations/          ← 挂载的广度观测（从 59k 记录按分类+信号映射提取）
+│   └── sofc.json
+├── signals/               ← 信号规格（从 §7 提取，含类型：指标型/事件型）
+├── extraction-log.md      ← 提取过程记录（哪些段落→哪些节点，覆盖率）
+└── panel.md               ← 认知面板渲染（竖井阶段的人工可读输出）
+```
+
+## 领域资产盘点（2026-08-18）
+
+- 文档：SOFC行业深度报告.md（v2.3, validated, 267 行）、SOC知识库_阶段性整理.md（110 行）、Bloom专利包（专利地图 144 行 + 清单 + 5 PDF）
+- 广度观测：燃料电池分类 666 条（文献 614、带参数 499、高分 62、近两月 211）；月度 activeness 见 observations
+- 现有 DB：knowledge_artifact ART-20260712-4F444B2861 + tech_3ba258d5d911656f（不动，只读参考）

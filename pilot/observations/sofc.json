@@ -1,0 +1,629 @@
+{
+ "domain": "SOFC",
+ "extracted_from": "all-records-lite.json, category=燃料电池",
+ "extracted_at": "2026-08-18",
+ "monthly_counts": {
+  "2025-12": 46,
+  "2026-01": 96,
+  "2026-02": 81,
+  "2026-03": 79,
+  "2026-04": 87,
+  "2026-05": 66,
+  "2026-06": 127,
+  "2026-07": 84
+ },
+ "signal_hits": {
+  "sig-5yr-life-verified": {
+   "count": 97,
+   "recent_growth": 32,
+   "top": [
+    {
+     "id": "https://mp.weixin.qq.com/s/2OkHJON-EFVllwpFtVBGog",
+     "title": "20.39%功率损失背后：SOFC再氧化失效，真正危险的可能是界面脱层",
+     "date": "2026-07-23",
+     "score": 8.2,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/2OkHJON-EFVllwpFtVBGog",
+     "kp": null,
+     "body_head": "20.39%功率损失背后：SOFC再氧化失效，真正危险的可能是界面脱层 原创 SOFC君观前沿 SOFC君观前沿 SOFC-SOEC-氢能技术 在阳极支撑型SOFC（ASOFC）中，Ni-YSZ阳极带来的高功率密度和低欧姆阻抗，是产业化路线的重要基础。但在真实运行中，停机、燃料短缺、密封失效或局部漏氧，都可能触发Ni→NiO再氧化。问题不只在于Ni相体积膨胀，更在于这种膨胀往往沿阳极厚度方向非均匀"
+    },
+    {
+     "id": "http://dx.doi.org/10.1021/jacs.5c19791",
+     "title": "限域于中空介孔碳中的致密铂基金属间纳米粒子用于耐久高功率重型燃料电池",
+     "date": "2026-02-28",
+     "score": 7.6,
+     "type": "literature",
+     "url": "http://dx.doi.org/10.1021/jacs.5c19791",
+     "kp": [
+      "催化剂[重型车燃料电池ORR]: Pt基金属间化合物纳米粒子",
+      "载体[重型车ORR]: 中空介孔碳"
+     ],
+     "body_head": "Heavy-duty vehicle (HDV) fuel cells require oxygen reduction reaction (ORR) catalysts with exceptional activity and durability under stringent operating conditions. However, conventional solid-solutio"
+    },
+    {
+     "id": "http://dx.doi.org/10.1021/jacs.5c19791",
+     "title": "中空介孔碳限域致密铂基金属间化合物纳米粒子用于耐久高功率氢能",
+     "date": "2026-02-28",
+     "score": 7.4,
+     "type": "literature",
+     "url": "http://dx.doi.org/10.1021/jacs.5c19791",
+     "kp": [
+      "催化剂[重型燃料电池]: Pt基金属间化合物NPs",
+      "载体[ORR催化剂]: 空心介孔碳"
+     ],
+     "body_head": "Heavy-duty vehicle (HDV) fuel cells require oxygen reduction reaction (ORR) catalysts with exceptional activity and durability under stringent operating conditions. However, conventional solid-solutio"
+    },
+    {
+     "id": "http://dx.doi.org/10.1021/acsenergylett.6c00542",
+     "title": "[ASAP] 晶格空位介导的铂基合金纳米催化剂结构有序化用于耐久PEM燃料电池阴极",
+     "date": "2026-03-29",
+     "score": 7.2,
+     "type": "literature",
+     "url": "http://dx.doi.org/10.1021/acsenergylett.6c00542",
+     "kp": [
+      "[有序化机制]: 晶格空位介导结构有序化",
+      "[催化剂]: Pt基金属间化合物",
+      "[应用]: PEMFC阴极ORR"
+     ],
+     "body_head": "Atomically ordered Pt-based intermetallic alloys have gained interest as promising cathode materials catalyzing the oxygen reduction reaction (ORR) in hydrogen-fueled proton exchange membrane fuel cel"
+    },
+    {
+     "id": "https://www.cell.com/matter/fulltext/S2590-2385(25)00649-6?rss=yes",
+     "title": "精确构建亚表面电子泵稳定铂催化剂抗氧降解用于燃料电池",
+     "date": "2026-02-10",
+     "score": 7.2,
+     "type": "literature",
+     "url": "https://www.cell.com/matter/fulltext/S2590-2385(25)00649-6?rss=yes",
+     "kp": [
+      "催化剂[燃料电池]: Pt纳米颗粒亚表面硼单原子掺杂",
+      "[稳定化]: ALD硼掺杂电子泵效应抑制Pt腐蚀",
+      "制备方法[Pt催化]: 原子层沉积(ALD)"
+     ],
+     "body_head": "Atomic layer deposition enables the precise interstitial doping of boron single atoms into the subsurface of Pt nanoparticles, inducing asymmetric strain and electron pump effect that effectively supp"
+    },
+    {
+     "id": "https://www.cell.com/joule/fulltext/S2542-4351(26)00119-4?rss=yes",
+     "title": "受限钾蒸发策略促进质子陶瓷燃料电池高性能空气电极的有序偏析",
+     "date": "2026-04-30",
+     "score": 7.1,
+     "type": "literature",
+     "url": "https://www.cell.com/joule/fulltext/S2542-4351(26)00119-4?rss=yes",
+     "kp": null,
+     "body_head": "Air electrodes often limit the efficiency and durability of protonic ceramic fuel cells. Here, a constricted potassium evaporation strategy is engineered to reconstruct a perovskite cathode, suppressi"
+    },
+    {
+     "id": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/adma.202521036?af=R",
+     "title": "调控三元Pt3(Co,Mn)1金属间化合物纳米颗粒界面氧空位介导有序化以增强OER性能",
+     "date": "2026-01-08",
+     "score": 7.1,
+     "type": "literature",
+     "url": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/adma.202521036?af=R",
+     "kp": [
+      "催化剂[ORR阴极]: L1₂有序Pt₃(Co,Mn)₁金属间纳米颗粒",
+      "界面工程[Pt₃Co核]: MnO共形壳层"
+     ],
+     "body_head": "ABSTRACT The sluggish kinetics and limited durability of the oxygen reduction reaction (ORR) at the cathode remain a maj..."
+    },
+    {
+     "id": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/aenm.202504855?af=R",
+     "title": "钙双原子催化剂中双通道σ给电子/π反馈驱动的p-p偶联加速氧还原反应",
+     "date": "2025-12-30",
+     "score": 7.1,
+     "type": "literature",
+     "url": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/aenm.202504855?af=R",
+     "kp": [
+      "[催化剂]: 钙双原子催化剂",
+      "[催化机制]: σ给予/π反馈驱动p-p耦合",
+      "[反应]: 氧还原反应(ORR)"
+     ],
+     "body_head": "ABSTRACT\n                  \n                    Main‐group metal‐based single‐atom catalysts (SACs) are promising candidates as oxygen reduction reaction (ORR) electrocatalysts due to their earth abun"
+    }
+   ]
+  },
+  "sig-mw-dynamic-data": {
+   "count": 20,
+   "recent_growth": 7,
+   "top": [
+    {
+     "id": "https://www.cell.com/joule/fulltext/S2542-4351(26)00175-3?rss=yes",
+     "title": "质子型固体氧化物电池氧电极的蒸汽诱导阳离子交换改性",
+     "date": "2026-05-27",
+     "score": 8.3,
+     "type": "literature",
+     "url": "https://www.cell.com/joule/fulltext/S2542-4351(26)00175-3?rss=yes",
+     "kp": [
+      "电极[P-SOC]: BaCo₀.₈Fe₀.₁Hf₀.₀₅W₀.₀₅O₃₋δ",
+      "[机制]: 蒸汽诱导W-Fe阳离子交换",
+      "[应用]: 质子陶瓷燃料电池/电解"
+     ],
+     "body_head": "A steam-engineered BaCo0.8Fe0.1Hf0.05W0.05O3−δ oxygen electrode featuring dynamic W-Fe cation exchange enables protonic solid oxide cells with benchmark fuel cell and electrolysis performance. In situ"
+    },
+    {
+     "id": "https://www.cell.com/joule/fulltext/S2542-4351(26)00175-3?rss=yes",
+     "title": "氧电极蒸汽诱导阳离子交换提升质子型固体氧化物电池性能",
+     "date": "2026-05-28",
+     "score": 7.4,
+     "type": "literature",
+     "url": "https://www.cell.com/joule/fulltext/S2542-4351(26)00175-3?rss=yes",
+     "kp": [
+      "电极[P-SOC]: BaCo₀.₈Fe₀.₁Hf₀.₀₅W₀.₀₅O₃₋δ",
+      "[机制]: 蒸汽诱导W-Fe阳离子交换",
+      "[应用]: 质子陶瓷燃料电池/电解"
+     ],
+     "body_head": "A steam-engineered BaCo0.8Fe0.1Hf0.05W0.05O3−δ oxygen electrode featuring dynamic W-Fe cation exchange enables protonic solid oxide cells with benchmark fuel cell and electrolysis performance. In situ"
+    },
+    {
+     "id": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/aenm.71223?af=R",
+     "title": "纳米孪晶高熵气凝胶通过Pd配位缺陷与多d轨道杂化促进氧还原用于锌空气电池",
+     "date": "2026-06-25",
+     "score": 7.1,
+     "type": "literature",
+     "url": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/aenm.71223?af=R",
+     "kp": [
+      "[材料]: 纳米孪晶高熵合金气凝胶",
+      "[结构]: 分级多孔+缺陷Pd配位",
+      "[应用]: 锌空气电池氧还原"
+     ],
+     "body_head": "ABSTRACT\n                  \n                    High‐entropy alloys (HEAs) offer exceptional opportunities for electrocatalytic applications, yet achieving precise control over their atomic‐scale defe"
+    },
+    {
+     "id": "http://dx.doi.org/10.1021/jacs.5c15936",
+     "title": "[ASAP] 动态振动耦合能量转移提升燃料电池氧还原催化剂性能",
+     "date": "2026-01-31",
+     "score": 7.0,
+     "type": "literature",
+     "url": "http://dx.doi.org/10.1021/jacs.5c15936",
+     "kp": [
+      "[机制]: 振动耦合能量转移(VCET)促进ORR",
+      "催化剂[ORR]: 杯芳烃tBuC[4]A锚定"
+     ],
+     "body_head": "We demonstrate here a promising yet challenging method to produce highly active catalysts by utilizing exothermic adsorption to spur endothermic desorption steps through dynamic surface energy transfe"
+    },
+    {
+     "id": "http://dx.doi.org/10.1021/jacs.5c15456",
+     "title": "氯桥连双铁原子催化剂用于高效稳定氧还原反应",
+     "date": "2026-01-03",
+     "score": 6.9,
+     "type": "literature",
+     "url": "http://dx.doi.org/10.1021/jacs.5c15456",
+     "kp": [
+      "催化剂[ORR]: 双Fe原子Cl桥联催化剂",
+      "[降解机制]: Fe-N与Fe-O键动态失配"
+     ],
+     "body_head": "Atomically dispersed iron-nitrogen-carbon (Fe-N-C) catalysts hold great promise for the oxygen reduction reaction (ORR), yet their structural instability under operational conditions restricts their p"
+    },
+    {
+     "id": "https://onlinelibrary.wiley.com/doi/10.1002/anie.8386838?af=R",
+     "title": "反应机制如何决定双原子催化剂氧还原反应活性火山图的双Sabatier最优值",
+     "date": "2026-04-28",
+     "score": 6.8,
+     "type": "literature",
+     "url": "https://onlinelibrary.wiley.com/doi/10.1002/anie.8386838?af=R",
+     "kp": [
+      "[催化剂]: 双原子催化剂(DAC)",
+      "[研究规模]: 200种DAC体系",
+      "[火山图]: 双Sabatier最优双峰活性图"
+     ],
+     "body_head": "ABSTRACT\n                  \n                    Dual‐atom catalysts (DACs) have demonstrated superior potential in the oxygen reduction reaction (ORR). However, the single‐peak activity volcano derive"
+    },
+    {
+     "id": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/aenm.202505277?af=R",
+     "title": "面向高性能耐久质子陶瓷电解池的定量界面工程框架",
+     "date": "2026-01-07",
+     "score": 6.8,
+     "type": "literature",
+     "url": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/aenm.202505277?af=R",
+     "kp": [
+      "工作温度[PCEC]: 400-600°C"
+     ],
+     "body_head": "ABSTRACT\n                  \n                    Protonic ceramic electrochemical cells (PCECs) are promising energy conversion devices for efficient power generation and green hydrogen production, off"
+    },
+    {
+     "id": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/aenm.202505277?af=R",
+     "title": "面向高性能长寿命质子陶瓷电化学电池的定量界面工程框架",
+     "date": "2026-01-06",
+     "score": 6.8,
+     "type": "literature",
+     "url": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/aenm.202505277?af=R",
+     "kp": [
+      "工作温度[PCEC]: 400-600°C"
+     ],
+     "body_head": "ABSTRACT\n                  \n                    Protonic ceramic electrochemical cells (PCECs) are promising energy conversion devices for efficient power generation and green hydrogen production, off"
+    }
+   ]
+  },
+  "sig-carbon-audit": {
+   "count": 82,
+   "recent_growth": 25,
+   "top": [
+    {
+     "id": "https://mp.weixin.qq.com/s/vcVcytrdopQHC82RGrREDQ",
+     "title": "甲烷直供700℃达774.53 mW/cm²：高熵钙钛矿阳极，把“无序”变成SOFC抗积碳武器",
+     "date": "2026-07-08",
+     "score": 7.9,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/vcVcytrdopQHC82RGrREDQ",
+     "kp": [],
+     "body_head": "甲烷直供700℃达774.53 mW/cm²：高熵钙钛矿阳极，把“无序”变成SOFC抗积碳武器 原创 SOFC君观前沿 SOFC君观前沿 SOFC-SOEC-氢能技术 对于直接碳氢燃料SOFC而言，阳极始终是决定系统上限的核心部件。传统Ni"
+    },
+    {
+     "id": "http://dx.doi.org/10.1021/jacs.5c19791",
+     "title": "限域于中空介孔碳中的致密铂基金属间纳米粒子用于耐久高功率重型燃料电池",
+     "date": "2026-02-28",
+     "score": 7.6,
+     "type": "literature",
+     "url": "http://dx.doi.org/10.1021/jacs.5c19791",
+     "kp": [
+      "催化剂[重型车燃料电池ORR]: Pt基金属间化合物纳米粒子",
+      "载体[重型车ORR]: 中空介孔碳"
+     ],
+     "body_head": "Heavy-duty vehicle (HDV) fuel cells require oxygen reduction reaction (ORR) catalysts with exceptional activity and durability under stringent operating conditions. However, conventional solid-solutio"
+    },
+    {
+     "id": "https://onlinelibrary.wiley.com/doi/10.1002/anie.6494121?af=R",
+     "title": "通过自适应N键合碳双层稳定高活性FeN5位点用于稳定燃料电池",
+     "date": "2026-05-05",
+     "score": 7.4,
+     "type": "literature",
+     "url": "https://onlinelibrary.wiley.com/doi/10.1002/anie.6494121?af=R",
+     "kp": [
+      "[活性位点]: FeN5构型(由FeN4升级)",
+      "[稳定化策略]: N-连接碳双层修复热解缺陷",
+      "[应用]: 质子交换膜燃料电池"
+     ],
+     "body_head": "The practical application of Fe-N-C catalysts in proton exchange membrane fuel cells is fundamentally constrained by the inherent activity-stability trade-off. Here, we propose a \"repair-and-upgrade\" "
+    },
+    {
+     "id": "https://www.cell.com/chem/fulltext/S2451-9294(26)00073-2?rss=yes",
+     "title": "高耐久质子交换膜燃料电池抗溶解双原子位点的筛选、设计与机理阐明",
+     "date": "2026-04-01",
+     "score": 7.4,
+     "type": "literature",
+     "url": "https://www.cell.com/chem/fulltext/S2451-9294(26)00073-2?rss=yes",
+     "kp": [
+      "催化剂[PEMFC]: Cr-Fe双金属位氮掺杂碳",
+      "[设计工具]: 结构描述符φ"
+     ],
+     "body_head": "Iron-based single-atom catalysts hold great potential to replace the platinum group catalysts in proton exchange membrane fuel cells, but their instability in acid environments is the main challenge f"
+    },
+    {
+     "id": "https://www.cell.com/chem/fulltext/S2451-9294(26)00073-2?rss=yes",
+     "title": "筛选、设计与阐明抗溶双原子位点用于高耐久质子交换膜燃料电池",
+     "date": "2026-03-31",
+     "score": 7.4,
+     "type": "literature",
+     "url": "https://www.cell.com/chem/fulltext/S2451-9294(26)00073-2?rss=yes",
+     "kp": [
+      "催化剂[PEMFC]: Cr-Fe双金属位氮掺杂碳",
+      "[设计工具]: 结构描述符φ"
+     ],
+     "body_head": "Iron-based single-atom catalysts hold great potential to replace the platinum group catalysts in proton exchange membrane fuel cells, but their instability in acid environments is the main challenge f"
+    },
+    {
+     "id": "http://dx.doi.org/10.1021/jacs.5c19791",
+     "title": "中空介孔碳限域致密铂基金属间化合物纳米粒子用于耐久高功率氢能",
+     "date": "2026-02-28",
+     "score": 7.4,
+     "type": "literature",
+     "url": "http://dx.doi.org/10.1021/jacs.5c19791",
+     "kp": [
+      "催化剂[重型燃料电池]: Pt基金属间化合物NPs",
+      "载体[ORR催化剂]: 空心介孔碳"
+     ],
+     "body_head": "Heavy-duty vehicle (HDV) fuel cells require oxygen reduction reaction (ORR) catalysts with exceptional activity and durability under stringent operating conditions. However, conventional solid-solutio"
+    },
+    {
+     "id": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/adma.73684?af=R",
+     "title": "钙介导的Fe-N键增强实现超稳定氧还原反应",
+     "date": "2026-06-12",
+     "score": 7.3,
+     "type": "literature",
+     "url": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/adma.73684?af=R",
+     "kp": [
+      "催化剂[氧还原反应]:Fe-Ca双原子位点/多孔碳",
+      "[Ca介导]:增强Fe-N键抑制活性位点浸出"
+     ],
+     "body_head": "ABSTRACT\n                  \n                    The practical deployment of atomically dispersed Fe–N–C catalysts for the oxygen reduction reaction (ORR) is severely hampered by the electrochemical le"
+    },
+    {
+     "id": "http://dx.doi.org/10.1021/jacs.6c02653",
+     "title": "Co–PdZn异质界面实现完全乙醇电氧化法拉第效率超过99.9%",
+     "date": "2026-05-02",
+     "score": 7.1,
+     "type": "literature",
+     "url": "http://dx.doi.org/10.1021/jacs.6c02653",
+     "kp": [
+      "法拉第效率[乙醇完全氧化]: >99.9%",
+      "[催化剂]: 碳载Co-PdZn异质界面",
+      "[反应]: 碱性乙醇电氧化"
+     ],
+     "body_head": "Developing electrocatalysts with exclusive selectivity for the complete ethanol oxidation reaction (EOR) is crucial for advancing direct ethanol fuel cells (DEFCs). Herein, we report a carbon-supporte"
+    }
+   ]
+  },
+  "sig-bloom-scaleup": {
+   "count": 7,
+   "recent_growth": 4,
+   "top": [
+    {
+     "id": "https://mp.weixin.qq.com/s/UNs73-KQQ7TR25U1ef0AUw",
+     "title": "SOFC密封材料：电堆量产时代，最容易被低估的一道“生死线”",
+     "date": "2026-06-22",
+     "score": 7.7,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/UNs73-KQQ7TR25U1ef0AUw",
+     "kp": [
+      "[SOFC]: 密封材料为电堆量产关键瓶颈"
+     ],
+     "body_head": "SOFC密封材料：电堆量产时代，最容易被低估的一道“生死线” 原创 SOFC君观前沿 SOFC君观前沿 SOFC-SOEC-氢能技术 如果说过去十年SOFC行业的核心问题是“能不能做出来”，那么接下来几年，真正的竞争会转向另一个问题：能不能稳定、批量、长期地卖出去。 这个转变正在发生。 一方面，AI数据中心带来的电力缺口，让分布式、高效率、可现场部署的SOFC重新进入能源产业的主视野。Bloom "
+    },
+    {
+     "id": "https://www.cell.com/matter/fulltext/S2590-2385(25)00658-7?rss=yes",
+     "title": "用于增强乙醇氧化电催化的模块化多界面纳米晶",
+     "date": "2026-02-21",
+     "score": 5.9,
+     "type": "literature",
+     "url": "https://www.cell.com/matter/fulltext/S2590-2385(25)00658-7?rss=yes",
+     "kp": [
+      "催化剂[碱性乙醇氧化]: Co₂P/Pd核壳-PdAu多界面纳米晶",
+      "[Co₂P/Pd界面]: 加速醋酸根生成",
+      "[PdAu界面]: 促进CO脱附"
+     ],
+     "body_head": "A modular multi-interface nanocrystal catalyst integrating Co2P/Pd core/shell and PdAu heterostructure interfaces is developed to enhance ethanol oxidation reaction in alkaline electrolytes. The Co2P/"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/rrA3KlfEcC5UYO6PClYqzw",
+     "title": "Bloom Energy:AI数据中心正在重新定价SOFC",
+     "date": "2026-06-25",
+     "score": 5.9,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/rrA3KlfEcC5UYO6PClYqzw",
+     "kp": [
+      "[产业趋势]: AI数据中心重塑SOFC定价"
+     ],
+     "body_head": "Bloom Energy:AI数据中心正在重新定价SOFC"
+    },
+    {
+     "id": "https://www.cell.com/matter/fulltext/S2590-2385(25)00658-7?rss=yes",
+     "title": "多界面纳米晶用于增强乙醇氧化电催化",
+     "date": "2026-02-22",
+     "score": 5.8,
+     "type": "literature",
+     "url": "https://www.cell.com/matter/fulltext/S2590-2385(25)00658-7?rss=yes",
+     "kp": [
+      "催化剂[碱性乙醇氧化]: Co₂P/Pd核壳-PdAu多界面纳米晶",
+      "[Co₂P/Pd界面]: 加速醋酸根生成",
+      "[PdAu界面]: 促进CO脱附"
+     ],
+     "body_head": "A modular multi-interface nanocrystal catalyst integrating Co2P/Pd core/shell and PdAu heterostructure interfaces is developed to enhance ethanol oxidation reaction in alkaline electrolytes. The Co2P/"
+    },
+    {
+     "id": "https://www.oracle.com/news/announcement/oracle-borderplex-and-bloom-energy-to-power-project-jupiter-with-fuel-cell-technology-2026-04-27/#:~:text=Oracle%20and%20BorderPlex%20Digital%20Assets%20today%20announced%20Project,center%20campus%20in%20Do%C3%B1a%20Ana%20County%2C%20New%20Mexico.",
+     "title": "甲骨文拟采用2.45GW的燃料电池为其数据中心供电",
+     "date": "2026-04-27",
+     "score": 5.7,
+     "type": "news",
+     "url": "https://www.oracle.com/news/announcement/oracle-borderplex-and-bloom-energy-to-power-project-jupiter-with-fuel-cell-technology-2026-04-27/#:~:text=Oracle%20and%20BorderPlex%20Digital%20Assets%20today%20announced%20Project,center%20campus%20in%20Do%C3%B1a%20Ana%20County%2C%20New%20Mexico.",
+     "kp": null,
+     "body_head": "4月27日，甲骨文在官网发文称，其将与美国燃料电池技术公司Bloom Energy（官网宣传采用固体氧化物燃料电池）合作，拟利用燃料电池为其新墨西哥州的Project Jupiter数据中心供电，规划功率最高2.45GW。文中称，此次合作将用燃料电池替代其先前规划的燃气、柴油供电方案，以减少该项目的温室气体排放。"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/2iCbey21_30jV6fnGXd1Yw",
+     "title": "先惠技术9个月揽获宁德时代超18亿订单；中国船舶氢燃料电池动力货船下水",
+     "date": "2026-07-21",
+     "score": 5.6,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/2iCbey21_30jV6fnGXd1Yw",
+     "kp": [
+      "时间[揽获订单]: 9个月",
+      "金额[宁德时代订单]: 18亿元"
+     ],
+     "body_head": "先惠技术9个月揽获宁德时代超18亿订单；中国船舶氢燃料电池动力货船下水 新能源技术与装备 **最新项目汇总：** * 先惠技术9个月揽获宁德时代超18亿订单 * 中国船舶氢燃料电池动力货船下水 **先惠技术9个月揽获宁德时代超18亿订单** 2026年以来，宁德时代产能建设全面提速。公开信息显示，公司创始人兼董事长曾毓群在2026大连夏季达沃斯论坛上表示，公司当年产能将超过1000GWh。这一突破"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/CljrFVL3OqcVKbIVLPmtyg",
+     "title": "日本SOFC行业进展：从家庭热电联供，到商用分布式与SOEC制氢",
+     "date": "2026-06-22",
+     "score": 5.2,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/CljrFVL3OqcVKbIVLPmtyg",
+     "kp": [
+      "[技术路线]: 家庭热电联供→商用分布式→SOEC制氢"
+     ],
+     "body_head": "日本SOFC行业进展：从家庭热电联供，到商用分布式与SOEC制氢 原创 SOFC君观前沿 SOFC君观前沿 SOFC-SOEC-氢能技术 如果观察全球SOFC产业，日本是一个很特殊的样本。 它并不是靠单一大型项目推动SOFC，而是先从家庭端做出规模化，再逐步向商用分布式、工业能源和SOEC制氢延伸。这条路径与美国Bloom Energy偏向数据中心和商业电力供应、欧洲偏向SOEC和氢能装备产业化的"
+    }
+   ]
+  },
+  "sig-life-database": {
+   "count": 1,
+   "recent_growth": 0,
+   "top": [
+    {
+     "id": "https://www.dicp.cas.cn/xwdt/ttxw/202605/t20260510_8199047.html",
+     "title": "大连化物所高比功率阴极闭合式风冷电堆通过鉴定测试",
+     "date": "2026-05-10",
+     "score": 6.9,
+     "type": "news",
+     "url": "https://www.dicp.cas.cn/xwdt/ttxw/202605/t20260510_8199047.html",
+     "kp": null,
+     "body_head": "5月10日，大连化物所在其官网发文称，陈忠伟研究员团队开发的高比功率阴极闭合式风冷电堆技术通过了科技成果鉴定和第三方测试验证。文中称，该风冷电堆比功率达1970 W/kg，面功率密度达1.15 W/cm2，成功进行了氢能无人机成功进行试飞。其通过催化层多尺度调控技术，解决了低湿环境下催化性能衰减及阳极反极引发碳腐蚀的问题；非对称水分传输技术则可平衡传统风冷堆中风冷导致膜变干电阻升高与保水传质需求的"
+    }
+   ]
+  },
+  "sig-pcfc-performance": {
+   "count": 56,
+   "recent_growth": 20,
+   "top": [
+    {
+     "id": "https://mp.weixin.qq.com/s/LwhpyWY7iJ1FUrqFlaMOYg",
+     "title": "不找“新材料”，先把烧结温度管好：亚稳纳米相让质子陶瓷电池在650℃做到1.44 W/cm²",
+     "date": "2026-07-16",
+     "score": 7.9,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/LwhpyWY7iJ1FUrqFlaMOYg",
+     "kp": [
+      "功率密度[质子陶瓷电池]: 1.44 W/cm²",
+      "工作温度[质子陶瓷电池]: 650℃"
+     ],
+     "body_head": "不找“新材料”，先把烧结温度管好：亚稳纳米相让质子陶瓷电池在650℃做到1.44 W/cm² 原创 SOFC君观前沿 SOFC君观前沿 SOFC-SOEC-氢能技术 在质子陶瓷燃料电池和可逆质子陶瓷电池中，空气极始终是影响中低温性能的关键环节。温度降到500—650℃后，氧吸附、解离、表面交换以及界面电荷转移明显变慢；而在电解模式下，空气极还要承担析氧反应，对传输能力和结构稳定性的要求更高。 常见"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/cRpY6a96UkwLZqH3oI1crA",
+     "title": "700℃做到1.73 W/cm²：Nd掺杂把BaFeO₃基无钴阴极推到了“性能甜点区”",
+     "date": "2026-07-21",
+     "score": 7.6,
+     "type": "news",
+     "url": "https://mp.weixin.qq.com/s/cRpY6a96UkwLZqH3oI1crA",
+     "kp": [
+      "温度[Nd掺杂BaFeO₃基无钴阴极]: 700℃",
+      "功率密度[Nd掺杂BaFeO₃基无钴阴极]: 1.73 W/cm²"
+     ],
+     "body_head": "700℃做到1.73 W/cm²：Nd掺杂把BaFeO₃基无钴阴极推到了“性能甜点区” 原创 SOFC君观前沿 SOFC君观前沿 SOFC-SOEC-氢能技术 在中温SOFC，尤其是质子陶瓷燃料电池中，阴极一直是最难啃的环节之一。温度从传统的800℃以上降到500—700℃后，材料稳定性、密封和系统成本确实有所改善，但氧气吸附、解离、表面扩散以及界面电荷转移都会明显变慢，阴极极化迅速上升。 近期，"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/TEXuyrvoooOFED5yjWadNQ",
+     "title": "Nat. Chem.：阳离子导向组装 POM-有机框架，提升燃料电池质子膜性能",
+     "date": "2026-06-18",
+     "score": 7.5,
+     "type": "literature",
+     "url": "https://mp.weixin.qq.com/s/TEXuyrvoooOFED5yjWadNQ",
+     "kp": [
+      "[组装策略]: 阳离子导向组装",
+      "[材料体系]: POM-有机框架",
+      "[应用]: 燃料电池质子膜"
+     ],
+     "body_head": "Nat. Chem.：阳离子导向组装 POM-有机框架，提升燃料电池质子膜性能 催化视界 质子交换膜燃料电池想要进一步提高功率密度，膜材料必须同时满足高质子传导、化学稳定、可加工和与电极界面兼容等要求。Nafion 是成熟选择，但在高温、低湿和自由基环境中仍有性能边界；许多晶态质子导体虽然结构有序，却难以直接做成可用膜。 这篇 Nature Chemistry 提出一种多阴离子-有机框架设计：用三"
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/ix-HR8xN8OKuq2IaSO7wlg",
+     "title": "100小时热循环不脱层：R-PCFC空气电极，开始从“高活性”走向“抗热失配”",
+     "date": "2026-06-29",
+     "score": 7.2,
+     "type": "literature",
+     "url": "https://mp.weixin.qq.com/s/ix-HR8xN8OKuq2IaSO7wlg",
+     "kp": [
+      "热循环稳定性[R-PCFC空气电极]: 100小时不脱层"
+     ],
+     "body_head": "100小时热循环不脱层：R-PCFC空气电极，开始从“高活性”走向“抗热失配” 原创 SOFC君观前沿 SOFC君观前沿 SOFC-SOEC-氢能技术 在SOFC和PCFC领域，空气电极材料的研发长期围绕一个关键词展开：活性。更低的极化阻抗、更快的氧表面交换、更高的功率密度，构成了多数论文的主线。 但对真正面向工程运行的电池而言，另一个问题同样致命：热膨胀失配。 尤其在可逆质子陶瓷燃料电池（R-P"
+    },
+    {
+     "id": "https://www.cell.com/joule/fulltext/S2542-4351(26)00119-4?rss=yes",
+     "title": "受限钾蒸发策略促进质子陶瓷燃料电池高性能空气电极的有序偏析",
+     "date": "2026-04-30",
+     "score": 7.1,
+     "type": "literature",
+     "url": "https://www.cell.com/joule/fulltext/S2542-4351(26)00119-4?rss=yes",
+     "kp": null,
+     "body_head": "Air electrodes often limit the efficiency and durability of protonic ceramic fuel cells. Here, a constricted potassium evaporation strategy is engineered to reconstruct a perovskite cathode, suppressi"
+    },
+    {
+     "id": "http://dx.doi.org/10.1021/acsenergylett.5c03159",
+     "title": "[ASAP] 原子级二维材料作为固体质子导体：实现最短质子转移距离",
+     "date": "2026-01-07",
+     "score": 7.1,
+     "type": "literature",
+     "url": "http://dx.doi.org/10.1021/acsenergylett.5c03159",
+     "kp": [
+      "材料[固态质子导体]: 原子级二维材料",
+      "[特征]: 最短质子转移距离+高选择性"
+     ],
+     "body_head": ""
+    },
+    {
+     "id": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/aenm.71226?af=R",
+     "title": "原位反向原子捕获提升质子陶瓷燃料电池阴极质子传导与氧还原动力学",
+     "date": "2026-06-25",
+     "score": 7.1,
+     "type": "literature",
+     "url": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/aenm.71226?af=R",
+     "kp": [
+      "[策略]: ALD反向原子捕获原位构建",
+      "[应用]: PCFC三导电阴极",
+      "[解决]: 质子传输+表面阳离子偏析"
+     ],
+     "body_head": "ABSTRACT\n                  \n                    Although triple‐conducting (H\n                    +\n                    /O\n                    2−\n                    /e\n                    −\n         "
+    },
+    {
+     "id": "https://mp.weixin.qq.com/s/ewclHTK0-XbdrRPeiIwEtg",
+     "title": "只做表面改性，600 ℃把R-PCEC推到1.24 W cm⁻²：PBSCF空气极稳定性难题有新解法",
+     "date": "2026-06-23",
+     "score": 7.0,
+     "type": "literature",
+     "url": "https://mp.weixin.qq.com/s/ewclHTK0-XbdrRPeiIwEtg",
+     "kp": [
+      "功率密度[R-PCEC 600℃]: 1.24 W/cm²",
+      "工作温度[R-PCEC]: 600℃",
+      "[空气极改性]: PBSCF表面改性"
+     ],
+     "body_head": "只做表面改性，600 ℃把R-PCEC推到1.24 W cm⁻²：PBSCF空气极稳定性难题有新解法 原创 SOFC君观前沿 SOFC君观前沿 SOFC-SOEC-氢能技术 在质子陶瓷电化学电池（PCEC）和可逆SOC体系中，空气极一直是性能与寿命的关键短板。尤其在中低温、含水蒸气环境下，氧还原/析氧反应（ORR/OER）动力学变慢，同时Sr/Ba等碱土元素表面偏析，容易形成SrO、Sr(OH)x"
+    }
+   ],
+   "note": "提取后补充的信号：高分未命中记录暴露了路线级信号缺口（PCFC 性能记录）"
+  }
+ },
+ "unmatched_high_score": [
+  {
+   "id": "https://mp.weixin.qq.com/s/LwhpyWY7iJ1FUrqFlaMOYg",
+   "title": "不找“新材料”，先把烧结温度管好：亚稳纳米相让质子陶瓷电池在650℃做到1.44 W/cm²",
+   "date": "2026-07-16",
+   "score": 7.9,
+   "type": "news",
+   "url": "https://mp.weixin.qq.com/s/LwhpyWY7iJ1FUrqFlaMOYg",
+   "kp": [
+    "功率密度[质子陶瓷电池]: 1.44 W/cm²",
+    "工作温度[质子陶瓷电池]: 650℃"
+   ],
+   "body_head": "不找“新材料”，先把烧结温度管好：亚稳纳米相让质子陶瓷电池在650℃做到1.44 W/cm² 原创 SOFC君观前沿 SOFC君观前沿 SOFC-SOEC-氢能技术 在质子陶瓷燃料电池和可逆质子陶瓷电池中，空气极始终是影响中低温性能的关键环节。温度降到500—650℃后，氧吸附、解离、表面交换以及界面电荷转移明显变慢；而在电解模式下，空气极还要承担析氧反应，对传输能力和结构稳定性的要求更高。 常见"
+  },
+  {
+   "id": "https://www.pnas.org/doi/abs/10.1073/pnas.2518463123?mi=eymic2&af=R&access=on&content=articlesChapters&publication=pnas&sortBy=Earliest&target=default",
+   "title": "用于燃料电池的微应变工程铂纳米笼",
+   "date": "2026-03-27",
+   "score": 7.8,
+   "type": "literature",
+   "url": "https://www.pnas.org/doi/abs/10.1073/pnas.2518463123?mi=eymic2&af=R&access=on&content=articlesChapters&publication=pnas&sortBy=Earliest&target=default",
+   "kp": [
+    "[催化剂]: 微应变工程铂纳米笼状物",
+    "[结构]: 笼形蛋白仿生纳米结构",
+    "[应用]: 质子交换膜燃料电池PEMFC"
+   ],
+   "body_head": "Proton exchange membrane fuel cells (PEMFCs) hold great promise for clean energy conversion, yet their performance is limited by insufficient mass transport bottlenecks within the catalyst layer. Addr"
+  },
+  {
+   "id": "https://mp.weixin.qq.com/s/Afs3NhjQccV-fUZ9pEmbzA",
+   "title": "Nature Energy：临界应变稳定氧还原反应",
+   "date": "2026-07-08",
+   "score": 7.6,
+   "type": "news",
+   "url": "https://mp.weixin.qq.com/s/Afs3NhjQccV-fUZ9pEmbzA",
+   "kp": [],
+   "body_head": "Nat. Energy：临界应变稳定ORR！ 催化视界 外延应变能提升 Pt 氧还原反应活性，但在燃料电池长期运行中，表面会溶解、重构和应变松弛。薄膜太薄容易失稳，太厚又可能丢掉应变优势；因此关键问题不是“应变越大越好”，而是存在怎样的稳定"
+  },
+  {
+   "id": "http://dx.doi.org/10.1021/jacs.6c01621",
+   "title": "通过石墨大环配体工程实现Fe-N-C催化剂自旋选择性水排斥",
+   "date": "2026-04-17",
+   "score": 7.6,
+   "type": "literature",
+   "url": "http://dx.doi.org/10.1021/jacs.6c01621",
+   "kp": [
+    "[关键瓶颈]: 催化剂/水界面失控",
+    "[工程策略]: 石墨大配体调控自旋选水排斥"
+   ],
+   "body_head": "Overcoming the sluggish intrinsic kinetics and mass-transport resistances of Fe-N-C cathodes is critical to bridging the performance gap with platinum-based benchmarks in proton exchange membrane fuel"
+  },
+  {
+   "id": "https://www.nature.com/articles/s44286-026-00362-7",
+   "title": "具有近乎完全选择透过性的氢分子介导质子交换膜",
+   "date": "2026-02-27",
+   "score": 7.6,
+   "type": "literature",
+   "url": "https://www.nature.com/articles/s44286-026-00362-7",
+   "kp": [
+    "选择性[质子交换膜]: 近完全选择性(H2分子介导)",
+    "机制[质子交换膜]: 氢分子介导突破选择性-电导率权衡"
+   ],
+   "body_head": "Ion exchange membranes play a critical role in environmental sustainability, with applications ranging from separations to energy storage and conversion. However, polymer-based membranes typically suf"
+  }
+ ]
+}

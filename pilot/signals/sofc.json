@@ -1,0 +1,136 @@
+{
+ "domain": "SOFC",
+ "description": "信号规格（从 §7 突破预警表提取 + 专利信号补充）。信号形态由卡点 nature 驱动（ADR-0006/0008）：economic→成本/订单证据，engineering→学习曲线指标，ecosystem→制度事件。",
+ "signals": [
+  {
+   "id": "sig-aep-delivery",
+   "name": "AEP 框架转交付",
+   "type": "event",
+   "watching": "AEP-Bloom 框架的交付进度",
+   "baseline": "首单 100MW、最高 1GW 框架",
+   "threshold": "累计交付 ≥500MW 且跨多个项目运行",
+   "linked_bottleneck": "bottle-financing-concentration",
+   "meaning": "数据中心由需求叙事升级为规模市场"
+  },
+  {
+   "id": "sig-life-database",
+   "name": "独立寿命数据库出现",
+   "type": "event",
+   "watching": "第三方核验的寿命/退化/服务成本数据",
+   "baseline": "缺失",
+   "threshold": "≥3 家厂商、≥40,000 小时、同口径退化与更换数据",
+   "linked_bottleneck": "bottle-opaque-tco",
+   "meaning": "跨厂商寿命比较可完成，TCO 判断质变"
+  },
+  {
+   "id": "sig-tco-transparent",
+   "name": "CAPEX/TCO 透明化",
+   "type": "event",
+   "watching": "项目级全边界成本披露",
+   "baseline": "缺失",
+   "threshold": "≥3 个项目公开全边界 $/kW 及 $/MWh",
+   "linked_bottleneck": "bottle-opaque-tco",
+   "meaning": "经济性由推断升级为可验证"
+  },
+  {
+   "id": "sig-bloom-scaleup",
+   "name": "Bloom 扩产兑现",
+   "type": "trend",
+   "watching": "产能、出货、良率、单位成本",
+   "baseline": "目标 2026 年底约 2GW/年（当前约 1GW）",
+   "threshold": "产能、出货、良率和单位成本同步改善",
+   "linked_bottleneck": "bottle-manufacturing-yield",
+   "meaning": "头部规模效应得到验证"
+  },
+  {
+   "id": "sig-second-tier-utilization",
+   "name": "第二梯队产能利用",
+   "type": "trend",
+   "watching": "Doosan/Elcogen 工厂利用率",
+   "baseline": "工厂已建/投产",
+   "threshold": "任一连续两年利用率 >60%",
+   "linked_bottleneck": "bottle-manufacturing-yield",
+   "meaning": "多供应商市场开始形成"
+  },
+  {
+   "id": "sig-china-repeat-orders",
+   "name": "中国重复订单",
+   "type": "event",
+   "watching": "潍柴等中国主体标准产品复用",
+   "baseline": "25/100kW 示范",
+   "threshold": "同一标准产品跨 ≥10 个项目复用且有复购",
+   "linked_bottleneck": "bottle-financing-concentration",
+   "meaning": "中国从示范进入早期商业化"
+  },
+  {
+   "id": "sig-5yr-life-verified",
+   "name": "五年堆寿命验证",
+   "type": "event",
+   "watching": "真实工况寿命实绩与输出保证",
+   "baseline": "企业目标值（Ceres 5 年目标）",
+   "threshold": "真实工况达到 5 年且输出保证可执行",
+   "linked_bottleneck": "bottle-degradation-multi",
+   "meaning": "堆更换成本不确定性显著下降"
+  },
+  {
+   "id": "sig-mw-dynamic-data",
+   "name": "MW 级系统动态数据公开",
+   "type": "event",
+   "watching": "整站负荷跟踪/燃气流量/温度/储能配置实测",
+   "baseline": "缺失（仅堆级 4.6%/s）",
+   "threshold": "MW 级公开负荷跟踪曲线与储能协同数据",
+   "linked_bottleneck": "bottle-degradation-multi",
+   "meaning": "AIDC 混合供电架构可优化"
+  },
+  {
+   "id": "sig-carbon-audit",
+   "name": "天然气碳核算第三方化",
+   "type": "event",
+   "watching": "项目级 kgCO2e/kWh 核验",
+   "baseline": "产品口径已有（308-378 kgCO2/MWh）",
+   "threshold": "第三方项目级核算并含甲烷上游",
+   "linked_bottleneck": "bottle-gas-carbon",
+   "meaning": "碳价值可与电网/燃机比较"
+  },
+  {
+   "id": "sig-partner-risk",
+   "name": "授权伙伴退出风险",
+   "type": "event_negative",
+   "watching": "重大伙伴退出或项目取消",
+   "baseline": "Bosch 2025 年退出 SOFC 活动",
+   "threshold": "新的重大伙伴退出或项目取消",
+   "linked_bottleneck": "bottle-financing-concentration",
+   "meaning": "下调授权生态和规划产能置信度（负向信号）"
+  },
+  {
+   "id": "sig-patent-hotspot",
+   "name": "Bloom 专利新方向（专利地图补充信号）",
+   "type": "trend",
+   "watching": "2024+ 新专利的技术方向分布",
+   "baseline": "热应力 2 件、密封 2 件、脱硫 1 件（2024）",
+   "threshold": "某工程难题方向连续两年出 ≥3 件专利 = 该卡点仍未闭合且在集中攻关；反之专利断档 + 良率披露改善 = 可能已闭合",
+   "linked_bottleneck": "bottle-degradation-multi",
+   "meaning": "专利密度是'工程卡点是否仍在攻关'的独立证据源（与文献信号互证）"
+  },
+  {
+   "id": "sig-customer-diversification",
+   "name": "客户集中度下降与授权生态兑现",
+   "type": "trend",
+   "watching": "前三大客户收入占比 + 授权伙伴持续销售",
+   "baseline": "头部客户集中度较高；Doosan 已量产、Weichai/Delta 推进",
+   "threshold": "前三大客户占比持续下降；≥3 个授权伙伴形成持续产品销售和版税",
+   "linked_bottleneck": "bottle-financing-concentration",
+   "meaning": "需求从大单驱动转为可复制市场；IP 授权模式跨过规模验证"
+  },
+  {
+   "id": "sig-pcfc-performance",
+   "name": "质子陶瓷路线性能记录",
+   "type": "trend",
+   "watching": "PCFC 功率密度与热循环稳定性记录",
+   "baseline": "1.44 W/cm² @650℃（亚稳纳米相，2026-07）；1.73 W/cm² @700℃（Nd 掺杂阴极）",
+   "threshold": "MW 级 PCFC 系统示范出现，或热循环稳定性进入产品规格",
+   "linked_route": "route-pcce",
+   "meaning": "route-pcce 从研发-中试向量产可行性移动（路线级信号：提取观测时反向发现，§7 原表未覆盖）"
+  }
+ ]
+}

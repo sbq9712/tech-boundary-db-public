@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "技术边界判断树（竖井 schema v0.1）",
+  "description": "ADR-0005/0006/0007/0008/0009 的代码化。判断树是散点认知层，权威版本在知识库文档。",
+  "type": "object",
+  "required": ["domain", "industry_judgment", "routes", "bottlenecks", "indicators"],
+  "properties": {
+    "domain": {
+      "type": "string",
+      "description": "领域名，如 SOFC。行业判断挂此层。"
+    },
+    "source_docs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "权威文档路径（ADR-0009：文档是核心资产）"
+    },
+    "as_of": { "type": "string", "description": "证据截至日" },
+    "industry_judgment": {
+      "type": "object",
+      "description": "行业判断（ADR-0007 三段式）",
+      "required": ["conclusion", "supporting_refs", "inflection_criteria"],
+      "properties": {
+        "conclusion": { "type": "string", "description": "结论" },
+        "supporting_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "论据：引用的路线判断/卡点节点 id"
+        },
+        "inflection_criteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["condition", "meaning"],
+            "properties": {
+              "condition": { "type": "string", "description": "当 X 出现 Y 变化" },
+              "meaning": { "type": "string", "description": "行业因 Z 基本面变化迎来拐点" },
+              "signal_ref": { "type": "string", "description": "对应的信号规格 id（行业级预警谓词）" }
+            }
+          }
+        },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "binding_constraint": {
+          "type": "string",
+          "description": "约束性卡点 id（ADR-0008：两侧一起找，只选一个，须过审）"
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "description": "路线判断（可省略层：无路线分叉的领域不需要）",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "judgment"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "judgment": { "type": "string", "description": "该路线的综合判断" },
+          "maturity": { "type": "string", "description": "成熟度描述（基础研究/中试/示范/商业扩张等）" },
+          "bottleneck_refs": { "type": "array", "items": { "type": "string" } },
+          "doc_anchor": { "type": "string", "description": "文档出处锚点（ADR-0009）" }
+        }
+      }
+    },
+    "bottlenecks": {
+      "type": "array",
+      "description": "卡点判断（技术侧四维 / 系统侧四类，ADR-0006/0008）",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "side", "nature", "statement", "evidence_refs"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "side": { "enum": ["technical", "system"] },
+          "nature": {
+            "oneOf": [
+              { "enum": ["physical", "engineering", "economic", "epistemic"] },
+              { "enum": ["regulatory", "supply_chain", "ecosystem", "social_acceptance"] }
+            ],
+            "description": "技术侧：physical/engineering/economic/epistemic；系统侧：regulatory/supply_chain/ecosystem/social_acceptance"
+          },
+          "statement": { "type": "string", "description": "卡点现状陈述" },
+          "breakthrough_form": { "type": "string", "description": "突破形态（由 nature 驱动）" },
+          "evidence_refs": { "type": "array", "items": { "type": "string" }, "description": "证据编号（文档 §5 或观测 id）" },
+          "doc_anchor": { "type": "string" },
+          "status": { "enum": ["active", "resolved", "weakening", "worsening"], "description": "卡点状态" },
+          "binding": { "type": "boolean", "description": "是否约束性卡点（须过审，ADR-0008）" }
+        }
+      }
+    },
+    "indicators": {
+      "type": "array",
+      "description": "指标边界节点（数值型知识）",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "current", "commercial_requirement"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "current": { "type": "string", "description": "当前实测/披露值（含口径）" },
+          "theoretical_limit": { "type": "string", "description": "理论边界（物理类才有）" },
+          "commercial_requirement": { "type": "string", "description": "场景需求值" },
+          "gap_nature": { "type": "string" },
+          "data_status": { "enum": ["verified", "disclosed", "missing", "disputed"] },
+          "doc_anchor": { "type": "string" }
+        }
+      }
+    },
+    "cross_domain_tech": {
+      "type": "array",
+      "description": "共性技术边（§4 的提取，跨行业）",
+      "items": {
+        "type": "object",
+        "required": ["name", "sofc_specific", "linked_domains"],
+        "properties": {
+          "name": { "type": "string" },
+          "sofc_specific": { "type": "string", "description": "在 SOFC 中的特殊要求" },
+          "linked_domains": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "to_verify": {
+      "type": "array",
+      "description": "待核实清单（§6）——覆盖度的显式记录（ADR-0006 措辞纪律）",
+      "items": { "type": "string" }
+    }
+  }
+}

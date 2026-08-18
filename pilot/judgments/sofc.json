@@ -1,0 +1,249 @@
+{
+  "domain": "SOFC",
+  "source_docs": [
+    "SOC/SOFC行业深度报告.md (v2.3, validated, 2026-07-20)",
+    "SOC/SOC知识库_阶段性整理.md (2026-05-26, SOEC 部分仅作邻接参考)",
+    "SOC/Bloom_Energy专利/专利地图.md (2026-06-08, 专利信号源)"
+  ],
+  "as_of": "2026-07-20",
+  "industry_judgment": {
+    "conclusion": "SOFC 已进入分层商业化，而非笼统的'商业化前夜'：大型现场发电（Bloom 千站级、20 亿美元收入）和日本住宅 CHP（55% 效率、12 年设计期）已有可验证市场；第二梯队（Doosan/Elcogen/潍柴）在量产爬坡。下一阶段胜负不取决于单片电池峰值性能，而取决于寿命、服务成本、制造良率、系统集成与项目融资能否同时闭环。",
+    "supporting_refs": ["route-platelet-ceramic", "route-metal-supported", "route-tubular", "route-hybrid-pressurized", "route-pcce", "bottle-opaque-tco", "bottle-degradation-multi", "bottle-manufacturing-yield", "bottle-bop-thermal", "bottle-gas-carbon", "bottle-financing-concentration"],
+    "inflection_criteria": [
+      {
+        "condition": "AEP 框架累计交付 ≥500MW 且跨多个项目运行",
+        "meaning": "数据中心从需求叙事升级为规模市场",
+        "signal_ref": "sig-aep-delivery"
+      },
+      {
+        "condition": "≥3 家厂商、≥40,000 小时、同口径退化与更换的独立寿命数据库出现",
+        "meaning": "可完成跨厂商寿命比较，TCO 从推断升级为可验证（经济性判断质变）",
+        "signal_ref": "sig-life-database"
+      },
+      {
+        "condition": "≥3 个项目公开全边界 $/kW 及 $/MWh",
+        "meaning": "经济性由推断升级为可验证",
+        "signal_ref": "sig-tco-transparent"
+      },
+      {
+        "condition": "中国同一标准产品跨 ≥10 个项目复用且有复购",
+        "meaning": "中国从示范进入早期商业化",
+        "signal_ref": "sig-china-repeat-orders"
+      },
+      {
+        "condition": "前三大客户收入占比持续下降 + ≥3 个授权伙伴形成持续产品销售",
+        "meaning": "需求从大单驱动转为可复制市场，IP 授权模式跨过规模验证",
+        "signal_ref": "sig-customer-diversification"
+      }
+    ],
+    "confidence": "medium",
+    "binding_constraint": "bottle-opaque-tco"
+  },
+  "routes": [
+    {
+      "id": "route-platelet-ceramic",
+      "name": "陶瓷支撑平板式 SOFC（600-800°C）",
+      "judgment": "商业化主路线。功率密度高、制造相对成熟、易模块化；受陶瓷脆性、热循环、密封和批次良率约束。Bloom、Elcogen 及多家系统商采用。",
+      "maturity": "商业扩张",
+      "bottleneck_refs": ["bottle-degradation-multi", "bottle-manufacturing-yield", "bottle-bop-thermal"],
+      "doc_anchor": "§1 技术路线表第1行"
+    },
+    {
+      "id": "route-metal-supported",
+      "name": "金属支撑中温 SOFC（450-630°C）",
+      "judgment": "量产导入期。机械强度、快速响应、低成本金属部件与自动化潜力；受金属氧化、界面匹配、长期耐久和规模良率约束。Ceres/Doosan 生态代表（50MW 工厂已投产）。",
+      "maturity": "量产导入",
+      "bottleneck_refs": ["bottle-manufacturing-yield", "bottle-opaque-tco"],
+      "doc_anchor": "§1 技术路线表第2行"
+    },
+    {
+      "id": "route-tubular",
+      "name": "管式/扁管式 SOFC（700-1000°C）",
+      "judgment": "密封边界较少、热机械稳健；体积功率密度和制造节拍受限。日本住宅 CHP 已验证（Aisin 55% 效率、12 年设计期）。",
+      "maturity": "成熟细分（住宅）",
+      "bottleneck_refs": [],
+      "doc_anchor": "§1 技术路线表第3行"
+    },
+    {
+      "id": "route-hybrid-pressurized",
+      "name": "加压 SOFC-燃气轮机混合（~900°C）",
+      "judgment": "系统效率更高、适合工业 CHP；系统复杂、启停慢、控制与维护成本高。三菱重工 250kW 级长期积累，商业复制弱于技术验证。",
+      "maturity": "工业示范",
+      "bottleneck_refs": ["bottle-bop-thermal"],
+      "doc_anchor": "§1 技术路线表第4行"
+    },
+    {
+      "id": "route-pcce",
+      "name": "质子陶瓷/低温固体氧化物（400-600°C）",
+      "judgment": "有望降低材料和密封负担、改善启停；电解质致密化、界面稳定、规模制造尚未成熟。研发至中试，不计入当前 SOFC 基准产能。",
+      "maturity": "研发-中试",
+      "bottleneck_refs": [],
+      "doc_anchor": "§1 技术路线表第5行"
+    },
+    {
+      "id": "route-rsoc",
+      "name": "可逆 SOC（SOFC/SOEC 切换）",
+      "judgment": "平台期权而非收入延伸：共用材料与制造，但循环工况、Ni 迁移、气体管理和经济调度更复杂。SOEC 的 GW 规划不能给 SOFC 估值。",
+      "maturity": "示范/早期商业",
+      "bottleneck_refs": [],
+      "doc_anchor": "§1 技术路线表第6行；§0 修正第1条"
+    }
+  ],
+  "bottlenecks": [
+    {
+      "id": "bottle-opaque-tco",
+      "name": "全生命周期成本不透明（寿命/服务/更换无统一口径）",
+      "side": "technical",
+      "nature": "economic",
+      "statement": "企业披露可用率或设计寿命，但不同时披露堆退化曲线、降额、更换间隔、计划停机和每 kW 年服务费——采购方无法重建 TCO。这是当前最大信息缺口：不是理论效率，而是成本证据。跨厂商可比 CAPEX、堆更换费用和服务成本全部缺失。",
+      "breakthrough_form": "成本证据过线：第三方核验的 ≥5 年客户侧输出、堆更换、降额和服务成本数据库出现，可跨厂商比较",
+      "evidence_refs": ["E01", "E05", "E06", "§0.5 经济性行"],
+      "doc_anchor": "§3.1；§7 行2-3",
+      "status": "active",
+      "binding": true
+    },
+    {
+      "id": "bottle-degradation-multi",
+      "name": "高温多机制退化（无唯一硬卡点）",
+      "side": "technical",
+      "nature": "engineering",
+      "statement": "长期运行同时受 Cr 中毒、连接体氧化、密封老化、燃料硫/硅污染、Ni 粗化、积碳、氧化还原循环和热应力影响。退化机制随材料体系、温度、燃料和工况变化。旧 dashboard 的 Ni 迁移主要来自 SOEC 电解模式，不能替代 SOFC 全栈退化分析。",
+      "breakthrough_form": "学习曲线：真实燃料杂质和启停循环下系统级退化稳定 <0.2%/1000h 且持续 >40,000h",
+      "evidence_refs": ["E12", "E14", "专利地图·工程难题组（2024 年 5 件热应力/密封专利=仍在攻关）"],
+      "doc_anchor": "§3.2；§2 退化率行",
+      "status": "active",
+      "binding": false
+    },
+    {
+      "id": "bottle-manufacturing-yield",
+      "name": "制造良率与工艺 know-how",
+      "side": "technical",
+      "nature": "engineering",
+      "statement": "主材料（NiO/YSZ/LSCF）不是稀缺品；真正壁垒是浆料、烧结曲线、在线检测、设备节拍和质量追溯的工艺 know-how。大面积薄层共烧、翘曲/裂纹、气密性、接触电阻、涂层均匀性共同决定良率。",
+      "breakthrough_form": "学习曲线：企业披露稳定产线良率、单位工时、产能利用率、质保返修率和连续两代产品成本下降",
+      "evidence_refs": ["E07", "E08", "E10", "Whiston 2019（BOS 成本是电芯 2 倍）"],
+      "doc_anchor": "§3.3",
+      "status": "active",
+      "binding": false
+    },
+    {
+      "id": "bottle-bop-thermal",
+      "name": "BOP 与热管理决定系统可复制性",
+      "side": "technical",
+      "nature": "engineering",
+      "statement": "重整器、脱硫、换热器、鼓风机、尾气处理、密封、电力电子和控制须在高温连续工况下协同。单项设备不新，但不同燃料/热负荷/海拔/并离网架构改变整机设计，标准化程度低。",
+      "breakthrough_form": "同一标准平台在 ≥3 个国家多个应用复用，交付周期、调试工时和故障率持续下降",
+      "evidence_refs": ["专利地图·燃料处理 8 件（脱硫/重整/尾气仍在出专利）", "E13"],
+      "doc_anchor": "§3.4",
+      "status": "active",
+      "binding": false
+    },
+    {
+      "id": "bottle-gas-carbon",
+      "name": "天然气依赖：商业优势同时是碳约束",
+      "side": "technical",
+      "nature": "economic",
+      "statement": "最成熟商业路径依赖天然气基础设施（308-378 kgCO2/MWh）。'非燃烧'不能转写为'零碳'。氢、沼气和 CCUS 各自引入燃料成本与基础设施问题。碳价值必须与可靠性价值、能源效率价值分开核算。",
+      "breakthrough_form": "第三方项目级 kgCO2e/kWh 核验（含甲烷上游）+ 低碳燃料长期合同出现",
+      "evidence_refs": ["E02", "§0.5 碳属性行"],
+      "doc_anchor": "§3.5；§2 碳强度行",
+      "status": "active",
+      "binding": false
+    },
+    {
+      "id": "bottle-financing-concentration",
+      "name": "项目融资与客户集中",
+      "side": "system",
+      "nature": "ecosystem",
+      "statement": "大型现场电源需要长期购电/服务合同、信用强的客户和融资方；头部企业收入客户集中明显。扩产先于稳定订单放大固定成本，订单框架可能分期/延后/取消。技术合格不自动转化为可融资资产——Bloom-AEP/Brookfield、Ceres-Centrica 正在把技术+渠道+燃料+资本组合成项目产品。",
+      "breakthrough_form": "制度事件：1GW 框架转化为持续交付、多客户收入占比提高、项目融资不再依赖少数战略伙伴",
+      "evidence_refs": ["E01", "E05", "§7 行1/11/12"],
+      "doc_anchor": "§3.6",
+      "status": "active",
+      "binding": false
+    }
+  ],
+  "indicators": [
+    {
+      "id": "ind-net-efficiency",
+      "name": "净交流电效率",
+      "current": "Bloom 全项目期约 65%-53%；Aisin 住宅机 55%（LHV，口径不同）",
+      "theoretical_limit": "不存在脱离燃料/温度/重整/辅机的统一单值",
+      "commercial_requirement": "现场连续供电 55%-65% LHV 对标区间",
+      "gap_nature": "已达产品门槛，缺独立同口径横评",
+      "data_status": "disclosed",
+      "doc_anchor": "§2 行1"
+    },
+    {
+      "id": "ind-availability",
+      "name": "整站可用率",
+      "current": "Bloom 披露非冗余约 99.9%、冗余后接近 99.999%（2020 后机队）",
+      "theoretical_limit": "数学上限 100%；实际由模块冗余、维护和燃料保障决定",
+      "commercial_requirement": "关键负载 99.99%-99.999%（瞬态由 UPS/BESS 覆盖）",
+      "gap_nature": "冗余架构已达关键负载区间，需项目级核验",
+      "data_status": "disclosed",
+      "doc_anchor": "§2 行3"
+    },
+    {
+      "id": "ind-stack-life",
+      "name": "电堆现场寿命",
+      "current": "Ceres 5 年目标；Aisin 12 年系统设计期；缺跨厂商堆级实绩",
+      "theoretical_limit": "材料退化不可为零，只能减缓和可维护化",
+      "commercial_requirement": "主电源合同至少 5 年或 40,000 小时 + 期末输出保证",
+      "gap_nature": "缺同口径长期实绩（目标值/设计期/堆寿命/可更换维护口径不一）",
+      "data_status": "missing",
+      "doc_anchor": "§2 行5"
+    },
+    {
+      "id": "ind-degradation-rate",
+      "name": "系统退化率",
+      "current": "缺跨厂商、真实燃料、同口径公开数据",
+      "theoretical_limit": "理论最低 0，真实高温材料体系无法长期零退化",
+      "commercial_requirement": "<0.2%/1,000h 持续 ≥40,000h",
+      "gap_nature": "证据缺失，非物理不可达",
+      "data_status": "missing",
+      "doc_anchor": "§2 行6"
+    },
+    {
+      "id": "ind-load-following",
+      "name": "系统负荷跟踪",
+      "current": "Ceres 披露堆级约 4.6%/s；缺 MW 级整站公开曲线",
+      "theoretical_limit": "电化学响应可快于热系统；不存在脱离 BOP 的统一速率",
+      "commercial_requirement": "UPS 侧毫秒级；发电侧秒级至分钟级平滑",
+      "gap_nature": "堆级能力与整站数据之间存在验证差距",
+      "data_status": "missing",
+      "doc_anchor": "§2 行4"
+    },
+    {
+      "id": "ind-carbon-intensity",
+      "name": "天然气发电碳强度",
+      "current": "Bloom 规格约 308-378 kgCO2/MWh",
+      "theoretical_limit": "天然气路径不可能为 0；无碳燃料时现场下限接近 0",
+      "commercial_requirement": "零碳电源采购要求接近 0",
+      "gap_nature": "理论不可达（不换燃料/不加 CCUS）",
+      "data_status": "verified",
+      "doc_anchor": "§2 行8"
+    }
+  ],
+  "cross_domain_tech": [
+    { "name": "陶瓷材料与薄层制造", "sofc_specific": "粉体一致性、浆料、烧结、缺陷检测是壁垒", "linked_domains": ["其它先进材料"] },
+    { "name": "连接体涂层与密封", "sofc_specific": "Cr 挥发毒化空气极；玻璃陶瓷密封定寿命", "linked_domains": ["氢基能源"] },
+    { "name": "燃料处理与热集成", "sofc_specific": "'燃料灵活'须整机认证而非材料兼容推断", "linked_domains": ["氢基能源", "AIDC"] },
+    { "name": "高压直流功率电子", "sofc_specific": "800V 级直流接口连接数据中心/储能", "linked_domains": ["AIDC", "储能"] },
+    { "name": "远程运维与预测诊断", "sofc_specific": "把不可避免的材料退化为可管理服务成本", "linked_domains": [] }
+  ],
+  "to_verify": [
+    "≥3 家同口径项目报价（设备/土建/燃气/并网/冗余/维保/堆更换责任）",
+    "≥2 个 MW 级项目连续 36 个月客户侧记录（单堆与整站口径分列）",
+    "AEP 1GW 框架中已交付/在建/已取消/未下单容量核验",
+    "Bloom 1→2GW 扩产完成度、产能利用率、单位制造成本和良率",
+    "Doosan 50MW 与 Elcogen 360MW 的实际出货、客户结构、质保数据",
+    "潍柴 25/100kW 连续运行小时、净效率口径、堆更换与复购",
+    "Ceres Endura 五年堆寿命、>65% 效率与降本三分之一的测试边界及第三方验证",
+    "数据中心场景 SOFC+UPS/BESS+电网实测功率曲线",
+    "统一 LHV/HHV、净/毛、寿命初/末期口径的效率数据库",
+    "天然气/沼气/氢/CCUS 分别核算 kgCO2e/kWh",
+    "连接体/涂层/密封/燃料净化/高温换热器供应商与验证时长清单",
+    "设备商/集成商/业主/设计院/融资方多方访谈（技术、采购、融资视角分开）"
+  ]
+}
