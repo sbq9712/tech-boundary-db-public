@@ -3,9 +3,9 @@
  "source_docs": [
   "核电/核电_核聚变商业化进展_技术边界.md (v1.0, 2026-07-03)"
  ],
- "as_of": "2026-08-18（联网核实后更新）",
+ "as_of": "2026-08-19（用户批准三项改判）",
  "industry_judgment": {
-  "conclusion": "尚未有任何装置实现持续净能量输出并发电。NIF 惯性约束实现 Q_plasma>1（2022，科学盈亏平衡，非工程），磁约束纪录 JET 69MJ/6s（Q~0.33，2024）。私营路线（CFS/SPARC 2027 验证 Q>1 → ARC 2030s 并网 400MWe）是最乐观时间线；ITER Q≥10 推迟至 2044。'经济可行'的商业聚变更远。行业时钟由技术侧卡点走（等离子体验证→材料→氚自持），系统侧（氚供应链、监管许可）开始进入视野但不是当前约束。",
+  "conclusion": "尚未有任何装置实现持续净能量输出并发电。NIF 惯性约束实现 Q_plasma>1（2022，科学盈亏平衡，非工程），磁约束纪录 JET 69MJ/6s（Q~0.33，2024）。私营路线（CFS/SPARC 首放电 2026、Q>1 目标 2026 末-2027 初（2026-08-18 核实，较原计划提前）→ ARC 2030s 并网 400MWe）是最乐观时间线，且 CFS×DeepMind/NVIDIA 的 AI 控制合作正把认知论主卡点推向黑箱解法；ITER Q≥10 推迟至 2044。'经济可行'的商业聚变更远。行业时钟由技术侧卡点走（等离子体验证→材料→氚自持），系统侧（氚供应链、监管许可）开始进入视野但不是当前约束。",
   "supporting_refs": [
    "route-tokamak",
    "route-stellarator",
@@ -291,6 +291,18 @@
    "date": "2026-08-18",
    "method": "web",
    "items": "BABY 1L / Helion 许可 / Proxima 融资 / SPARC 进度 / 中国磁体 / ITER 基线 / Helion 燃料策略"
+  }
+ ],
+ "review_log": [
+  {
+   "date": "2026-08-19",
+   "reviewer": "user",
+   "items": [
+    "bottle-plasma-control nature=epistemic 改判批准",
+    "行业判断时间线句更新批准（SPARC 2026）",
+    "bottle-tritium conditional_on 扩大至含 Helion（D-T 过渡）批准"
+   ],
+   "status": "approved"
   }
  ]
 }

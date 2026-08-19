@@ -5,7 +5,7 @@
   "SOC/SOC知识库_阶段性整理.md (2026-05-26, SOEC 部分仅作邻接参考)",
   "SOC/Bloom_Energy专利/专利地图.md (2026-06-08, 专利信号源)"
  ],
- "as_of": "2026-08-18（联网核实后更新）",
+ "as_of": "2026-08-19（用户批准约束性卡点判定）",
  "industry_judgment": {
   "conclusion": "SOFC 已进入分层商业化，而非笼统的'商业化前夜'：大型现场发电（Bloom 千站级、20 亿美元收入）和日本住宅 CHP（55% 效率、12 年设计期）已有可验证市场；第二梯队（Doosan/Elcogen/潍柴）在量产爬坡。下一阶段胜负不取决于单片电池峰值性能，而取决于寿命、服务成本、制造良率、系统集成与项目融资能否同时闭环。",
   "supporting_refs": [
@@ -343,6 +343,16 @@
    "date": "2026-08-18",
    "method": "web",
    "items": "AEP 1GW 扩单 / Bloom 电堆寿命与服务成本 / Doosan-Elcogen 产能"
+  }
+ ],
+ "review_log": [
+  {
+   "date": "2026-08-19",
+   "reviewer": "user",
+   "items": [
+    "binding_constraint=bottle-opaque-tco 确认（备选融资集中被排除）"
+   ],
+   "status": "approved"
   }
  ]
 }
