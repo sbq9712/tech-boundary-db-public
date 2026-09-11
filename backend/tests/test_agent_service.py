@@ -61,7 +61,8 @@ def test_citation_normalization_matches_github_frontend_contract():
 
 
 def test_resolve_model_accepts_only_configured_models(monkeypatch):
-    monkeypatch.setattr(agent_service, "AI_ALLOWED_MODELS", ["company-model"])
+    monkeypatch.setattr(agent_service, "get_available_models",
+                        lambda: {"default_model": "company-model", "models": ["company-model"]})
     assert resolve_model("company-model") == "company-model"
 
 

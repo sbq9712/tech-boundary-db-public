@@ -21,13 +21,14 @@ from sqlalchemy.orm import Session
 
 from app.models.conversation import ConversationAgentRun, ConversationMessage, ConversationSession
 from app.services.github_qa import QAServiceError, search_canonical
+from app.services.model_catalog import get_catalog
 
 
 logger = logging.getLogger(__name__)
 
 AI_API_KEY = os.getenv("TECHDB_AGENT_API_KEY", "").strip()
-AI_BASE_URL = os.getenv("TECHDB_AGENT_BASE_URL", "https://aigate.catl.com/v1").rstrip("/")
-AI_MODEL = os.getenv("TECHDB_AGENT_MODEL", "GLM-5.2")
+AI_BASE_URL = os.getenv("TECHDB_AGENT_BASE_URL", "").strip().rstrip("/")
+AI_MODEL = os.getenv("TECHDB_AGENT_MODEL", "").strip()
 AI_TIMEOUT = int(os.getenv("TECHDB_AGENT_AI_TIMEOUT_SECONDS", "180"))
 AI_MAX_RETRIES = int(os.getenv("TECHDB_AGENT_MAX_RETRIES", "2"))
 AI_RETRY_BASE_DELAY_SECONDS = float(os.getenv("TECHDB_AGENT_RETRY_BASE_DELAY_SECONDS", "2"))
@@ -48,31 +49,20 @@ SHORT_EXPANSION_MARKERS = ("详细", "展开", "继续", "补充", "深入", "�
 
 
 def _parse_allowed_models() -> list[str]:
-    raw = os.getenv("TECHDB_AGENT_ALLOWED_MODELS", "")
-    configured = [item.strip() for item in raw.split(",") if item.strip()]
-    if configured:
-        defaults = configured
-    elif "z.ai" in AI_BASE_URL.lower():
-        defaults = ["glm-5.2", "glm-5.1", "glm-4.5-flash"]
-    else:
-        defaults = ["GLM-5.2", "GLM-5.1", "Kimi-K2.6", "DeepSeek-V4-Pro", "MiniMax-M2.7"]
-    models: list[str] = []
-    for model in [AI_MODEL, *defaults]:
-        if model and model not in models:
-            models.append(model)
-    return models
-
-
-AI_ALLOWED_MODELS = _parse_allowed_models()
+    return list(dict.fromkeys(
+        item.strip() for item in os.getenv("TECHDB_AGENT_ALLOWED_MODELS", "").split(",")
+        if item.strip()
+    ))
 
 
 def get_available_models() -> dict:
-    return {"default_model": AI_MODEL, "models": AI_ALLOWED_MODELS}
+    return get_catalog(AI_BASE_URL, AI_API_KEY, AI_MODEL, _parse_allowed_models())
 
 
 def resolve_model(selected_model: str | None) -> str:
-    model = (selected_model or AI_MODEL).strip()
-    if model not in AI_ALLOWED_MODELS:
+    catalog = get_available_models()
+    model = (selected_model or catalog["default_model"] or "").strip()
+    if model not in catalog["models"]:
         raise ValueError(f"Unsupported model: {model}")
     return model
 
