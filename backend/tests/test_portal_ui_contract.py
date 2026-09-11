@@ -121,6 +121,8 @@ def test_home_exposes_persisted_conversations_in_sidebar():
     assert "sidebar-retrieval-status" not in css
     assert ".qa-message.user{justify-content:flex-end}" in css
     assert ".qa-message.assistant{justify-content:flex-start}" in css
+    assert ".qa-message-content{min-width:0}" in css
+    assert ".qa-message.user .qa-message.user" not in css
     assert "TECHDB_QA_SERVICE_URL" not in js
     assert "regenerate,retry" in js
     assert ".sidebar-conversation-list" in css

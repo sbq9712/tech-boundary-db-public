@@ -1848,7 +1848,7 @@ a:hover{color:var(--brand-lighter)}
 .qa-example-questions button:hover{border-color:var(--brand-border);color:var(--brand);background:var(--brand-bg)}
 .qa-message{display:flex;gap:0;padding:12px 4px;border-bottom:1px solid var(--border-subtle)}
 .qa-message:last-child{border-bottom:0}
-.qa-message.user .qa-message-content{min-width:0}
+.qa-message-content{min-width:0}
 .qa-message.user{justify-content:flex-end}
 .qa-message.assistant{justify-content:flex-start}
 .qa-message.user .qa-message-content{flex:0 1 auto;max-width:min(78%,680px);margin-left:auto;text-align:right}
@@ -1922,7 +1922,7 @@ a:hover{color:var(--brand-lighter)}
 .conversation-history .qa-message{
   padding:14px 4px;
 }
-.qa-message.user .qa-message.user .qa-message-bubble{
+.qa-message.user .qa-message-bubble{
   background:var(--brand-bg);
   border:1px solid var(--brand-border);
   border-radius:var(--radius-md);
