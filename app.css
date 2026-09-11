@@ -2138,12 +2138,13 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
   border-radius:var(--radius-lg);
   box-shadow:0 24px 56px rgba(16,24,40,.16),0 6px 18px rgba(16,24,40,.08);
   overflow:hidden;
-  transition:transform .26s cubic-bezier(.2,.7,.3,1),visibility .26s,box-shadow .26s;
-  animation:homeDrawerIn .28s cubic-bezier(.2,.7,.3,1);
+  transition:transform .3s cubic-bezier(.2,.7,.3,1),opacity .24s ease,visibility .3s,box-shadow .3s;
+  animation:homeDrawerIn .32s cubic-bezier(.2,.7,.3,1);
 }
-@keyframes homeDrawerIn{from{transform:translateX(26px);opacity:0}to{transform:none;opacity:1}}
+@keyframes homeDrawerIn{from{transform:translateX(calc(100% + 24px));opacity:0}to{transform:none;opacity:1}}
 .home-body.drawer-collapsed .home-drawer{
-  transform:translateX(101%);
+  transform:translateX(calc(100% + 24px));
+  opacity:0;
   visibility:hidden;
   box-shadow:none;
   animation:none;
@@ -2184,33 +2185,66 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
   padding:14px 14px 18px;
 }
 .home-drawer-body .home-section{flex-shrink:0;box-shadow:none}
+/* ── 面板内部按钮比例：与 16px 节标题、26px 收起把手同一比例系统 ── */
+.home-drawer .home-section-link{
+  display:inline-flex;
+  align-items:center;
+  height:26px;
+  padding:0 12px;
+  border:1px solid var(--brand-border);
+  border-radius:999px;
+  background:var(--bg-canvas);
+  color:var(--brand);
+  font:600 11.5px/1 inherit;
+  transition:background .15s,border-color .15s;
+}
+.home-drawer .home-section-link:hover{background:var(--brand-bg);color:var(--brand)}
+.home-drawer .home-boundary-card{
+  gap:0;
+}
+.home-drawer .boundary-card-action{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  margin-top:10px;
+  padding:6px 10px 6px 11px;
+  border:1px solid var(--border-standard);
+  border-radius:8px;
+  align-self:flex-start;
+  color:var(--brand);
+  font-size:11px;
+  font-weight:600;
+  line-height:1;
+  transition:border-color .15s,background .15s;
+}
+.home-boundary-card:hover .boundary-card-action{border-color:var(--brand-border);background:var(--brand-bg)}
+.home-drawer .home-alert-table th{font-size:11.5px}
 .home-drawer .home-boundary-grid{grid-template-columns:1fr;overflow-x:visible}
 .home-drawer .home-alert-table-wrap{overflow-x:auto}
 .home-drawer .home-alert-table{min-width:520px}
 .home-drawer-tab{
   position:absolute;
-  right:0;
+  right:24px;
   top:50%;
   transform:translateY(-50%);
-  z-index:29;
+  z-index:31;
   display:none;
   align-items:center;
   gap:9px;
   writing-mode:vertical-rl;
   padding:18px 9px;
   border:1px solid var(--brand-border);
-  border-right:0;
-  border-radius:999px 0 0 999px;
+  border-radius:999px;
   background:var(--bg-canvas);
   color:var(--brand);
   font:600 12px/1.35 inherit;
   letter-spacing:.16em;
-  box-shadow:-8px 0 22px rgba(94,106,210,.14);
+  box-shadow:0 10px 26px rgba(94,106,210,.2);
   cursor:pointer;
-  transition:background .15s,box-shadow .15s;
+  transition:background .15s,box-shadow .15s,transform .15s;
 }
 .home-drawer-tab svg{width:13px;height:13px}
-.home-drawer-tab:hover{background:var(--brand-bg);box-shadow:-10px 0 26px rgba(94,106,210,.2)}
+.home-drawer-tab:hover{background:var(--brand-bg);box-shadow:0 12px 30px rgba(94,106,210,.26);transform:translateY(-50%) scale(1.03)}
 .home-drawer-tab:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .home-body.drawer-collapsed .home-drawer-tab{display:inline-flex}
 @media(prefers-reduced-motion:reduce){
@@ -2221,5 +2255,6 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
   .home-body{--drawer-w:min(86vw,460px)}
   .home-drawer{top:12px;right:12px;bottom:12px}
   .home-drawer-collapse{top:50%;right:calc(12px + var(--drawer-w))}
+  .home-drawer-tab{right:12px}
   .home-drawer-tab{top:auto;bottom:24px;transform:none}
 }
