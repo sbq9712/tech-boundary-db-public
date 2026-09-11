@@ -118,9 +118,10 @@ function syncMapHorizontalBar(){
 }
 function initMapHorizontalScroll(){
   const scroller=document.getElementById('industryTree');
+  if(!scroller)return;
   const track=document.getElementById('mapXScroll');
   const thumb=document.getElementById('mapXThumb');
-  if(!scroller||!track||!thumb)return;
+  if(track&&thumb){
   scroller.onscroll=syncMapHorizontalBar;
   track.onpointerdown=event=>{
     if(track.classList.contains('disabled'))return;
@@ -145,20 +146,26 @@ function initMapHorizontalScroll(){
       track.onpointercancel=null;
     };
   };
+  }
   let dragging=false;
   let startX=0;
+  let startY=0;
   let startScroll=0;
+  let startTop=0;
   scroller.onpointerdown=event=>{
     if(event.target.closest('a,button,summary,input'))return;
     dragging=true;
     startX=event.clientX;
+    startY=event.clientY;
     startScroll=scroller.scrollLeft;
+    startTop=scroller.scrollTop;
     scroller.classList.add('dragging');
     scroller.setPointerCapture(event.pointerId);
   };
   scroller.onpointermove=event=>{
     if(!dragging)return;
     scroller.scrollLeft=startScroll-(event.clientX-startX);
+    scroller.scrollTop=startTop-(event.clientY-startY);
   };
   scroller.onpointerup=scroller.onpointercancel=()=>{
     dragging=false;
@@ -398,7 +405,7 @@ function sourcesView(){
   const tabsHtml=tabs.map(t=>`<button class="bookmark-tab ${tab===t?'active':''}" data-src-tab="${t}">${t} <span style="opacity:.6;font-size:11px">${SOURCE_LIST.filter(s=>s[2]===t).length}</span></button>`).join('');
   return `<section class="panel content-panel"><h1 class="section-title">按信息类型浏览 ${SOURCE_LIST.length} 个信息源，持续追踪产业动态、学术前沿和行业研究</h1><div class="bookmark-tabs" style="margin-bottom:20px">${tabsHtml}</div><div id="sourceGroupsContent">${groupsHtml}</div></section>`;
 }
-function mapView(){const state=parseHash();const group=state.params.get('group')||'zero-carbon';const tabs=[["zero-carbon","零碳产业"],["ai-intelligent","AI与智能科技"],["general-tech","通用技术"]];const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};return `<section class="flat-content map-content-panel"><div class="map-head"><div><h1 class="section-title">追求完备而互斥</h1></div><div class="map-tools"><input id="mapSearch" value="${escapeHtml(mapSearchDraft)}" placeholder="搜索节点" aria-label="搜索行业图景节点"/><button class="secondary-btn" id="mapExpandAll" type="button">展开全部</button><button class="secondary-btn" id="mapCollapse" type="button">折叠到二级</button></div></div><div class="bookmark-tabs">${tabs.map(([key,label])=>`<button class="bookmark-tab ${group===key?'active':''}" data-map-group="${key}">${label}</button>`).join('')}</div><div class="map-shell"><header class="map-summary"><strong>${titleMap[group]||'零碳产业'}</strong><span id="industryMapMeta">正在加载图景…</span><span class="map-hint">点击叶子节点查看关联内容</span></header><div class="industry-tree" id="industryTree"><div class="status-note">正在加载图景…</div></div><div class="map-x-scroll" id="mapXScroll"><div class="map-x-thumb" id="mapXThumb"></div></div></div></section>`;}
+function mapView(){const state=parseHash();const group=state.params.get('group')||'zero-carbon';const tabs=[["zero-carbon","零碳产业"],["ai-intelligent","AI与智能科技"],["general-tech","通用技术"]];const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};return `<section class="flat-content map-content-panel"><div class="map-head"><div><h1 class="section-title">追求完备而互斥</h1></div><div class="map-tools"><input id="mapSearch" value="${escapeHtml(mapSearchDraft)}" placeholder="搜索节点" aria-label="搜索行业图景节点"/><button class="secondary-btn" id="mapExpandAll" type="button">展开全部</button><button class="secondary-btn" id="mapCollapse" type="button">折叠到二级</button></div></div><div class="bookmark-tabs">${tabs.map(([key,label])=>`<button class="bookmark-tab ${group===key?'active':''}" data-map-group="${key}">${label}</button>`).join('')}</div><div class="map-shell"><header class="map-summary"><strong>${titleMap[group]||'零碳产业'}</strong><span id="industryMapMeta">正在加载图景…</span><span class="map-hint">按住空白处拖动平移 · 点击叶子节点查看关联内容</span></header><div class="industry-tree" id="industryTree"><div class="status-note">正在加载图景…</div></div></div></section>`;}
 function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");const modelSelect=document.getElementById("modelSelect");if(modelSelect){modelSelect.value=selectedModel;modelSelect.addEventListener('change',()=>{selectedModel=modelSelect.value;localStorage.setItem('assistant_model',selectedModel);});}if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,120)}px`;});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const knowledgeToggle=document.getElementById('knowledgeToggle');if(knowledgeToggle)knowledgeToggle.addEventListener('click',()=>{const body=document.querySelector('.home-body');const expanded=!body?.classList.contains('knowledge-expanded');body?.classList.toggle('knowledge-expanded',expanded);knowledgeToggle.setAttribute('aria-expanded',expanded?'true':'false');const label=knowledgeToggle.querySelector('span');if(label)label.textContent=expanded?'收起':'展开';localStorage.setItem('knowledge_interaction_expanded',expanded?'1':'0');localStorage.removeItem('knowledge_interaction_collapsed');});const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});const createUserBtn=document.getElementById("createUserBtn");if(createUserBtn)createUserBtn.addEventListener("click",showCreateUserModal);}
 async function loadAssistantStatus(){
   const state=document.getElementById("conversationState");

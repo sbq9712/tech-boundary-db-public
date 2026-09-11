@@ -249,40 +249,7 @@
 .map-content-panel a.leaf-tag:hover{
   transform:translateY(-1px);
 }
-.map-x-scroll{
-  height:24px;
-  padding:7px 12px;
-  border-top:1px solid var(--border-subtle);
-  background:var(--bg-panel);
-  cursor:pointer;
-  touch-action:none;
-}
-.map-x-scroll:before{
-  content:"";
-  display:block;
-  height:10px;
-  border-radius:999px;
-  background:var(--bg-hover);
-}
-.map-x-thumb{
-  height:10px;
-  min-width:56px;
-  border-radius:999px;
-  background:var(--text-quaternary);
-  box-shadow:0 1px 4px rgba(0,0,0,.15);
-  transform:translateX(0);
-  margin-top:-10px;
-  cursor:grab;
-  touch-action:none;
-}
-.map-x-scroll:active .map-x-thumb{
-  cursor:grabbing;
-  background:var(--text-primary);
-}
-.map-x-scroll.disabled{
-  opacity:.42;
-  cursor:default;
-}
+
 .map-content-panel .industry-tree.dragging{
   cursor:grabbing;
   user-select:none;
@@ -374,10 +341,8 @@
 .map-content-panel .mind-card .mind-title.len-lg{font-size:11px}
 .map-content-panel .mind-card .mind-title.len-xl{font-size:10px}
 /* 横向滚动条去重：隐藏原生横条，统一用下方自定义滑条 */
-/* 横向滚动条彻底去重：撤销全局 scrollbar-width:thin（它会禁用 webkit 伪元素定制，
-   导致原生横条复活），改用 webkit 伪元素按轴控制——横向原生条删除，竖向保留并美化 */
-.map-content-panel .industry-tree{scrollbar-width:auto;scrollbar-color:auto}
-.map-content-panel .industry-tree::-webkit-scrollbar:horizontal{height:0;display:none}
-.map-content-panel .industry-tree::-webkit-scrollbar{width:10px}
-.map-content-panel .industry-tree::-webkit-scrollbar-thumb{background:rgba(23,24,28,.16);border-radius:999px;border:3px solid transparent;background-clip:content-box}
-.map-content-panel .industry-tree::-webkit-scrollbar-track{background:transparent}
+/* 滚动条全部隐藏：平移完全靠鼠标拖拽（横向+纵向），任何尺寸/缩放下都不显示滚动条。
+   scrollbar-width:none 为标准路径（Chromium 121+/Firefox），::-webkit-scrollbar 为旧内核兜底 */
+.map-content-panel .industry-tree{scrollbar-width:none}
+.map-content-panel .industry-tree::-webkit-scrollbar{display:none;width:0;height:0}
+.map-content-panel .industry-tree{cursor:grab}
