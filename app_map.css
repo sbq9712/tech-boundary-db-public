@@ -99,7 +99,7 @@
 .map-content-panel .mind-node>details>.mind-card{
   position:relative;
   z-index:1;
-  width:190px;
+  width:133px;
   min-height:58px;
   border:1px solid var(--border-standard);
   border-radius:var(--radius-md);
@@ -351,7 +351,7 @@
 .map-content-panel .mind-node>details>.mind-card em{margin-top:3px;font-size:10px;letter-spacing:.02em}
 /* 根节点：品牌渐变 + 光晕 */
 .map-content-panel .mind-node.depth-0>details>.mind-card{
-  width:200px;min-height:52px;
+  width:140px;min-height:52px;
   background:linear-gradient(135deg,var(--brand-light),var(--brand));
   border:none;border-radius:12px;
   box-shadow:0 8px 22px rgba(94,106,210,.32);
@@ -377,3 +377,9 @@
 .map-content-panel .mind-node>details>ul>.mind-node:before{background:rgba(94,106,210,.22)}
 /* 叶子资产标签：更矮更精致 */
 .map-content-panel .leaf-tag{min-height:26px;font-size:11px;border-radius:8px}
+/* 节点宽度 7/10 后的字号自适应：字多缩小、放不下自动换行 */
+.map-content-panel .mind-card .mind-title{font-size:12px;line-height:1.35;word-break:break-word}
+.map-content-panel .mind-card .mind-title.len-lg{font-size:11px}
+.map-content-panel .mind-card .mind-title.len-xl{font-size:10px}
+/* 横向滚动条去重：隐藏原生横条，统一用下方自定义滑条 */
+.map-content-panel .industry-tree::-webkit-scrollbar:horizontal{height:0;display:none}

@@ -80,7 +80,7 @@ a:hover{color:var(--brand-lighter)}
 
 /* ── Sidebar (248px, light) ── */
 .sidebar{
-  width:248px;
+  width:196px;
   flex-shrink:0;
   display:flex;
   flex-direction:column;
@@ -576,7 +576,7 @@ a:hover{color:var(--brand-lighter)}
 }
 .home-loading-card{
   grid-column:1/-1;
-  min-height:96px;
+  min-height:132px;
   display:grid;
   place-items:center;
   color:var(--text-quaternary);
@@ -588,12 +588,12 @@ a:hover{color:var(--brand-lighter)}
 .home-boundary-card{
   position:relative;
   min-width:0;
-  min-height:150px;
+  min-height:214px;
   display:flex;
   flex-direction:column;
   border:1px solid var(--border-standard);
   border-radius:var(--radius-md);
-  padding:12px 14px 10px 16px;
+  padding:14px 15px 12px 18px;
   background:var(--bg-canvas);
   color:var(--text-primary);
   font:inherit;
@@ -639,10 +639,10 @@ a:hover{color:var(--brand-lighter)}
   font-weight:600;
 }
 .home-boundary-card h3{
-  margin:7px 0 5px;
-  font-size:13px;
+  margin:10px 0 8px;
+  font-size:14px;
   font-weight:650;
-  line-height:1.35;
+  line-height:1.28;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
@@ -651,10 +651,10 @@ a:hover{color:var(--brand-lighter)}
   display:grid;
   grid-template-columns:auto 1fr;
   gap:7px;
-  margin:0 0 7px;
+  margin:0 0 9px;
   color:var(--text-secondary);
   font-size:11px;
-  line-height:1.45;
+  line-height:1.32;
 }
 .boundary-card-def-text{min-width:0}
 .boundary-card-definition strong{
@@ -672,7 +672,7 @@ a:hover{color:var(--brand-lighter)}
 }
 .home-boundary-card ol{
   display:grid;
-  gap:4px;
+  gap:5px;
   margin:0;
   padding:0;
   list-style:none;
@@ -685,7 +685,7 @@ a:hover{color:var(--brand-lighter)}
   min-width:0;
   color:var(--text-secondary);
   font-size:11px;
-  line-height:1.35;
+  line-height:1.28;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -2058,7 +2058,6 @@ a:hover{color:var(--brand-lighter)}
 /* ── 资料库 in-app 视图 ── */
 .library .lib-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
 .library .section-title{margin:0}
-.library .lib-sub{margin-top:6px;color:var(--text-tertiary);font-size:13px}
 .library .filter-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .library .filter-row select{max-width:300px;font-family:var(--sans);font-size:13px;padding:8px 10px;border:1px solid var(--border-standard);border-radius:var(--radius-md);background:var(--bg-canvas);color:var(--text-primary);cursor:pointer}
 .library .filter-row select:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
