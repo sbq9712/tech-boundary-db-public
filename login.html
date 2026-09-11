@@ -5,89 +5,81 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet" />
   <title>登录 — 技术边界数据库</title>
   <style>
     :root{
-      --bg:#f7f8f8; --text:#1a1a1a; --muted:#6b6f76; --line:rgba(0,0,0,.06);
-      --brand:#5e6ad2;
-      --r:14px;
-      --sans:'Outfit','Noto Sans SC',system-ui,-apple-system,sans-serif;
+      --bg-canvas:#f7f8f8;--bg-panel:#ffffff;--bg-surface:#f0f1f2;
+      --text-primary:#1a1a1a;--text-secondary:#3d3d3d;--text-tertiary:#6b6f76;--text-quaternary:#9aa0a6;
+      --border-subtle:rgba(0,0,0,.06);--border-standard:rgba(0,0,0,.1);
+      --brand:#5e6ad2;--brand-light:#7170ff;--brand-bg:rgba(94,106,210,.08);--brand-border:rgba(94,106,210,.25);
+      --radius-md:8px;--radius-lg:12px;--radius-xl:16px;
+      --sans:'Outfit','Noto Sans SC',system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+      --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
     }
-    *{ box-sizing:border-box; }
+    *{box-sizing:border-box}
     body{
-      margin:0; font-family:var(--sans); color:var(--text);
-      min-height:100vh;
-      display:flex; align-items:center; justify-content:center;
-      background: #f8f9fc;
+      margin:0;font-family:var(--sans);color:var(--text-primary);
+      min-height:100vh;display:flex;align-items:center;justify-content:center;
+      background:
+        radial-gradient(1200px 500px at 70% -10%,rgba(94,106,210,.06),transparent 60%),
+        var(--bg-canvas);
     }
-
     .card{
-      width:100%; max-width:380px;
-      background:#ffffff;
-      border:1px solid var(--line);
-      border-radius:20px;
-      padding:36px 32px;
-      box-shadow:0 8px 32px rgba(0,0,0,.08);
+      width:100%;max-width:380px;
+      background:var(--bg-panel);
+      border:1px solid var(--border-subtle);
+      border-radius:var(--radius-xl);
+      padding:38px 34px 32px;
+      box-shadow:0 1px 2px rgba(16,24,40,.04),0 12px 40px rgba(16,24,40,.06);
+      position:relative;overflow:hidden;
     }
-    .brand{
-      text-align:center;
-      font-size:15px; font-weight:800;
-      margin-bottom:6px;
+    .card::before{
+      content:"";position:absolute;left:0;top:0;right:0;height:3px;
+      background:linear-gradient(90deg,var(--brand-light),var(--brand));
     }
+    .brand-row{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px}
+    .brand-mark{
+      display:flex;align-items:center;justify-content:center;
+      width:34px;height:34px;border-radius:var(--radius-md);
+      background:var(--brand);color:#fff;flex-shrink:0;
+    }
+    .brand-mark svg{width:19px;height:19px}
+    .brand{font-size:16px;font-weight:700;letter-spacing:-.01em}
     .subtitle{
-      text-align:center;
-      color:var(--muted); font-size:12px;
-      margin-bottom:28px;
+      text-align:center;color:var(--text-quaternary);font-size:11px;
+      font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;
+      margin-bottom:30px;
     }
-
-    label{
-      display:block;
-      font-size:12px; color:var(--muted);
-      margin-bottom:6px;
-    }
-    .field{ margin-bottom:16px; }
+    label{display:block;font-size:12px;color:var(--text-tertiary);font-weight:600;margin-bottom:6px}
+    .field{margin-bottom:16px}
     input{
-      width:100%;
-      background:#ffffff;
-      border:1px solid #d1d5db;
-      color:var(--text);
-      padding:11px 14px;
-      border-radius:12px;
-      font-size:14px;
-      outline:none;
-      transition:border-color .15s;
+      width:100%;background:var(--bg-canvas);
+      border:1px solid var(--border-standard);color:var(--text-primary);
+      padding:11px 13px;border-radius:var(--radius-md);
+      font-size:14px;font-family:inherit;outline:none;
+      transition:border-color .15s,box-shadow .15s;
     }
-    input:focus{ border-color:rgba(37,99,235,.5); }
-
+    input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-bg)}
+    input::placeholder{color:var(--text-quaternary)}
     .btn{
-      width:100%;
-      padding:12px;
-      border-radius:12px;
-      border:none;
-      background: var(--brand);
-      color:#fff;
-      font-size:14px; font-weight:600;
-      cursor:pointer;
-      margin-top:8px;
-      transition:opacity .15s;
+      width:100%;padding:12px;border-radius:var(--radius-md);border:none;
+      background:var(--brand);color:#fff;font-size:14px;font-weight:600;
+      font-family:inherit;cursor:pointer;margin-top:10px;
+      transition:background .15s,box-shadow .15s;
     }
-    .btn:hover{ opacity:.88; }
-    .btn:disabled{ opacity:.5; cursor:not-allowed; }
-
-    .error{
-      color:#f87171;
-      font-size:13px;
-      text-align:center;
-      min-height:20px;
-      margin-top:12px;
-    }
+    .btn:hover{background:var(--brand-light);box-shadow:0 2px 10px rgba(94,106,210,.3)}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .error{color:#b42318;font-size:12px;text-align:center;min-height:18px;margin-top:12px}
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="brand">技术边界数据库</div>
-    <div class="subtitle">（样机）</div>
+    <div class="brand-row">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+      <div class="brand">技术边界数据库</div>
+    </div>
+    <div class="subtitle">Tech Boundary DB</div>
 
     <div class="field">
       <label for="username">用户名</label>

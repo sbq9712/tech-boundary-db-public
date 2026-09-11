@@ -6,8 +6,8 @@
   <title>技术仪表盘（样机）</title>
   <style>
     :root{
-      --bg:#f8f9fc; --text:#1e293b; --muted:#64748b; --line:rgba(0,0,0,.08);
-      --r:14px; --shadow: 0 4px 16px rgba(0,0,0,.06);
+      --bg:#f7f8f8; --text:#1a1a1a; --muted:#6b6f76; --line:rgba(0,0,0,.06);
+      --r:12px; --shadow:0 1px 2px rgba(16,24,40,.04),0 0 0 1px rgba(16,24,40,.02);
       --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     }
@@ -16,11 +16,11 @@
       margin:0; font-family:var(--sans); color:var(--text);
       background: #f8f9fc;
     }
-    a{ color:#2563eb; text-decoration:none; }
+    a{ color:#5e6ad2; text-decoration:none; }
     a:hover{ text-decoration:underline; }
     .topbar{
       position:sticky; top:0; z-index:20;
-      backdrop-filter: blur(10px);
+      backdrop-filter: blur(12px) saturate(1.2);
       background: rgba(255,255,255,.92);
       border-bottom:1px solid var(--line);
     }
@@ -185,7 +185,7 @@
     }
     .tree-node.active{
       font-weight:800;
-      color:#2563eb;
+      color:#5e6ad2;
     }
     .tree-indent{
       width: 16px;
@@ -514,7 +514,7 @@
     ctx.fillText(`${yLabel}（min=${minY.toFixed(2)}, max=${maxY.toFixed(2)}）`, left, h-12);
 
     // line
-    ctx.strokeStyle = "rgba(37,99,235,.95)";
+    ctx.strokeStyle = "rgba(94,106,210,.95)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     points.forEach((p,i)=>{
@@ -526,7 +526,7 @@
     ctx.stroke();
 
     // points
-    ctx.fillStyle = "rgba(37,99,235,.95)";
+    ctx.fillStyle = "rgba(94,106,210,.95)";
     points.forEach((p,i)=>{
       const x=X(i), y=Y(p.y);
       ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
