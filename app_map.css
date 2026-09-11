@@ -6,9 +6,10 @@
 }
 .map-head{
   display:flex;
-  align-items:flex-start;
+  align-items:center;
   justify-content:space-between;
   gap:16px;
+  min-height:38px;
 }
 .map-tools{
   display:flex;
@@ -299,10 +300,6 @@
 
 .map-content-panel{
   padding:0;
-}
-.map-head{
-  align-items:flex-start;
-  gap:10px;
 }
 .map-tools input{
   height:34px;

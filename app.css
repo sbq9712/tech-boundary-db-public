@@ -2056,7 +2056,7 @@ a:hover{color:var(--brand-lighter)}
 }
 
 /* ── 资料库 in-app 视图 ── */
-.library .lib-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.library .lib-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;min-height:38px;margin-bottom:18px}
 .library .filter-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .library .filter-row select{max-width:300px;font-family:var(--sans);font-size:13px;padding:8px 10px;border:1px solid var(--border-standard);border-radius:var(--radius-md);background:var(--bg-canvas);color:var(--text-primary);cursor:pointer}
 .library .filter-row select:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
@@ -2119,3 +2119,9 @@ a:hover{color:var(--brand-lighter)}
   color:var(--text-quaternary);
   font-size:15px;font-weight:600;
 }
+
+/* ── 模块头部统一：标题行 38px 与右侧工具/筛选同线等高（深度调研/行业图景/资料库/用户管理/信源） ── */
+.flat-content>.section-title,
+.content-panel>.section-title{display:flex;align-items:center;min-height:38px}
+/* 锚点按钮（上传资料）文字垂直居中 */
+a.secondary-btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
