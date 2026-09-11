@@ -356,7 +356,7 @@ function homeView(){
   </section>
     </div>
   </aside>
-  <button class="home-drawer-tab" id="homeDrawerOpen" type="button" aria-expanded="false" aria-controls="homeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><span>技术预警 · 技术边界</span></button>
+  <button class="home-drawer-tab" id="homeDrawerOpen" type="button" aria-expanded="false" aria-controls="homeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span>技术预警 · 技术边界</span></button>
   <section class="home-section home-knowledge-section" aria-labelledby="homeKnowledgeTitle">
     <div class="home-section-heading compact knowledge-heading">
       <div><h2 id="homeKnowledgeTitle">与知识库互动</h2></div>
