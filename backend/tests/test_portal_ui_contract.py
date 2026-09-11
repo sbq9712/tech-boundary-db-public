@@ -18,7 +18,7 @@ def load_served_js() -> str:
 def test_sidebar_is_visually_stable():
     css = load_served_css()
     sidebar = css.split(".sidebar{", 1)[1].split("}", 1)[0]
-    assert "width:248px" in sidebar
+    assert "width:196px" in sidebar
     assert "flex-shrink:0" in sidebar
     assert "height:100dvh" in css.split(".app-shell{", 1)[1].split("}", 1)[0]
     assert "transition:width" not in css
@@ -29,7 +29,12 @@ def test_sidebar_is_visually_stable():
 def test_home_layout_is_boundary_alert_and_knowledge_workbench():
     css = load_served_css()
     js = load_served_js()
-    assert "grid-template-rows:auto auto minmax(360px,1fr)" in css
+    assert "--drawer-w:max(340px,33.333vw)" in css
+    assert ".home-drawer{" in css
+    assert "home-drawer-tab" in css
+    assert ".home-body.drawer-collapsed .home-drawer" in css
+    assert ".home-knowledge-section" in css
+    assert "margin-left:calc(var(--drawer-w) + 18px)" in css
     assert ".home-boundary-grid" in css
     assert ".home-alert-table" in css
     assert ".home-knowledge-section" in css
@@ -41,9 +46,10 @@ def test_home_layout_is_boundary_alert_and_knowledge_workbench():
     assert "是什么" in js and "关键指标边界" in js
     assert "情报发布" in js and "预警生成" in js
     assert "/breadth/data/processed/alert-records.json" in js
-    assert "knowledgeToggle" in js
-    assert "knowledge_interaction_expanded" in js
-    assert "knowledge-expanded" in js
+    assert "homeDrawer" in js
+    assert "homeDrawerClose" in js and "homeDrawerOpen" in js
+    assert "drawer-collapsed" in js
+    assert "knowledgeToggle" not in js
     assert "最新研究结论" not in js
     assert "高信号变化" not in js
     assert "基于知识库的问答" not in js

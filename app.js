@@ -329,17 +329,13 @@ function shell(state){
 }
 function view(route){const m={home:homeView,breadth:breadthView,dashboard:dashboardView,map:mapView,users:usersView,library:libraryView};return (m[route]||homeView)();}
 function homeView(){
-  const knowledgeExpanded=localStorage.getItem('knowledge_interaction_expanded')==='1';
-  return `<div class="home-body ${knowledgeExpanded?'knowledge-expanded':''}">
-  <section class="home-section home-boundary-section" aria-labelledby="homeBoundaryTitle">
-    <div class="home-section-heading">
-      <div><h1 id="homeBoundaryTitle">技术边界</h1></div>
-      <button class="home-section-link" type="button" data-route="dashboard">查看全部</button>
+  return `<div class="home-body">
+  <aside class="home-drawer" id="homeDrawer" aria-label="技术预警与技术边界">
+    <div class="home-drawer-head">
+      <span class="home-drawer-title">情报面板</span>
+      <button class="home-drawer-close" id="homeDrawerClose" type="button" aria-expanded="true" aria-controls="homeDrawer">收起<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
     </div>
-    <div class="home-boundary-grid" id="homeBoundaryCards">
-      <div class="home-loading-card">正在加载技术边界…</div>
-    </div>
-  </section>
+    <div class="home-drawer-body">
   <section class="home-section home-alert-section" aria-labelledby="homeAlertTitle">
     <div class="home-section-heading compact">
       <div><h2 id="homeAlertTitle">技术预警</h2></div>
@@ -349,10 +345,22 @@ function homeView(){
       <div class="alert-empty">正在加载技术预警…</div>
     </div>
   </section>
+  <section class="home-section home-boundary-section" aria-labelledby="homeBoundaryTitle">
+    <div class="home-section-heading">
+      <div><h2 id="homeBoundaryTitle">技术边界</h2></div>
+      <button class="home-section-link" type="button" data-route="dashboard">查看全部</button>
+    </div>
+    <div class="home-boundary-grid" id="homeBoundaryCards">
+      <div class="home-loading-card">正在加载技术边界…</div>
+    </div>
+  </section>
+    </div>
+  </aside>
+  <button class="home-drawer-tab" id="homeDrawerOpen" type="button" aria-expanded="false" aria-controls="homeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><span>技术预警 · 技术边界</span></button>
   <section class="home-section home-knowledge-section" aria-labelledby="homeKnowledgeTitle">
     <div class="home-section-heading compact knowledge-heading">
       <div><h2 id="homeKnowledgeTitle">与知识库互动</h2></div>
-      <div class="knowledge-heading-actions"><span class="knowledge-hint">基于广度情报索引检索并给出可核验引用</span><button class="knowledge-toggle" id="knowledgeToggle" type="button" aria-expanded="${knowledgeExpanded?'true':'false'}" aria-controls="knowledgeConversation"><span>${knowledgeExpanded?'收起':'展开'}</span><i aria-hidden="true"></i></button></div>
+      <div class="knowledge-heading-actions"><span class="knowledge-hint">基于广度情报索引检索并给出可核验引用</span></div>
     </div>
     <div class="panel conversation-panel" id="knowledgeConversation">
       <div class="conversation-toolbar"><label class="session-picker"><span>会话</span><select id="sessionSelect" aria-label="选择历史会话"><option value="">新对话</option></select></label><button id="deleteConversationBtn" class="icon-btn" type="button" title="删除当前会话" aria-label="删除当前会话" disabled>×</button><button id="newConversationBtn" class="ghost-btn" type="button">＋ 新对话</button><span id="conversationState">正在检查检索服务…</span></div>
@@ -406,7 +414,7 @@ function sourcesView(){
   return `<section class="panel content-panel"><h1 class="section-title">按信息类型浏览 ${SOURCE_LIST.length} 个信息源，持续追踪产业动态、学术前沿和行业研究</h1><div class="bookmark-tabs" style="margin-bottom:20px">${tabsHtml}</div><div id="sourceGroupsContent">${groupsHtml}</div></section>`;
 }
 function mapView(){const state=parseHash();const group=state.params.get('group')||'zero-carbon';const tabs=[["zero-carbon","零碳产业"],["ai-intelligent","AI与智能科技"],["general-tech","通用技术"]];const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};return `<section class="flat-content map-content-panel"><div class="map-head"><div><h1 class="section-title">追求完备而互斥</h1></div><div class="map-tools"><input id="mapSearch" value="${escapeHtml(mapSearchDraft)}" placeholder="搜索节点" aria-label="搜索行业图景节点"/><button class="secondary-btn" id="mapExpandAll" type="button">展开全部</button><button class="secondary-btn" id="mapCollapse" type="button">折叠到二级</button></div></div><div class="bookmark-tabs">${tabs.map(([key,label])=>`<button class="bookmark-tab ${group===key?'active':''}" data-map-group="${key}">${label}</button>`).join('')}</div><div class="map-shell"><header class="map-summary"><strong>${titleMap[group]||'零碳产业'}</strong><span id="industryMapMeta">正在加载图景…</span><span class="map-hint">按住空白处拖动平移 · 点击叶子节点查看关联内容</span></header><div class="industry-tree" id="industryTree"><div class="status-note">正在加载图景…</div></div></div></section>`;}
-function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");const modelSelect=document.getElementById("modelSelect");if(modelSelect){modelSelect.value=selectedModel;modelSelect.addEventListener('change',()=>{selectedModel=modelSelect.value;localStorage.setItem('assistant_model',selectedModel);});}if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,120)}px`;});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const knowledgeToggle=document.getElementById('knowledgeToggle');if(knowledgeToggle)knowledgeToggle.addEventListener('click',()=>{const body=document.querySelector('.home-body');const expanded=!body?.classList.contains('knowledge-expanded');body?.classList.toggle('knowledge-expanded',expanded);knowledgeToggle.setAttribute('aria-expanded',expanded?'true':'false');const label=knowledgeToggle.querySelector('span');if(label)label.textContent=expanded?'收起':'展开';localStorage.setItem('knowledge_interaction_expanded',expanded?'1':'0');localStorage.removeItem('knowledge_interaction_collapsed');});const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});const createUserBtn=document.getElementById("createUserBtn");if(createUserBtn)createUserBtn.addEventListener("click",showCreateUserModal);}
+function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");const modelSelect=document.getElementById("modelSelect");if(modelSelect){modelSelect.value=selectedModel;modelSelect.addEventListener('change',()=>{selectedModel=modelSelect.value;localStorage.setItem('assistant_model',selectedModel);});}if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,120)}px`;});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const homeBodyEl=document.querySelector('.home-body');const homeDrawerClose=document.getElementById('homeDrawerClose');const homeDrawerOpenBtn=document.getElementById('homeDrawerOpen');if(homeDrawerClose&&homeBodyEl)homeDrawerClose.addEventListener('click',()=>{homeBodyEl.classList.add('drawer-collapsed');homeDrawerClose.setAttribute('aria-expanded','false');if(homeDrawerOpenBtn)homeDrawerOpenBtn.focus();});if(homeDrawerOpenBtn&&homeBodyEl)homeDrawerOpenBtn.addEventListener('click',()=>{homeBodyEl.classList.remove('drawer-collapsed');if(homeDrawerClose){homeDrawerClose.setAttribute('aria-expanded','true');homeDrawerClose.focus();}});const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});const createUserBtn=document.getElementById("createUserBtn");if(createUserBtn)createUserBtn.addEventListener("click",showCreateUserModal);}
 async function loadAssistantStatus(){
   const state=document.getElementById("conversationState");
   try{
