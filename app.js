@@ -176,6 +176,7 @@ function initMapHorizontalScroll(){
 window.addEventListener('resize',syncMapHorizontalBar);
 let activeSessionId = null;
 let activeRequestController = null;
+let activeRequestEpoch = 0;
 let lastFailedQuery = '';
 let knowledgeGraphCleanup = null;
 function emptyPanels(){return {hot_intel:[],parameter_boundaries:[],alert_intel:[],dashboard_links:[]};}
@@ -201,7 +202,7 @@ function renderHomeMessages(){
   return hasMessages?activeSessionMessages.map((msg,index)=>renderConversationMessage(msg,index)).join(''):'';
 }
 function renderConversationMessage(msg,index){
-  if(msg.role==='user')return `<div class="qa-message user user-msg"><div class="qa-message-avatar" aria-hidden="true">你</div><div class="qa-message-content"><div class="qa-message-bubble">${escapeHtml(msg.text||'')}</div></div></div>`;
+  if(msg.role==='user')return `<div class="qa-message user user-msg"><div class="qa-message-content"><div class="qa-message-bubble">${escapeHtml(msg.text||'')}</div></div></div>`;
   const content=msg.text||'';
   const citations=(msg.extra&&msg.extra.citations)||[];
   const isStreaming=Boolean(msg.streaming);
@@ -209,7 +210,7 @@ function renderConversationMessage(msg,index){
   const rendered=renderMarkdown(content).replace(/\[(\d+)\]/g,(match,num)=>citations.some(c=>Number(c.id)===Number(num)?true:false)?`<button type="button" class="qa-citation-ref" data-citation="${Number(num)}">[${num}]</button>`:match);
   const body=msg.error?`<div class="qa-error-state"><span>${escapeHtml(msg.error)}</span><button type="button" class="ghost-btn" data-qa-action="retry" data-msg-idx="${index}">重试</button></div>`:`${rendered}${isStreaming?'<span class="qa-typing-cursor"></span>':''}`;
   const actions=!isStreaming&&!msg.error&&content?`<div class="qa-actions"><button class="qa-action-btn" type="button" data-qa-action="copy" data-msg-idx="${index}" title="复制回答">复制</button>${isLast?`<button class="qa-action-btn" type="button" data-qa-action="regenerate" data-msg-idx="${index}" title="重新生成最后一条回答">重新生成</button>`:''}<button class="qa-action-btn" type="button" data-qa-action="export" data-msg-idx="${index}" title="导出 Markdown">导出</button></div>`:'';
-  return `<div class="qa-message assistant assistant-msg ${isStreaming?'streaming':''}" data-message-index="${index}"><div class="qa-message-avatar" aria-hidden="true">AI</div><div class="qa-message-content"><div class="qa-message-bubble"><div class="response-text">${body}</div></div>${msg.status?`<div class="qa-status-line">${escapeHtml(msg.status)}</div>`:''}${!isStreaming&&!msg.error?renderInlineResources(msg.extra):''}${actions}</div></div>`;
+  return `<div class="qa-message assistant assistant-msg ${isStreaming?'streaming':''}" data-message-index="${index}"><div class="qa-message-content"><div class="qa-message-bubble"><div class="response-text">${body}</div></div>${msg.status?`<div class="qa-status-line">${escapeHtml(msg.status)}</div>`:''}${!isStreaming&&!msg.error?renderInlineResources(msg.extra):''}${actions}</div></div>`;
 }
 function modelLabel(model){
   if(model==='glm-5.2')return 'GLM-5.2 深度';
@@ -233,17 +234,23 @@ async function loadAssistantModels(){
 }
 let activeSessionMessages = [];
 let conversationSessions = [];
+let pendingConversation = null;
 function renderSidebarConversations(){
   const list=document.getElementById('sidebarConversationList');
   if(!list)return;
-  if(!conversationSessions.length){
+  const items=pendingConversation
+    ?[pendingConversation,...conversationSessions.filter(item=>item.id!==pendingConversation.id)]
+    :conversationSessions;
+  if(!items.length){
     list.innerHTML='<div class="sidebar-conversation-empty">暂无历史对话</div>';
     return;
   }
-  list.innerHTML=conversationSessions.map(item=>{
+  list.innerHTML=items.map(item=>{
     const id=escapeHtml(String(item.id||''));
     const title=escapeHtml(item.title||'未命名对话');
-    const active=item.id===activeSessionId;
+    const pending=Boolean(item.pending);
+    const active=pending||item.id===activeSessionId;
+    if(pending)return `<div class="sidebar-conversation-row active pending"><div class="sidebar-conversation-item" aria-current="page"><span>${title}</span></div></div>`;
     return `<div class="sidebar-conversation-row ${active?'active':''}"><button class="sidebar-conversation-item" type="button" data-conversation-id="${id}" title="${title}" aria-current="${active?'page':'false'}"><span>${title}</span></button><button class="sidebar-conversation-delete" type="button" data-delete-conversation="${id}" title="删除此对话" aria-label="删除对话：${title}">×</button></div>`;
   }).join('');
 }
@@ -254,6 +261,7 @@ async function loadConversations(preferredId=null){
     const res=await apiFetch('/api/conversations');
     if(!res.ok)throw new Error(`HTTP ${res.status}`);
     conversationSessions=(await res.json()).sessions||[];
+    if(pendingConversation&&conversationSessions.some(item=>item.id===pendingConversation.id))pendingConversation=null;
     const target=preferredId&&conversationSessions.some(item=>item.id===preferredId)
       ?preferredId
       :(activeSessionId&&conversationSessions.some(item=>item.id===activeSessionId)?activeSessionId:null);
@@ -293,11 +301,21 @@ async function deleteConversation(sessionId){
   showToast('会话已删除');
 }
 function startNewConversation(){
-  if(activeRequestController)activeRequestController.abort();
+  activeRequestEpoch+=1;
+  const previousController=activeRequestController;
+  activeRequestController=null;
+  previousController?.abort();
   activeSessionId=null;
   activeSessionMessages=[];
+  pendingConversation=null;
   const answer=document.getElementById('answer');
+  const askBtn=document.getElementById('askBtn');
+  const stopBtn=document.getElementById('stopBtn');
+  const retryBtn=document.getElementById('retryBtn');
   if(answer)answer.innerHTML=renderHomeMessages();
+  if(askBtn){askBtn.disabled=false;askBtn.textContent='发送';}
+  if(stopBtn)stopBtn.hidden=true;
+  if(retryBtn)retryBtn.hidden=true;
   renderSidebarConversations();
   document.getElementById('queryInput')?.focus();
 }
@@ -314,7 +332,7 @@ document.addEventListener('click',event=>{
     const sessionId=conversationAction.dataset.conversationId;
     if(sessionId&&sessionId!==activeSessionId)loadConversationMessages(sessionId);
   }
-  if(event.target?.id==='sidebarNewConversationBtn')startNewConversation();
+  if(event.target?.closest?.('#sidebarNewConversationBtn'))startNewConversation();
   if(event.target?.id==='stopBtn'&&activeRequestController)activeRequestController.abort();
   if(event.target?.id==='retryBtn'&&lastFailedQuery){
     const input=document.getElementById('queryInput');
@@ -329,7 +347,7 @@ document.addEventListener('click',event=>{
 });
 function parseHash(){const raw=(location.hash||"#home").slice(1);const [routePart,queryPart=""]=raw.split("?");return {route:routes[routePart]?routePart:"home",params:new URLSearchParams(queryPart)};}
 function setRoute(route,params){const q=params?`?${params.toString()}`:"";location.hash=route+q;}
-function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route==="home"){activeSessionId=null;activeSessionMessages=[];}if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){loadAssistantModels();loadAssistantStatus();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
+function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route==="home"){activeSessionId=null;activeSessionMessages=[];}if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){loadAssistantModels();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
 async function ensureCurrentUser(){if(!currentUser){await loadCurrentUser();}return currentUser;}
 function loadCurrentUser(){return apiFetch("/api/auth/me").then(r=>r.ok?r.json():null).then(d=>{if(d){currentUser=d;}}).catch(()=>{});}
 function isAdmin(){return currentUser&&currentUser.role==="admin";}
@@ -346,9 +364,7 @@ function shell(state){
     if(key!=='home'||state.route!=='home')return item;
     return item+`<section class="sidebar-conversation-hub" aria-label="门户会话">
       <button class="sidebar-new-conversation" id="sidebarNewConversationBtn" type="button"><span aria-hidden="true">＋</span><span>新建对话</span></button>
-      <div class="sidebar-conversation-heading">历史对话记录</div>
       <div class="sidebar-conversation-list" id="sidebarConversationList" tabindex="0" aria-label="历史对话列表"><div class="sidebar-conversation-empty">正在加载…</div></div>
-      <div class="sidebar-retrieval-status" id="conversationState" data-status="loading"><span class="sidebar-status-dot" aria-hidden="true"></span><span>正在检查检索服务…</span></div>
     </section>`;
   }).join("");
   return `<aside class="sidebar"><div class="sidebar-brand"><div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><div class="sidebar-title">技术边界数据库</div></div><nav class="sidebar-nav">${navHtml}</nav><div class="sidebar-account"><div class="sidebar-avatar">${escapeHtml(avatarLetter)}</div><div class="sidebar-account-info"><div class="sidebar-account-name">${escapeHtml(accName)}</div><div class="sidebar-account-role">${escapeHtml(accRole)}</div></div><div class="sidebar-actions"><button class="ghost-btn" id="changePwdBtn">密码</button><button class="ghost-btn" id="logoutBtn">退出</button></div></div></aside><section class="workspace"><main class="main ${state.route==='home'?'home-main':state.route==='breadth'?'breadth-main':''}" id="main" tabindex="-1">${view(state.route)}</main></section>`;
@@ -389,7 +405,7 @@ function homeView(){
       </div>
       <div class="conversation-history" id="answer" ${activeSessionMessages.length?'':'hidden'}>${renderHomeMessages()}</div>
       <div class="query-box qa-input-area">
-        <label class="model-picker" title="选择本次回答使用的模型"><span>模型</span><select id="modelSelect" class="model-select">${renderModelOptions()}</select></label>
+        <label class="model-picker" title="选择本次回答使用的模型"><select id="modelSelect" class="model-select" aria-label="选择本次回答使用的模型">${renderModelOptions()}</select></label>
         <textarea id="queryInput" class="query-input" autocomplete="off" name="tech-boundary-query" rows="1" placeholder="输入你的问题…"></textarea>
         <button id="askBtn" class="primary-btn">发送</button>
         <button id="stopBtn" class="secondary-btn" type="button" hidden>停止</button>
@@ -433,15 +449,6 @@ function sourcesView(){
 }
 function mapView(){const state=parseHash();const group=state.params.get('group')||'zero-carbon';const tabs=[["zero-carbon","零碳产业"],["ai-intelligent","AI与智能科技"],["general-tech","通用技术"]];const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};return `<section class="flat-content map-content-panel"><div class="map-head"><div><h1 class="section-title">追求完备而互斥</h1></div><div class="map-tools"><input id="mapSearch" value="${escapeHtml(mapSearchDraft)}" placeholder="搜索节点" aria-label="搜索行业图景节点"/><button class="secondary-btn" id="mapExpandAll" type="button">展开全部</button><button class="secondary-btn" id="mapCollapse" type="button">折叠到二级</button></div></div><div class="bookmark-tabs">${tabs.map(([key,label])=>`<button class="bookmark-tab ${group===key?'active':''}" data-map-group="${key}">${label}</button>`).join('')}</div><div class="map-shell"><header class="map-summary"><strong>${titleMap[group]||'零碳产业'}</strong><span id="industryMapMeta">正在加载图景…</span><span class="map-hint">按住空白处拖动平移 · 点击叶子节点查看关联内容</span></header><div class="industry-tree" id="industryTree"><div class="status-note">正在加载图景…</div></div></div></section>`;}
 function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");const modelSelect=document.getElementById("modelSelect");if(modelSelect){modelSelect.value=selectedModel;modelSelect.addEventListener('change',()=>{selectedModel=modelSelect.value;localStorage.setItem('assistant_model',selectedModel);});}if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,120)}px`;});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const homeBodyEl=document.querySelector('.home-body');const homeDrawerClose=document.getElementById('homeDrawerClose');const homeDrawerOpenBtn=document.getElementById('homeDrawerOpen');const setDrawerCollapsed=(body,collapsed)=>{body.classList.toggle('drawer-collapsed',collapsed);if(homeDrawerClose)homeDrawerClose.setAttribute('aria-expanded',collapsed?'false':'true');if(homeDrawerOpenBtn)homeDrawerOpenBtn.setAttribute('aria-expanded',collapsed?'true':'false');};if(homeDrawerClose&&homeBodyEl)homeDrawerClose.addEventListener('click',()=>{setDrawerCollapsed(homeBodyEl,true);if(homeDrawerOpenBtn)homeDrawerOpenBtn.focus();});if(homeDrawerOpenBtn&&homeBodyEl)homeDrawerOpenBtn.addEventListener('click',()=>{setDrawerCollapsed(homeBodyEl,false);if(homeDrawerClose)homeDrawerClose.focus();});if(homeBodyEl&&!window.__homeDrawerOutsideBound){window.__homeDrawerOutsideBound=true;document.addEventListener('click',event=>{const body=document.querySelector('.home-body');if(!body||body.classList.contains('drawer-collapsed'))return;if(!event.target.closest('.home-drawer,.home-drawer-tab,.home-drawer-collapse'))body.classList.add('drawer-collapsed');});}const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});const createUserBtn=document.getElementById("createUserBtn");if(createUserBtn)createUserBtn.addEventListener("click",showCreateUserModal);}
-async function loadAssistantStatus(){
-  const state=document.getElementById("conversationState");
-  try{
-    const res=await apiFetch('/api/assistant/status');
-    const data=await res.json();
-    const count=(data.stats||{}).indexed_records;
-    if(state){const label=state.querySelector('span:last-child');if(label)label.textContent=data.ready?`检索服务已就绪 · ${Number(count||0).toLocaleString('zh-CN')} 条索引`:data.message||'检索服务未配置';state.dataset.status=data.ready?'ready':(data.status||'unknown');}
-  }catch(err){if(state){const label=state.querySelector('span:last-child');if(label)label.textContent='检索服务状态检查失败';state.dataset.status='error';}}
-}
 async function loadKnowledgeGraph(){
   const container=document.getElementById('qaGraphContainer');
   if(!container)return;
@@ -895,8 +902,15 @@ async function submitQuery(options={}){
   if(!query){input?.focus();return;}
   if(activeRequestController)return;
 
+  const requestEpoch=++activeRequestEpoch;
   const regenerate=Boolean(options.regenerate);
   const retry=Boolean(options.retry);
+  const requestedSessionId=activeSessionId;
+  const creatingConversation=!requestedSessionId&&!regenerate&&!retry;
+  if(creatingConversation){
+    pendingConversation={id:`pending-${requestEpoch}`,title:'新对话',pending:true};
+    renderSidebarConversations();
+  }
   let replacedMessage=null;
   if(regenerate||retry)replacedMessage=activeSessionMessages.pop()||null;
   if(!regenerate&&!retry)activeSessionMessages.push({role:'user',text:query});
@@ -920,7 +934,7 @@ async function submitQuery(options={}){
     const res=await fetch('/api/assistant/stream',{
       method:'POST',
       headers:{...authHeaders(),'Content-Type':'application/json'},
-      body:JSON.stringify({query,model:selectedModel,session_id:activeSessionId||null,regenerate,retry}),
+      body:JSON.stringify({query,model:selectedModel,session_id:requestedSessionId||null,regenerate,retry}),
       signal:controller.signal,
     });
     if(!res.ok){
@@ -928,7 +942,9 @@ async function submitQuery(options={}){
       throw new Error(errData.detail||'请求失败');
     }
     activeSessionId=res.headers.get('X-Conversation-Id')||activeSessionId;
+    if(pendingConversation&&activeSessionId)pendingConversation={...pendingConversation,id:activeSessionId};
     renderSidebarConversations();
+    if(creatingConversation)void loadConversations(activeSessionId);
     const reader=res.body.getReader();
     const decoder=new TextDecoder();
     let buffer="";
@@ -988,8 +1004,10 @@ async function submitQuery(options={}){
     await loadConversations(activeSessionId);
 
   }catch(err){
+    if(requestEpoch!==activeRequestEpoch)return;
     lastFailedQuery=query;
     const stopped=err?.name==='AbortError';
+    if(creatingConversation&&!activeSessionId)pendingConversation=null;
     assistantMsg.streaming=false;
     assistantMsg.status='';
     assistantMsg.error=stopped?'已停止生成。':(err?.message||'连接失败，请稍后重试。');
@@ -997,9 +1015,11 @@ async function submitQuery(options={}){
     else refreshConversationSurface();
     if(retryBtn)retryBtn.hidden=false;
   }finally{
-    activeRequestController=null;
-    if(askBtn){askBtn.disabled=false;askBtn.textContent='发送';}
-    if(stopBtn)stopBtn.hidden=true;
+    if(requestEpoch===activeRequestEpoch){
+      activeRequestController=null;
+      if(askBtn){askBtn.disabled=false;askBtn.textContent='发送';}
+      if(stopBtn)stopBtn.hidden=true;
+    }
   }
 }
 

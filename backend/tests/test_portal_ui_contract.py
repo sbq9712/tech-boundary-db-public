@@ -106,7 +106,7 @@ def test_home_exposes_persisted_conversations_in_sidebar():
     assert "sidebarConversationList" in js
     assert "data-conversation-id" in js
     assert "data-delete-conversation" in js
-    assert "conversationState" in js
+    assert "conversationState" not in js
     assert "sessionSelect" not in js
     assert "newConversationBtn" not in js
     assert "deleteConversationBtn" not in js
@@ -114,6 +114,13 @@ def test_home_exposes_persisted_conversations_in_sidebar():
     assert "const deletingActive=sessionId===activeSessionId" in js
     assert "if(deletingActive)startNewConversation()" in js
     assert "loadConversationMessages" in js
+    assert "pendingConversation={id:`pending-${requestEpoch}`,title:'新对话',pending:true}" in js
+    assert "event.target?.closest?.('#sidebarNewConversationBtn')" in js
+    assert "qa-message-avatar" not in js
+    assert "sidebar-conversation-heading" not in js
+    assert "sidebar-retrieval-status" not in css
+    assert ".qa-message.user{justify-content:flex-end}" in css
+    assert ".qa-message.assistant{justify-content:flex-start}" in css
     assert "TECHDB_QA_SERVICE_URL" not in js
     assert "regenerate,retry" in js
     assert ".sidebar-conversation-list" in css
