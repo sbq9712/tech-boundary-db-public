@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import json
 import re
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROCESSED = ROOT / "breadth" / "data" / "processed"
-OUTPUT = PROCESSED / "alert-records.json"
+DEFAULT_DATA_DIR = ROOT / "breadth" / "data"
 
 
 def part_number(path: Path) -> int:
@@ -24,11 +24,17 @@ def load_part(path: Path) -> list[dict]:
 
 
 def main() -> None:
-    manifest = json.loads((PROCESSED / "manifest.json").read_text(encoding="utf-8"))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
+    args = parser.parse_args()
+    processed = args.data_dir / "processed"
+    output = processed / "alert-records.json"
+
+    manifest = json.loads((processed / "manifest.json").read_text(encoding="utf-8"))
     generated_at = manifest.get("meta", {}).get("processed_at", "")
 
     raw_records: list[dict] = []
-    for path in sorted(PROCESSED.glob("lite-part-*.js"), key=part_number):
+    for path in sorted(processed.glob("lite-part-*.js"), key=part_number):
         raw_records.extend(load_part(path))
 
     alerts = [
@@ -62,8 +68,8 @@ def main() -> None:
         "total": len(alerts),
         "items": alerts,
     }
-    OUTPUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"wrote {len(alerts)} alerts to {OUTPUT}")
+    output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {len(alerts)} alerts to {output}")
 
 
 if __name__ == "__main__":

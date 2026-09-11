@@ -1,0 +1,35 @@
+name: Local development contracts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "start_with_local_ai.sh"
+      - "web/Dockerfile"
+      - "scripts/hydrate_breadth_runtime.py"
+      - "scripts/build_breadth_alert_snapshot.py"
+      - "scripts/build_breadth_category_counts.py"
+      - "scripts/test_breadth_runtime_hydration.py"
+      - ".github/workflows/local-dev-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  breadth-runtime-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check shell and Python syntax
+        run: |
+          bash -n start_with_local_ai.sh
+          python -m py_compile \
+            scripts/hydrate_breadth_runtime.py \
+            scripts/build_breadth_alert_snapshot.py \
+            scripts/build_breadth_category_counts.py
+      - name: Run hydration contract tests
+        run: python -m unittest scripts/test_breadth_runtime_hydration.py -v

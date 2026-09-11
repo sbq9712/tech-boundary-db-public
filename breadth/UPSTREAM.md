@@ -23,3 +23,29 @@ Local integration retained during upstream sync:
 
 Run the snapshot script after replacing upstream breadth files. The API checks
 the lite-shard names and sizes before using it, so stale counts are not served.
+
+
+## Local runtime hydration
+
+A normal clone intentionally contains no large files under `data/processed`.
+`bash ./start_with_local_ai.sh` runs
+`python3 scripts/hydrate_breadth_runtime.py` before Docker builds the web image.
+
+The hydrator uses a sparse Git checkout of only `data/processed` from the pinned
+runtime commit above. It validates the 59,717-record inline manifest, data
+version, all 30 lite/meta/summary shard indices, the upstream file count, and a
+local SHA-256 inventory. It then generates Tech Boundary DB's
+`alert-records.json` and `category-counts.json`. A valid local snapshot is
+reused on later starts without another large download. The Dockerfile has an
+independent fail-closed check so an incomplete runtime cannot become a web
+image.
+
+Manual diagnostics:
+
+```bash
+python3 scripts/hydrate_breadth_runtime.py --check
+python3 scripts/hydrate_breadth_runtime.py --force
+```
+
+The first command is read-only. The second explicitly redownloads the pinned
+snapshot. Neither command uses API keys or company data.

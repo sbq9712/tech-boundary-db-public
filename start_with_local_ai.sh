@@ -20,5 +20,13 @@ MSG
   exit 1
 fi
 
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required to prepare breadth runtime data." >&2
+  exit 1
+fi
+
+echo "Preparing pinned breadth runtime data before the Docker build..."
+python3 "$ROOT/scripts/hydrate_breadth_runtime.py"
+
 cd "$ROOT"
 docker compose --env-file "$ENV_FILE" up -d --build api readonly-agent web
