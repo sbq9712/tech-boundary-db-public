@@ -656,13 +656,7 @@ a:hover{color:var(--brand-lighter)}
   font-size:11px;
   line-height:1.45;
 }
-.boundary-card-def-text{
-  display:-webkit-box;
-  -webkit-line-clamp:2;
-  -webkit-box-orient:vertical;
-  overflow:hidden;
-  min-width:0;
-}
+.boundary-card-def-text{min-width:0}
 .boundary-card-definition strong{
   color:var(--brand);
   font-size:10px;
@@ -684,7 +678,6 @@ a:hover{color:var(--brand-lighter)}
   list-style:none;
   counter-reset:boundary;
 }
-.home-boundary-card li:nth-child(n+3){display:none}
 .home-boundary-card li{
   counter-increment:boundary;
   display:flex;
@@ -2064,6 +2057,8 @@ a:hover{color:var(--brand-lighter)}
 
 /* ── 资料库 in-app 视图 ── */
 .library .lib-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.library .section-title{margin:0}
+.library .lib-sub{margin-top:6px;color:var(--text-tertiary);font-size:13px}
 .library .filter-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .library .filter-row select{max-width:300px;font-family:var(--sans);font-size:13px;padding:8px 10px;border:1px solid var(--border-standard);border-radius:var(--radius-md);background:var(--bg-canvas);color:var(--text-primary);cursor:pointer}
 .library .filter-row select:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
