@@ -195,6 +195,7 @@ a:hover{color:var(--brand-lighter)}
 .main{
   height:100%;
   overflow-y:auto;
+  overflow-x:hidden;
   padding:28px 32px;
   background:
     linear-gradient(180deg,rgba(94,106,210,.03),rgba(94,106,210,0) 240px),

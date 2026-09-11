@@ -374,4 +374,10 @@
 .map-content-panel .mind-card .mind-title.len-lg{font-size:11px}
 .map-content-panel .mind-card .mind-title.len-xl{font-size:10px}
 /* 横向滚动条去重：隐藏原生横条，统一用下方自定义滑条 */
+/* 横向滚动条彻底去重：撤销全局 scrollbar-width:thin（它会禁用 webkit 伪元素定制，
+   导致原生横条复活），改用 webkit 伪元素按轴控制——横向原生条删除，竖向保留并美化 */
+.map-content-panel .industry-tree{scrollbar-width:auto;scrollbar-color:auto}
 .map-content-panel .industry-tree::-webkit-scrollbar:horizontal{height:0;display:none}
+.map-content-panel .industry-tree::-webkit-scrollbar{width:10px}
+.map-content-panel .industry-tree::-webkit-scrollbar-thumb{background:rgba(23,24,28,.16);border-radius:999px;border:3px solid transparent;background-clip:content-box}
+.map-content-panel .industry-tree::-webkit-scrollbar-track{background:transparent}
