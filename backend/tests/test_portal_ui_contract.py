@@ -48,11 +48,18 @@ def test_home_layout_is_boundary_alert_and_knowledge_workbench():
     assert "情报发布" in js and "预警生成" in js
     assert "/breadth/data/processed/alert-records.json" in js
     assert "homeDrawer" in js
-    assert "homeDrawerClose" in js and "homeDrawerOpen" in js
+    assert "homeDrawerClose" not in js
+    assert "homeDrawerOpen" in js
     assert "drawer-collapsed" in js
     assert "knowledgeToggle" not in js
     assert "情报面板" not in js
-    assert "homeDrawerClose" in js and "homeDrawerOutsideBound" in js
+    assert "homeDrawerOutsideBound" in js
+    assert "event.target.closest('.home-drawer,.home-drawer-tab')" in js
+    assert "home-drawer-collapse" not in css
+    assert ".home-knowledge-section .qa-graph-container{" in css
+    assert "flex:1 1 0" in css
+    assert "width:100%" in css
+    assert "min-height:360px" in css
     assert "最新研究结论" not in js
     assert "高信号变化" not in js
     assert "基于知识库的问答" not in js
