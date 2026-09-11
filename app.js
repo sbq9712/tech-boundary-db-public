@@ -232,20 +232,36 @@ async function loadAssistantModels(){
   }catch(_err){}
 }
 let activeSessionMessages = [];
+let conversationSessions = [];
+function renderSidebarConversations(){
+  const list=document.getElementById('sidebarConversationList');
+  if(!list)return;
+  if(!conversationSessions.length){
+    list.innerHTML='<div class="sidebar-conversation-empty">暂无历史对话</div>';
+    return;
+  }
+  list.innerHTML=conversationSessions.map(item=>{
+    const id=escapeHtml(String(item.id||''));
+    const title=escapeHtml(item.title||'未命名对话');
+    const active=item.id===activeSessionId;
+    return `<div class="sidebar-conversation-row ${active?'active':''}"><button class="sidebar-conversation-item" type="button" data-conversation-id="${id}" title="${title}" aria-current="${active?'page':'false'}"><span>${title}</span></button><button class="sidebar-conversation-delete" type="button" data-delete-conversation="${id}" title="删除此对话" aria-label="删除对话：${title}">×</button></div>`;
+  }).join('');
+}
 async function loadConversations(preferredId=null){
-  const select=document.getElementById('sessionSelect');
-  if(!select)return;
+  const list=document.getElementById('sidebarConversationList');
+  if(!list)return;
   try{
     const res=await apiFetch('/api/conversations');
-    if(!res.ok)return;
-    const sessions=(await res.json()).sessions||[];
-    select.innerHTML='<option value="">新对话</option>'+sessions.map(item=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.title||'未命名对话')}</option>`).join('');
-    const target=preferredId&&sessions.some(item=>item.id===preferredId)?preferredId:'';
-    select.value=target;
-    const deleteBtn=document.getElementById('deleteConversationBtn');
-    if(deleteBtn)deleteBtn.disabled=!target;
-    if(target)await loadConversationMessages(target);
-  }catch(_err){}
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    conversationSessions=(await res.json()).sessions||[];
+    const target=preferredId&&conversationSessions.some(item=>item.id===preferredId)
+      ?preferredId
+      :(activeSessionId&&conversationSessions.some(item=>item.id===activeSessionId)?activeSessionId:null);
+    renderSidebarConversations();
+    if(target&&target!==activeSessionId)await loadConversationMessages(target);
+  }catch(_err){
+    list.innerHTML='<div class="sidebar-conversation-empty">历史对话加载失败</div>';
+  }
 }
 async function loadConversationMessages(sessionId){
   const answer=document.getElementById('answer');
@@ -254,8 +270,7 @@ async function loadConversationMessages(sessionId){
   if(!res.ok)return;
   const data=await res.json();
   activeSessionId=sessionId;
-  const deleteBtn=document.getElementById('deleteConversationBtn');
-  if(deleteBtn)deleteBtn.disabled=false;
+  renderSidebarConversations();
   activeSessionMessages=(data.messages||[]).map(message=>({
     role:message.role,
     text:message.content,
@@ -266,9 +281,8 @@ async function loadConversationMessages(sessionId){
 }
 async function deleteConversation(sessionId){
   if(!sessionId)return;
-  const select=document.getElementById('sessionSelect');
-  const title=select?.selectedOptions?.[0]?.textContent||'当前会话';
-  if(!window.confirm(`删除${title}及其消息？`))return;
+  const title=conversationSessions.find(item=>item.id===sessionId)?.title||'当前会话';
+  if(!window.confirm(`删除“${title}”及其消息？`))return;
   const res=await apiFetch(`/api/conversations/${encodeURIComponent(sessionId)}`,{method:'DELETE'});
   if(!res.ok){showToast('删除会话失败');return;}
   startNewConversation();
@@ -281,21 +295,23 @@ function startNewConversation(){
   activeSessionMessages=[];
   const answer=document.getElementById('answer');
   if(answer)answer.innerHTML=renderHomeMessages();
-  const select=document.getElementById('sessionSelect');
-  if(select)select.value='';
+  renderSidebarConversations();
   document.getElementById('queryInput')?.focus();
 }
-document.addEventListener('change',event=>{
-  if(event.target?.id==='sessionSelect'){
-    const sessionId=event.target.value;
-    const deleteBtn=document.getElementById('deleteConversationBtn');
-    if(deleteBtn)deleteBtn.disabled=!sessionId;
-    if(sessionId)loadConversationMessages(sessionId);else startNewConversation();
-  }
-});
 document.addEventListener('click',event=>{
-  if(event.target?.id==='newConversationBtn')startNewConversation();
-  if(event.target?.id==='deleteConversationBtn')deleteConversation(activeSessionId);
+  const deleteAction=event.target?.closest?.('[data-delete-conversation]');
+  if(deleteAction){
+    event.preventDefault();
+    event.stopPropagation();
+    deleteConversation(deleteAction.dataset.deleteConversation);
+    return;
+  }
+  const conversationAction=event.target?.closest?.('[data-conversation-id]');
+  if(conversationAction){
+    const sessionId=conversationAction.dataset.conversationId;
+    if(sessionId&&sessionId!==activeSessionId)loadConversationMessages(sessionId);
+  }
+  if(event.target?.id==='sidebarNewConversationBtn')startNewConversation();
   if(event.target?.id==='stopBtn'&&activeRequestController)activeRequestController.abort();
   if(event.target?.id==='retryBtn'&&lastFailedQuery){
     const input=document.getElementById('queryInput');
@@ -323,7 +339,14 @@ function shell(state){
   const navHtml=visibleNav.map(([key,code])=>{
     const r=routes[key];
     if(r&&r.href){return `<a class="sidebar-nav-item" href="${r.href}">${r.label}</a>`;}
-    return `<button class="sidebar-nav-item ${state.route===key?'active':''}" data-route="${key}">${r.label}</button>`;
+    const item=`<button class="sidebar-nav-item ${state.route===key?'active':''}" data-route="${key}">${r.label}</button>`;
+    if(key!=='home'||state.route!=='home')return item;
+    return item+`<section class="sidebar-conversation-hub" aria-label="门户会话">
+      <button class="sidebar-new-conversation" id="sidebarNewConversationBtn" type="button"><span aria-hidden="true">＋</span><span>新建对话</span></button>
+      <div class="sidebar-conversation-heading">历史对话记录</div>
+      <div class="sidebar-conversation-list" id="sidebarConversationList" tabindex="0" aria-label="历史对话列表"><div class="sidebar-conversation-empty">正在加载…</div></div>
+      <div class="sidebar-retrieval-status" id="conversationState" data-status="loading"><span class="sidebar-status-dot" aria-hidden="true"></span><span>正在检查检索服务…</span></div>
+    </section>`;
   }).join("");
   return `<aside class="sidebar"><div class="sidebar-brand"><div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><div class="sidebar-title">技术边界数据库</div></div><nav class="sidebar-nav">${navHtml}</nav><div class="sidebar-account"><div class="sidebar-avatar">${escapeHtml(avatarLetter)}</div><div class="sidebar-account-info"><div class="sidebar-account-name">${escapeHtml(accName)}</div><div class="sidebar-account-role">${escapeHtml(accRole)}</div></div><div class="sidebar-actions"><button class="ghost-btn" id="changePwdBtn">密码</button><button class="ghost-btn" id="logoutBtn">退出</button></div></div></aside><section class="workspace"><main class="main ${state.route==='home'?'home-main':state.route==='breadth'?'breadth-main':''}" id="main" tabindex="-1">${view(state.route)}</main></section>`;
 }
@@ -354,13 +377,8 @@ function homeView(){
   </aside>
   <button class="home-drawer-collapse" id="homeDrawerClose" type="button" aria-label="收起" title="收起" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
   <button class="home-drawer-tab" id="homeDrawerOpen" type="button" aria-expanded="false" aria-controls="homeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span>技术预警 · 技术边界</span></button>
-  <section class="home-section home-knowledge-section" aria-labelledby="homeKnowledgeTitle">
-    <div class="home-section-heading compact knowledge-heading">
-      <div><h2 id="homeKnowledgeTitle">与知识库互动</h2></div>
-      <div class="knowledge-heading-actions"><span class="knowledge-hint">基于广度情报索引检索并给出可核验引用</span></div>
-    </div>
+  <section class="home-section home-knowledge-section" aria-label="技术情报知识库问答">
     <div class="panel conversation-panel" id="knowledgeConversation">
-      <div class="conversation-toolbar"><label class="session-picker"><span>会话</span><select id="sessionSelect" aria-label="选择历史会话"><option value="">新对话</option></select></label><button id="deleteConversationBtn" class="icon-btn" type="button" title="删除当前会话" aria-label="删除当前会话" disabled>×</button><button id="newConversationBtn" class="ghost-btn" type="button">＋ 新对话</button><span id="conversationState">正在检查检索服务…</span></div>
       <div class="qa-empty-state" id="knowledgeEmptyState" ${activeSessionMessages.length?'hidden':''}>
         <div class="qa-graph-container" id="qaGraphContainer"><div class="qa-graph-placeholder">正在读取关系图谱…</div></div>
         <div class="qa-empty-copy"><strong>技术情报知识库</strong><span>关系图谱概览与广度情报索引来自同一套检索服务</span></div>
@@ -418,8 +436,8 @@ async function loadAssistantStatus(){
     const res=await apiFetch('/api/assistant/status');
     const data=await res.json();
     const count=(data.stats||{}).indexed_records;
-    if(state){state.textContent=data.ready?`检索服务已就绪 · ${Number(count||0).toLocaleString('zh-CN')} 条索引`:data.message||'检索服务未配置';state.dataset.status=data.status||'unknown';}
-  }catch(err){if(state){state.textContent='检索服务状态检查失败';state.dataset.status='error';}}
+    if(state){const label=state.querySelector('span:last-child');if(label)label.textContent=data.ready?`检索服务已就绪 · ${Number(count||0).toLocaleString('zh-CN')} 条索引`:data.message||'检索服务未配置';state.dataset.status=data.ready?'ready':(data.status||'unknown');}
+  }catch(err){if(state){const label=state.querySelector('span:last-child');if(label)label.textContent='检索服务状态检查失败';state.dataset.status='error';}}
 }
 async function loadKnowledgeGraph(){
   const container=document.getElementById('qaGraphContainer');
@@ -907,7 +925,7 @@ async function submitQuery(options={}){
       throw new Error(errData.detail||'请求失败');
     }
     activeSessionId=res.headers.get('X-Conversation-Id')||activeSessionId;
-    const deleteBtn=document.getElementById('deleteConversationBtn');if(deleteBtn)deleteBtn.disabled=!activeSessionId;
+    renderSidebarConversations();
     const reader=res.body.getReader();
     const decoder=new TextDecoder();
     let buffer="";

@@ -140,6 +140,134 @@ a:hover{color:var(--brand-lighter)}
 .sidebar-nav-item:hover{background:var(--bg-surface);color:var(--text-primary)}
 .sidebar-nav-item.active{background:var(--brand-bg);color:var(--brand);font-weight:600}
 
+/* 门户会话：把新建、历史记录、删除和检索状态收进左侧导航 */
+.sidebar-conversation-hub{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  margin:2px 2px 8px;
+  padding:8px 6px 9px;
+  border-bottom:1px solid var(--border-subtle);
+}
+.sidebar-new-conversation{
+  width:100%;
+  min-height:34px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:0 10px;
+  border:1px solid var(--brand-border);
+  border-radius:var(--radius-md);
+  background:var(--bg-canvas);
+  color:var(--brand);
+  font:600 12px/1 var(--sans);
+  cursor:pointer;
+  text-align:left;
+  transition:background .15s,border-color .15s,box-shadow .15s;
+}
+.sidebar-new-conversation:hover{
+  background:var(--brand-bg);
+  border-color:var(--brand);
+  box-shadow:0 4px 12px rgba(94,106,210,.09);
+}
+.sidebar-new-conversation>span:first-child{font-size:17px;font-weight:400;line-height:1}
+.sidebar-conversation-heading{
+  padding:4px 8px 1px;
+  color:var(--text-tertiary);
+  font-size:10.5px;
+  font-weight:650;
+  letter-spacing:.02em;
+  text-align:left;
+}
+.sidebar-conversation-list{
+  max-height:168px;
+  overflow-y:hidden;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  scrollbar-gutter:stable;
+  outline:none;
+}
+.sidebar-conversation-list:hover,
+.sidebar-conversation-list:focus,
+.sidebar-conversation-list:focus-within{overflow-y:auto}
+.sidebar-conversation-row{
+  min-height:32px;
+  display:flex;
+  align-items:center;
+  border-radius:var(--radius-sm);
+  color:var(--text-tertiary);
+}
+.sidebar-conversation-row:hover{background:var(--bg-surface);color:var(--text-primary)}
+.sidebar-conversation-row.active{background:var(--brand-bg);color:var(--brand)}
+.sidebar-conversation-item{
+  flex:1;
+  min-width:0;
+  height:32px;
+  padding:0 3px 0 8px;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:500 11.5px/1.25 var(--sans);
+  text-align:left;
+  cursor:pointer;
+}
+.sidebar-conversation-item span{
+  display:block;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.sidebar-conversation-row.active .sidebar-conversation-item{font-weight:600}
+.sidebar-conversation-delete{
+  flex:0 0 25px;
+  width:25px;
+  height:25px;
+  margin-right:3px;
+  padding:0;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:var(--text-quaternary);
+  font:400 17px/1 var(--sans);
+  cursor:pointer;
+  opacity:0;
+  transition:opacity .12s,color .12s,background .12s;
+}
+.sidebar-conversation-row:hover .sidebar-conversation-delete,
+.sidebar-conversation-row.active .sidebar-conversation-delete,
+.sidebar-conversation-delete:focus-visible{opacity:1}
+.sidebar-conversation-delete:hover{background:var(--red-bg);color:var(--red)}
+.sidebar-conversation-empty{
+  padding:7px 8px;
+  color:var(--text-quaternary);
+  font-size:11px;
+  line-height:1.4;
+}
+.sidebar-retrieval-status{
+  display:flex;
+  align-items:flex-start;
+  gap:6px;
+  min-height:24px;
+  padding:5px 8px 0;
+  color:var(--text-tertiary);
+  font-size:10px;
+  line-height:1.35;
+}
+.sidebar-status-dot{
+  flex:0 0 6px;
+  width:6px;
+  height:6px;
+  margin-top:3px;
+  border-radius:50%;
+  background:var(--text-quaternary);
+}
+.sidebar-retrieval-status[data-status="ready"] .sidebar-status-dot{background:var(--green)}
+.sidebar-retrieval-status[data-status="error"] .sidebar-status-dot{background:var(--red)}
+@media(hover:none){
+  .sidebar-conversation-list{overflow-y:auto}
+}
+
 .sidebar-account{
   flex-shrink:0;
   display:flex;
@@ -834,6 +962,7 @@ a:hover{color:var(--brand-lighter)}
     text-align:center;
     white-space:normal;
   }
+  .sidebar-conversation-hub{display:none}
   .sidebar-account{flex-direction:column;padding:8px 4px;gap:5px}
   .sidebar-account-info{display:none}
   .sidebar-actions{flex-direction:column;gap:3px}

@@ -41,7 +41,7 @@ def test_home_layout_is_boundary_alert_and_knowledge_workbench():
     assert ".home-knowledge-section" in css
     assert "技术边界" in js
     assert "技术预警" in js
-    assert "与知识库互动" in js
+    assert "与知识库互动" not in js
     assert "loadHomeBoundaries" in js
     assert "sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0))" in js
     assert "是什么" in js and "关键指标边界" in js
@@ -98,16 +98,26 @@ def test_home_exposes_model_selector_and_sends_model_param():
     assert ".model-select" in css
 
 
-def test_home_exposes_persisted_conversation_controls():
+def test_home_exposes_persisted_conversations_in_sidebar():
     js = load_served_js()
+    css = load_served_css()
     assert "/api/conversations" in js
-    assert "sessionSelect" in js
-    assert "newConversationBtn" in js
-    assert "deleteConversationBtn" in js
+    assert "sidebarNewConversationBtn" in js
+    assert "sidebarConversationList" in js
+    assert "data-conversation-id" in js
+    assert "data-delete-conversation" in js
+    assert "conversationState" in js
+    assert "sessionSelect" not in js
+    assert "newConversationBtn" not in js
+    assert "deleteConversationBtn" not in js
     assert "method:'DELETE'" in js
     assert "loadConversationMessages" in js
     assert "TECHDB_QA_SERVICE_URL" not in js
     assert "regenerate,retry" in js
+    assert ".sidebar-conversation-list" in css
+    assert "max-height:168px" in css
+    assert "overflow-y:hidden" in css
+    assert ".sidebar-conversation-list:hover" in css
 
 
 def test_industry_map_page_uses_server_tree():
