@@ -37,7 +37,7 @@ def test_home_layout_is_boundary_alert_and_knowledge_workbench():
     assert ".home-knowledge-section" in css
     assert "margin-left:calc(var(--drawer-w)" not in css
     assert ".home-boundary-grid" in css
-    assert ".home-alert-table" in css
+    assert ".home-alert-list" in css
     assert ".home-knowledge-section" in css
     assert "技术边界" in js
     assert "技术预警" in js
@@ -45,7 +45,12 @@ def test_home_layout_is_boundary_alert_and_knowledge_workbench():
     assert "loadHomeBoundaries" in js
     assert "sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0))" in js
     assert "是什么" in js and "关键指标边界" in js
-    assert "情报发布" in js and "预警生成" in js
+    assert "<th>情报发布</th>" not in js and "<th>预警生成</th>" not in js
+    assert "进入广度追踪" not in js
+    assert "HOME_ALERT_PAGE_SIZE=5" in js
+    assert "homeAlertTimestamp(b)-homeAlertTimestamp(a)" in js
+    assert "home-alert-reason-text" in js and "data-alert-reason-toggle" in js
+    assert "focus_title" in js and "focus_date" in js and "focus_url" in js
     assert "/breadth/data/processed/alert-records.json" in js
     assert "homeDrawer" in js
     assert "homeDrawerClose" not in js
@@ -169,3 +174,13 @@ def test_deep_research_metrics_use_commercial_readiness_statuses():
     assert "isSofcReport?'':indicatorGrid('关键指标（经济）'" in js
     assert ".commercial-status-missing" in css
     assert "color:var(--red);background:var(--red-bg)" in css
+
+
+def test_breadth_portal_focuses_the_exact_alert_record():
+    js = load_served_js()
+    breadth_js = urlopen("http://web/breadth/app.js", timeout=10).read().decode("utf-8")
+    assert "focus_title" in js and "focus_date" in js and "focus_url" in js
+    assert "focusRecord" in breadth_js
+    assert "data-record-index" in breadth_js
+    assert "scrollMarginTop" in breadth_js
+    assert "scrollIntoView({ block: 'start' })" in breadth_js

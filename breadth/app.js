@@ -37,6 +37,8 @@ const state = {
   collapsedGroups: new Set(),
   expandedClusters: new Set(),
   sortBy: 'date',
+  focusRecord: null,
+  focusApplied: false,
   // Report view state
   currentView: 'intelligence', // 'intelligence' | 'reports'
   reportType: 'daily', // 'daily' | 'weekly' | 'monthly'
@@ -44,11 +46,20 @@ const state = {
   reportDatesCache: {}, // { daily: [...], weekly: [...], monthly: [...] }
 };
 
-// Portal integration: accept ?alert=level from parent iframe URL
+// Portal integration: accept an alert filter and an exact record locator.
 (function applyPortalAlert() {
   try {
-    var p = new URLSearchParams(window.location.search).get('alert');
-    if (p) state.alertLevel = p;
+    const params = new URLSearchParams(window.location.search);
+    const alertLevel = params.get('alert');
+    if (alertLevel) state.alertLevel = alertLevel;
+    const title = params.get('focus_title') || '';
+    if (title) {
+      state.focusRecord = {
+        title,
+        date: params.get('focus_date') || '',
+        url: params.get('focus_url') || '',
+      };
+    }
   } catch (e) {}
 })();
 
@@ -1082,6 +1093,16 @@ function renderCategoryTree() {
 }
 
 function renderRecords() {
+  let focusIndex = -1;
+  if (state.focusRecord && !state.focusApplied) {
+    focusIndex = state.filtered.findIndex(item =>
+      item.title === state.focusRecord.title &&
+      (!state.focusRecord.date || item.date === state.focusRecord.date) &&
+      (!state.focusRecord.url || item.url === state.focusRecord.url)
+    );
+    if (focusIndex >= 0) state.page = Math.floor(focusIndex / PAGE_SIZE) + 1;
+    state.focusApplied = true;
+  }
   const pages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
   state.page = Math.min(state.page, pages);
   const start = (state.page - 1) * PAGE_SIZE;
@@ -1094,6 +1115,15 @@ function renderRecords() {
     return;
   }
   $('recordList').innerHTML = rows.map(renderRecordCard).join('');
+  if (focusIndex >= 0) {
+    const focused = state.filtered[focusIndex];
+    requestAnimationFrame(() => {
+      const card = document.querySelector(`[data-record-index="${focused._idx}"]`);
+      const toolbar = document.querySelector('.content-toolbar');
+      if (card) card.style.scrollMarginTop = `${(toolbar?.offsetHeight || 0) + 8}px`;
+      card?.scrollIntoView({ block: 'start' });
+    });
+  }
 }
 
 function renderRecordCard(item) {
@@ -1219,7 +1249,7 @@ function renderRecordCard(item) {
     }
   }
 
-  return `<article class="record-card">
+  return `<article class="record-card" data-record-index="${item._idx ?? -1}">
     <div class="record-title">${levelBadges}${titleHtml}${clusterHtml}</div>
     ${topicHtml}
     ${metaLine}

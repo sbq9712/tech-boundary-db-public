@@ -376,8 +376,7 @@ function homeView(){
     <div class="home-drawer-body">
   <section class="home-section home-alert-section" aria-labelledby="homeAlertTitle">
     <div class="home-section-heading compact">
-      <div><h2 id="homeAlertTitle">技术预警</h2></div>
-      <button class="home-section-link" type="button" data-route="breadth">进入广度追踪</button>
+      <div class="home-alert-heading"><h2 id="homeAlertTitle">技术预警</h2><div class="home-alert-pagination" aria-label="技术预警翻页"><button id="homeAlertPrev" type="button" aria-label="上一页" title="上一页">‹</button><span id="homeAlertPageLabel">—</span><button id="homeAlertNext" type="button" aria-label="下一页" title="下一页">›</button></div></div>
     </div>
     <div class="home-alert-table-wrap" id="alertPanelBody">
       <div class="alert-empty">正在加载技术预警…</div>
@@ -415,7 +414,7 @@ function homeView(){
 </div>`;
 }
 function renderInsightPanels(){return '';}
-function breadthView(){const alertLevel=parseHash().params.get('alert')||'';const query=alertLevel?`?alert=${encodeURIComponent(alertLevel)}`:'';return `<section style="padding:0;overflow:hidden;height:100%;display:flex;flex-direction:column"><div style="flex:1;overflow:hidden;display:block" id="breadthFrameWrap"><iframe src="/breadth/index.html${query}" style="width:100%;height:100%;border:none;display:block" title="广度追踪" allowfullscreen></iframe></div></section>`;}
+function breadthView(){const source=parseHash().params;const forwarded=new URLSearchParams();['alert','focus_title','focus_date','focus_url'].forEach(key=>{const value=source.get(key);if(value)forwarded.set(key,value);});const query=forwarded.size?`?${forwarded.toString()}`:'';return `<section style="padding:0;overflow:hidden;height:100%;display:flex;flex-direction:column"><div style="flex:1;overflow:hidden;display:block" id="breadthFrameWrap"><iframe src="/breadth/index.html${query}" style="width:100%;height:100%;border:none;display:block" title="广度追踪" allowfullscreen></iframe></div></section>`;}
 function dashboardView(){return `<section class="flat-content"><h1 class="section-title">基于知识库文档凝聚的技术边界判断，含核心指标、卡点分析和突破预警</h1><form class="dashboard-search" id="dashboardFilter"><input id="dashboardQ" placeholder="搜索技术、行业或指标，例如 压缩空气、超导、钠电池"/><button class="secondary-btn" type="submit">检索</button></form><div class="dashboard-grid" id="dashboardRows"><div class="status-note">正在加载仪表盘…</div></div></section>`;}
 function sourcesView(){
   const state=parseHash();
@@ -494,29 +493,76 @@ function homeBoundaryDefinition(item){const name=item.name||'该技术';const sc
 function homeBoundaryLines(item){const indicators=(item.key_indicators||[]).slice(0,3).map(ind=>`${ind.name||''}${ind.value&&ind.value!=='—'?`：${ind.value}${ind.unit&&ind.unit!=='—'?ind.unit:''}`:''}`);if(indicators.length)return indicators;const metrics=(item.metrics||[]).slice(0,3);return metrics.length?metrics:['关键指标边界待补充'];}
 async function loadHomeBoundaries(){const root=document.getElementById('homeBoundaryCards');if(!root)return;try{const res=await apiFetch('/api/dashboards');const data=await res.json();const all=data.items||[];const items=all.slice().sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0)).slice(0,3);if(!items.length){root.innerHTML='<div class="home-loading-card">尚无已发布的技术边界</div>';return;}root.innerHTML=items.map((item,index)=>{const reviewLabel=item.review_status==='validated'?'已审核':item.metric_review_status==='reviewed'?'指标已审阅':'持续更新';return `<button class="home-boundary-card ${index===0?'primary':''}" type="button" data-home-dashboard="${escapeHtml(item.id)}"><div class="boundary-card-meta"><time>${escapeHtml(formatHomeDate(item.updated_at))}</time><span>${reviewLabel}</span></div><h3>${escapeHtml(item.name||'未命名技术')}</h3><p class="boundary-card-definition"><strong>是什么</strong><span class="boundary-card-def-text">${escapeHtml(homeBoundaryDefinition(item))}</span></p><div class="boundary-card-label">关键指标边界</div><ol>${homeBoundaryLines(item).map(line=>`<li>${escapeHtml(line)}</li>`).join('')}</ol><div class="boundary-card-action">查看边界详情 <span aria-hidden="true">→</span></div></button>`}).join('');root.querySelectorAll('[data-home-dashboard]').forEach(card=>card.addEventListener('click',()=>showDashboardDetail(card.dataset.homeDashboard)));}catch(err){root.innerHTML='<div class="home-loading-card">技术边界加载失败</div>';}}
 
+const HOME_ALERT_PAGE_SIZE=5;
+let homeAlertItems=[];
+let homeAlertPage=1;
+function homeAlertTarget(item){
+  const params=new URLSearchParams({alert:'alert',focus_title:String(item.alert_title||item.title||''),focus_date:String(item.published_at||item.publish_date||''),focus_url:String(item.url||'')});
+  return `#breadth?${params.toString()}`;
+}
+function homeAlertTimestamp(item){
+  const value=item.published_at||item.publish_date||'';
+  const parsed=Date.parse(value);
+  return Number.isFinite(parsed)?parsed:Number.NEGATIVE_INFINITY;
+}
+function renderHomeAlertPage(){
+  const body=document.getElementById('alertPanelBody');
+  if(!body)return;
+  const pages=Math.max(1,Math.ceil(homeAlertItems.length/HOME_ALERT_PAGE_SIZE));
+  homeAlertPage=Math.min(Math.max(1,homeAlertPage),pages);
+  const start=(homeAlertPage-1)*HOME_ALERT_PAGE_SIZE;
+  const rows=homeAlertItems.slice(start,start+HOME_ALERT_PAGE_SIZE);
+  const pageLabel=document.getElementById('homeAlertPageLabel');
+  const previous=document.getElementById('homeAlertPrev');
+  const next=document.getElementById('homeAlertNext');
+  if(pageLabel)pageLabel.textContent=`${homeAlertPage} / ${pages}`;
+  if(previous)previous.disabled=homeAlertPage<=1;
+  if(next)next.disabled=homeAlertPage>=pages;
+  body.innerHTML=`<div class="home-alert-list">${rows.map((item,index)=>{
+    const title=item.alert_title||item.title||'未命名情报';
+    const publishedTime=item.published_at||item.publish_date||'';
+    const domain=item.domain_name||item.domain||String(item.info_item_id||'').split('_')[1]||'待归类';
+    const reason=item.alert_reason||item.reviewer_comment||item.alert_body||item.summary||(item.content||'').slice(0,240)||'持续跟踪';
+    const target=homeAlertTarget(item);
+    const reasonId=`home-alert-reason-${start+index}`;
+    return `<article class="home-alert-item"><div class="home-alert-primary"><span class="home-alert-domain">${escapeHtml(domain)}</span><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><div class="home-alert-reason"><span class="home-alert-reason-label">预警原因：</span><span class="home-alert-reason-text" id="${reasonId}">${escapeHtml(reason)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开</button></div></article>`;
+  }).join('')}</div>`;
+  requestAnimationFrame(()=>body.querySelectorAll('.home-alert-reason-text').forEach(reason=>{
+    const toggle=reason.parentElement?.querySelector('[data-alert-reason-toggle]');
+    if(toggle)toggle.hidden=reason.scrollHeight<=reason.clientHeight+1;
+  }));
+}
 async function loadAlertIntel(){
   const body=document.getElementById('alertPanelBody');
   if(!body)return;
+  if(!body.dataset.bound){
+    body.addEventListener('click',event=>{
+      const toggle=event.target.closest?.('[data-alert-reason-toggle]');
+      if(!toggle)return;
+      const reason=document.getElementById(toggle.getAttribute('aria-controls'));
+      if(!reason)return;
+      const expanded=toggle.getAttribute('aria-expanded')==='true';
+      reason.classList.toggle('expanded',!expanded);
+      toggle.setAttribute('aria-expanded',expanded?'false':'true');
+      toggle.textContent=expanded?'展开':'收起';
+    });
+    body.dataset.bound='1';
+  }
+  document.getElementById('homeAlertPrev')?.addEventListener('click',()=>{homeAlertPage-=1;renderHomeAlertPage();});
+  document.getElementById('homeAlertNext')?.addEventListener('click',()=>{homeAlertPage+=1;renderHomeAlertPage();});
   try{
     const res=await fetch('/breadth/data/processed/alert-records.json',{cache:'no-store'});
     if(!res.ok)throw new Error(`alert snapshot ${res.status}`);
     const data=await res.json();
-    const items=Array.isArray(data.items)?data.items:[];
-    if(!items.length){
+    homeAlertItems=(Array.isArray(data.items)?data.items:[]).slice().sort((a,b)=>homeAlertTimestamp(b)-homeAlertTimestamp(a));
+    homeAlertPage=1;
+    if(!homeAlertItems.length){
       body.innerHTML='<div class="alert-empty">当前没有活跃预警情报</div>';
+      const pageLabel=document.getElementById('homeAlertPageLabel');
+      if(pageLabel)pageLabel.textContent='0 / 0';
       return;
     }
-    body.innerHTML=`<table class="home-alert-table"><thead><tr><th>标题</th><th>情报发布</th><th>预警生成</th><th>领域</th><th>预警原因</th></tr></thead><tbody>${items.slice(0,4).map(item=>{
-      const color=item.alert_color||(item.confidence==='high'?'high':item.confidence==='medium'?'orange':'normal');
-      const title=item.alert_title||item.title||'未命名情报';
-      const alertBody=item.alert_body||item.summary||(item.content||'').slice(0,120)||'';
-      const publishedTime=item.published_at||item.publish_date||'';
-      const alertCreatedTime=item.alert_created_at||item.alert_time||item.created_at||'';
-      const target=item.target_url||'#breadth';
-      const domain=item.domain_name||item.domain||String(item.info_item_id||'').split('_')[1]||'待归类';
-      const reason=item.reviewer_comment||alertBody||'持续跟踪';
-      return `<tr><td><a class="home-alert-title" href="${escapeHtml(target)}"><i class="alert-signal ${escapeHtml(color)}"></i>${escapeHtml(title)}</a></td><td><time>${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></td><td><time>${escapeHtml(formatHomeDate(alertCreatedTime,'—'))}</time></td><td><span class="home-alert-domain">${escapeHtml(domain)}</span></td><td title="${escapeHtml(reason)}">${escapeHtml(compactHomeText(reason,10))}</td></tr>`;
-    }).join('')}</tbody></table>`;
+    renderHomeAlertPage();
   }catch(err){
     body.innerHTML='<div class="alert-empty">技术预警加载失败</div>';
   }
