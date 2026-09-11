@@ -2123,5 +2123,8 @@ a:hover{color:var(--brand-lighter)}
 /* ── 模块头部统一：标题行 38px 与右侧工具/筛选同线等高（深度调研/行业图景/资料库/用户管理/信源） ── */
 .flat-content>.section-title,
 .content-panel>.section-title{display:flex;align-items:center;min-height:38px}
+/* 头部行内的标题清除自带 16px 下边距：flex 按外边距盒居中，不去掉会导致文字比工具高出数像素 */
+.map-head .section-title,
+.lib-head .section-title{margin:0}
 /* 锚点按钮（上传资料）文字垂直居中 */
 a.secondary-btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
