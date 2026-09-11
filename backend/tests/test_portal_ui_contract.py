@@ -50,6 +50,8 @@ def test_home_layout_is_boundary_alert_and_knowledge_workbench():
     assert "homeDrawerClose" in js and "homeDrawerOpen" in js
     assert "drawer-collapsed" in js
     assert "knowledgeToggle" not in js
+    assert "情报面板" not in js
+    assert "homeDrawerClose" in js and "homeDrawerOutsideBound" in js
     assert "最新研究结论" not in js
     assert "高信号变化" not in js
     assert "基于知识库的问答" not in js
