@@ -111,6 +111,8 @@ def test_home_exposes_persisted_conversations_in_sidebar():
     assert "newConversationBtn" not in js
     assert "deleteConversationBtn" not in js
     assert "method:'DELETE'" in js
+    assert "const deletingActive=sessionId===activeSessionId" in js
+    assert "if(deletingActive)startNewConversation()" in js
     assert "loadConversationMessages" in js
     assert "TECHDB_QA_SERVICE_URL" not in js
     assert "regenerate,retry" in js

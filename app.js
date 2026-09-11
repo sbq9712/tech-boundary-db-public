@@ -283,10 +283,13 @@ async function deleteConversation(sessionId){
   if(!sessionId)return;
   const title=conversationSessions.find(item=>item.id===sessionId)?.title||'当前会话';
   if(!window.confirm(`删除“${title}”及其消息？`))return;
+  const deletingActive=sessionId===activeSessionId;
   const res=await apiFetch(`/api/conversations/${encodeURIComponent(sessionId)}`,{method:'DELETE'});
   if(!res.ok){showToast('删除会话失败');return;}
-  startNewConversation();
-  await loadConversations();
+  if(deletingActive)startNewConversation();
+  conversationSessions=conversationSessions.filter(item=>item.id!==sessionId);
+  renderSidebarConversations();
+  await loadConversations(deletingActive?null:activeSessionId);
   showToast('会话已删除');
 }
 function startNewConversation(){
