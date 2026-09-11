@@ -54,7 +54,7 @@
     input[type="file"]{
       width:100%;
       background:#ffffff;
-      border:1px solid #d1d5db;
+      border:1px solid #d8dee8;
       color:var(--text);
       padding:10px;
       border-radius:12px;
@@ -67,12 +67,23 @@
     th{ background:#f1f5f9; font-weight:650; white-space:nowrap; }
     tr:last-child td{ border-bottom:none; }
 
-    .btn{ cursor:pointer; padding:8px 10px; border-radius:10px; border:1px solid #d1d5db; background:#f1f5f9; color:var(--text); font-size:12px; }
+    .btn{ cursor:pointer; padding:8px 10px; border-radius:10px; border:1px solid #d8dee8; background:#f1f5f9; color:var(--text); font-size:12px; }
     .btn:hover{ background:#e2e8f0; }
 
     .error{ color:#fca5a5; }
     .success{ color:#a7f3d0; }
-  </style>
+  /* ── chrome unification v2：与门户统一 ── */
+.nav a,.nav button{background:transparent;border-color:transparent;color:#3d3d3d;transition:background .15s,color .15s,border-color .15s}
+.nav a:hover,.nav button:hover{background:rgba(94,106,210,.07);border-color:rgba(94,106,210,.18);color:#5e6ad2}
+.btn{transition:border-color .15s,background .15s,box-shadow .15s}
+.btn:hover{border-color:rgba(94,106,210,.35)!important;box-shadow:0 1px 6px rgba(16,24,40,.05)}
+::selection{background:rgba(94,106,210,.16)}
+*{scrollbar-width:thin;scrollbar-color:rgba(23,24,28,.18) transparent}
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:rgba(23,24,28,.16);border-radius:999px;border:3px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background-color:rgba(23,24,28,.28)}
+</style>
 </head>
 <body>
 <div class="topbar">

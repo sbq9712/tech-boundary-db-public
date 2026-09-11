@@ -2083,7 +2083,11 @@ a:hover{color:var(--brand-lighter)}
 .library .ai-mark.ai_filled{color:var(--green)}
 .library .row-actions{display:flex;gap:8px;white-space:nowrap}
 .library .row-actions .secondary-btn{padding:5px 11px;font-size:12px}
-.library .lib-empty{text-align:center;padding:56px 20px;color:var(--text-tertiary);font-size:13px;border:1.5px dashed var(--border-standard);border-radius:var(--radius-lg);background:var(--bg-panel)}
+.library .lib-empty{text-align:center;padding:64px 20px;color:var(--text-tertiary);font-size:13px;border:1.5px dashed var(--border-standard);border-radius:var(--radius-lg);background:var(--bg-panel)}
+.library .lib-empty-icon{width:56px;height:56px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;background:var(--brand-bg);color:var(--brand)}
+.library .lib-empty-icon svg{width:24px;height:24px}
+.library .lib-empty-title{color:var(--text-secondary);font-size:14px;font-weight:600;margin-bottom:5px}
+.library .lib-empty-hint{font-size:12.5px}
 .library .lib-foot{margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .library .lib-count{color:var(--text-tertiary);font-size:12px;font-variant-numeric:tabular-nums}
 .library .secondary-btn:disabled{opacity:.45;cursor:not-allowed}
@@ -2128,3 +2132,14 @@ a:hover{color:var(--brand-lighter)}
 .lib-head .section-title{margin:0}
 /* 锚点按钮（上传资料）文字垂直居中 */
 a.secondary-btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+
+/* ── 全站精修 v3：世界级细节 ── */
+::selection{background:rgba(94,106,210,.16)}
+*{scrollbar-width:thin;scrollbar-color:rgba(23,24,28,.18) transparent}
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:rgba(23,24,28,.16);border-radius:999px;border:3px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background-color:rgba(23,24,28,.28)}
+.main,.flat-content,.panel{font-variant-numeric:tabular-nums}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:4px}
+.primary-btn:active,.secondary-btn:active,.ghost-btn:active{transform:translateY(0) scale(.985)}

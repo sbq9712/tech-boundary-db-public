@@ -103,7 +103,22 @@
       .toolbar{justify-content:flex-start;margin-top:12px}
       .map-frame{height:calc(100dvh - 300px);min-height:500px}
     }
-  </style>
+  /* ── chrome unification v2：与门户统一 ── */
+.nav a,.nav button{background:transparent;border-color:transparent;color:#3d3d3d;transition:background .15s,color .15s,border-color .15s}
+.nav a:hover,.nav button:hover{background:rgba(94,106,210,.07);border-color:rgba(94,106,210,.18);color:#5e6ad2}
+.btn{transition:border-color .15s,background .15s,box-shadow .15s}
+.btn:hover{border-color:rgba(94,106,210,.35)!important;box-shadow:0 1px 6px rgba(16,24,40,.05)}
+::selection{background:rgba(94,106,210,.16)}
+*{scrollbar-width:thin;scrollbar-color:rgba(23,24,28,.18) transparent}
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:rgba(23,24,28,.16);border-radius:999px;border:3px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background-color:rgba(23,24,28,.28)}
+
+.tab{border:1px solid #d8dee8!important;border-radius:999px!important;background:#fff!important;color:#3d3d3d!important;padding:9px 16px!important;transform:none!important;transition:all .15s}
+.tab:hover{border-color:rgba(94,106,210,.35)!important}
+.tab.active{background:#5e6ad2!important;border-color:#5e6ad2!important;color:#fff!important}
+</style>
 </head>
 <body>
   <div class="topbar">
