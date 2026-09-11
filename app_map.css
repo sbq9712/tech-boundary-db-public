@@ -6,7 +6,7 @@
 }
 .map-head{
   display:flex;
-  align-items:flex-end;
+  align-items:flex-start;
   justify-content:space-between;
   gap:16px;
 }
@@ -99,7 +99,7 @@
 .map-content-panel .mind-node>details>.mind-card{
   position:relative;
   z-index:1;
-  width:133px;
+  width:150px;
   min-height:58px;
   border:1px solid var(--border-standard);
   border-radius:var(--radius-md);
@@ -298,15 +298,10 @@
 }
 
 .map-content-panel{
-  padding:12px 14px 10px;
-}
-.map-content-panel .section-title{
-  font-size:16px;
-  line-height:1.3;
-  margin:4px 0 8px;
+  padding:0;
 }
 .map-head{
-  align-items:center;
+  align-items:flex-start;
   gap:10px;
 }
 .map-tools input{
@@ -351,7 +346,7 @@
 .map-content-panel .mind-node>details>.mind-card em{margin-top:3px;font-size:10px;letter-spacing:.02em}
 /* 根节点：品牌渐变 + 光晕 */
 .map-content-panel .mind-node.depth-0>details>.mind-card{
-  width:140px;min-height:52px;
+  width:158px;min-height:52px;
   background:linear-gradient(135deg,var(--brand-light),var(--brand));
   border:none;border-radius:12px;
   box-shadow:0 8px 22px rgba(94,106,210,.32);
