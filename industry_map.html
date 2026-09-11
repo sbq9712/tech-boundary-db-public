@@ -48,9 +48,9 @@
     .summary-title{font-weight:760}
     .meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px}
     .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 8px;background:#f8fafc}
-    .legend{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:12px}
-    .legend-item{display:inline-flex;gap:5px;align-items:center}
-    .dot{width:14px;height:14px;border-radius:999px;display:inline-grid;place-items:center;font-size:10px;font-weight:800;color:white}
+    .legend{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:12px}
+    .legend-item{display:inline-flex;gap:6px;align-items:center;padding:4px 11px 4px 6px;border-radius:999px;border:1px solid var(--line);background:#fff}
+    .dot{width:16px;height:16px;border-radius:999px;display:inline-grid;place-items:center;font-size:9px;font-weight:800;color:white}
     .dot.intel{background:var(--green)}
     .dot.issue{background:var(--amber)}
     .dot.dashboard{background:var(--blue)}
@@ -68,13 +68,17 @@
     .mind-node>details{display:flex;align-items:center}
     .mind-node summary{list-style:none;cursor:pointer}
     .mind-node summary::-webkit-details-marker{display:none}
-    .node-card{position:relative;z-index:1;width:190px;min-height:58px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;padding:10px 12px;box-shadow:0 8px 18px rgba(15,23,42,.06)}
+    .node-card{position:relative;z-index:1;width:190px;min-height:48px;border:1px solid var(--line);border-radius:10px;background:#fff;padding:9px 12px;box-shadow:0 1px 2px rgba(16,24,40,.04);transition:border-color .15s,box-shadow .2s,transform .15s}
+    .node-card:hover{border-color:rgba(94,106,210,.35);box-shadow:0 3px 10px rgba(94,106,210,.12);transform:translateY(-1px)}
     .node-card .title{display:block;font-weight:760;line-height:1.35;word-break:break-word}
     .node-card .sub{display:block;margin-top:4px;color:var(--muted);font-size:11px}
-    .depth-0>details>.node-wrap>.node-card{width:210px;background:var(--root);border-color:var(--root);color:#fff}
-    .depth-0>details>.node-wrap>.node-card .sub{color:#cbd5e1}
-    .depth-1>details>.node-wrap>.node-card{background:#e0f2fe;border-color:#7dd3fc}
-    .depth-2>details>.node-wrap>.node-card{background:#ecfeff}
+    .depth-0>details>.node-wrap>.node-card{width:200px;background:linear-gradient(135deg,#7170ff,#5e6ad2);border:none;border-radius:12px;color:#fff;box-shadow:0 8px 22px rgba(94,106,210,.32)}
+    .depth-0>details>.node-wrap>.node-card .sub{color:rgba(255,255,255,.75)}
+    .depth-1>details>.node-wrap>.node-card{background:#fff;border-color:rgba(94,106,210,.22);box-shadow:inset 3px 0 0 var(--blue),0 1px 2px rgba(16,24,40,.04)}
+    .depth-1>details>.node-wrap>.node-card .title{color:var(--blue)}
+    .depth-2>details>.node-wrap>.node-card{background:#fff}
+    .leaf>details>.node-wrap>.node-card{min-height:42px}
+    .leaf>details>.node-wrap>.node-card .title{font-weight:640}
     .leaf>details>.node-wrap>.node-card{background:#fff}
     .leaf-actions{display:flex;gap:6px;margin-top:8px;align-items:center}
     .asset-mark{width:24px;height:24px;border-radius:999px;border:1px solid transparent;display:inline-grid;place-items:center;font-size:12px;font-weight:850;color:#fff}
@@ -84,8 +88,8 @@
     .asset-mark.missing{background:var(--red);border-color:#b91c1c;cursor:not-allowed}
     a.asset-mark:hover{filter:brightness(.95);transform:translateY(-1px)}
     .mind-node>details>ul{display:flex;flex-direction:column;gap:10px;margin-left:38px;position:relative}
-    .mind-node>details>ul:before{content:"";position:absolute;left:-20px;top:28px;bottom:28px;width:1px;background:#cbd5e1}
-    .mind-node>details>ul>.mind-node:before{content:"";position:absolute;left:-20px;width:20px;height:1px;background:#cbd5e1}
+    .mind-node>details>ul:before{content:"";position:absolute;left:-20px;top:28px;bottom:28px;width:1px;background:rgba(94,106,210,.22)}
+    .mind-node>details>ul>.mind-node:before{content:"";position:absolute;left:-20px;width:20px;height:1px;background:rgba(94,106,210,.22)}
     .depth-0>details>ul{gap:16px}
     .node-wrap{display:block}
     .match .node-card{outline:3px solid rgba(94,106,210,.18);border-color:#828fff}

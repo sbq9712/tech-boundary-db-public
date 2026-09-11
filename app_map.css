@@ -331,3 +331,49 @@
 @media(max-width:1100px){
   .map-summary .map-hint{display:none}
 }
+
+/* ── 思维图节点精修 v2：更紧凑、更有设计感 ── */
+.map-content-panel .mind-node>details>.mind-card{
+  min-height:46px;
+  padding:9px 12px;
+  border-radius:10px;
+  background:var(--bg-panel);
+  border-color:var(--border-standard);
+  box-shadow:0 1px 2px rgba(16,24,40,.04);
+  transition:border-color .15s ease,box-shadow .2s ease,transform .15s ease;
+}
+.map-content-panel .mind-node>details>.mind-card:hover{
+  border-color:var(--brand-border);
+  box-shadow:0 3px 10px rgba(94,106,210,.12);
+  transform:translateY(-1px);
+}
+.map-content-panel .mind-node>details>.mind-card span{font-size:12.5px;line-height:1.4}
+.map-content-panel .mind-node>details>.mind-card em{margin-top:3px;font-size:10px;letter-spacing:.02em}
+/* 根节点：品牌渐变 + 光晕 */
+.map-content-panel .mind-node.depth-0>details>.mind-card{
+  width:200px;min-height:52px;
+  background:linear-gradient(135deg,var(--brand-light),var(--brand));
+  border:none;border-radius:12px;
+  box-shadow:0 8px 22px rgba(94,106,210,.32);
+}
+.map-content-panel .mind-node.depth-0>details>.mind-card:hover{box-shadow:0 10px 26px rgba(94,106,210,.4)}
+/* 一级分类：白卡 + 左缘品牌色条（全站签名元素） */
+.map-content-panel .mind-node.depth-1>details>.mind-card{
+  background:var(--bg-panel);
+  border-color:rgba(94,106,210,.22);
+  box-shadow:inset 3px 0 0 var(--brand),0 1px 2px rgba(16,24,40,.04);
+}
+.map-content-panel .mind-node.depth-1>details>.mind-card:hover{
+  border-color:var(--brand-border);
+  box-shadow:inset 3px 0 0 var(--brand),0 3px 10px rgba(94,106,210,.12);
+}
+.map-content-panel .mind-node.depth-1>details>.mind-card span{color:var(--brand)}
+/* 中间层与叶子：轻量 */
+.map-content-panel .mind-node.depth-2>details>.mind-card{background:var(--bg-panel)}
+.map-content-panel .mind-node.leaf>details>.mind-card{background:var(--bg-canvas);min-height:40px}
+.map-content-panel .mind-node.leaf>details>.mind-card span{font-weight:550;font-size:12px}
+/* 连接线：品牌淡色 */
+.map-content-panel .mind-node>details>ul:before,
+.map-content-panel .mind-node>details>ul>.mind-node:before{background:rgba(94,106,210,.22)}
+/* 叶子资产标签：更矮更精致 */
+.map-content-panel .leaf-tag{min-height:26px;font-size:11px;border-radius:8px}

@@ -4,7 +4,7 @@ const routes = {
   dashboard: { label: "深度调研", title: "深度调研" },
   map: { label: "行业图景", title: "行业图景" },
   users: { label: "用户管理", title: "用户管理" },
-  library: { label: "资料库", title: "资料库", href: "uploads_library.html" }
+  library: { label: "资料库", title: "资料库" }
 };
 const navItems = [["home","HOME"],["breadth","BRD"],["dashboard","DDY"],["map","MAP"],["library","LIB"],["users","USR"]];
 let currentUser = null;  // {username, display_name, role} filled by loadCurrentUser()
@@ -303,7 +303,7 @@ document.addEventListener('click',event=>{
 });
 function parseHash(){const raw=(location.hash||"#home").slice(1);const [routePart,queryPart=""]=raw.split("?");return {route:routes[routePart]?routePart:"home",params:new URLSearchParams(queryPart)};}
 function setRoute(route,params){const q=params?`?${params.toString()}`:"";location.hash=route+q;}
-function render(){if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route==="home"){activeSessionId=null;activeSessionMessages=[];}if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){loadAssistantModels();loadAssistantStatus();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();}
+function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route==="home"){activeSessionId=null;activeSessionMessages=[];}if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){loadAssistantModels();loadAssistantStatus();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
 async function ensureCurrentUser(){if(!currentUser){await loadCurrentUser();}return currentUser;}
 function loadCurrentUser(){return apiFetch("/api/auth/me").then(r=>r.ok?r.json():null).then(d=>{if(d){currentUser=d;}}).catch(()=>{});}
 function isAdmin(){return currentUser&&currentUser.role==="admin";}
@@ -320,7 +320,7 @@ function shell(state){
   }).join("");
   return `<aside class="sidebar"><div class="sidebar-brand"><div class="sidebar-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><div class="sidebar-title">技术边界数据库</div></div><nav class="sidebar-nav">${navHtml}</nav><div class="sidebar-account"><div class="sidebar-avatar">${escapeHtml(avatarLetter)}</div><div class="sidebar-account-info"><div class="sidebar-account-name">${escapeHtml(accName)}</div><div class="sidebar-account-role">${escapeHtml(accRole)}</div></div><div class="sidebar-actions"><button class="ghost-btn" id="changePwdBtn">密码</button><button class="ghost-btn" id="logoutBtn">退出</button></div></div></aside><section class="workspace"><main class="main ${state.route==='home'?'home-main':state.route==='breadth'?'breadth-main':''}" id="main" tabindex="-1">${view(state.route)}</main></section>`;
 }
-function view(route){const m={home:homeView,breadth:breadthView,dashboard:dashboardView,map:mapView,users:usersView};return (m[route]||homeView)();}
+function view(route){const m={home:homeView,breadth:breadthView,dashboard:dashboardView,map:mapView,users:usersView,library:libraryView};return (m[route]||homeView)();}
 function homeView(){
   const knowledgeExpanded=localStorage.getItem('knowledge_interaction_expanded')==='1';
   return `<div class="home-body ${knowledgeExpanded?'knowledge-expanded':''}">
@@ -398,7 +398,7 @@ function sourcesView(){
   const tabsHtml=tabs.map(t=>`<button class="bookmark-tab ${tab===t?'active':''}" data-src-tab="${t}">${t} <span style="opacity:.6;font-size:11px">${SOURCE_LIST.filter(s=>s[2]===t).length}</span></button>`).join('');
   return `<section class="panel content-panel"><div class="eyebrow">信源</div><h1 class="section-title">按信息类型浏览 ${SOURCE_LIST.length} 个信息源，持续追踪产业动态、学术前沿和行业研究。</h1><div class="bookmark-tabs" style="margin-bottom:20px">${tabsHtml}</div><div id="sourceGroupsContent">${groupsHtml}</div></section>`;
 }
-function mapView(){const state=parseHash();const group=state.params.get('group')||'zero-carbon';const tabs=[["zero-carbon","零碳产业"],["ai-intelligent","AI与智能科技"],["general-tech","通用技术"]];const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};return `<section class="flat-content map-content-panel"><div class="map-head"><div><div class="eyebrow">行业图景</div><h1 class="section-title">追求完备而互斥。</h1></div><div class="map-tools"><input id="mapSearch" value="${escapeHtml(mapSearchDraft)}" placeholder="搜索节点" aria-label="搜索行业图景节点"/><button class="secondary-btn" id="mapExpandAll" type="button">展开全部</button><button class="secondary-btn" id="mapCollapse" type="button">折叠到二级</button></div></div><div class="bookmark-tabs">${tabs.map(([key,label])=>`<button class="bookmark-tab ${group===key?'active':''}" data-map-group="${key}">${label}</button>`).join('')}</div><div class="map-shell"><header class="map-summary"><strong>${titleMap[group]||'零碳产业'}</strong><span id="industryMapMeta">正在加载图景…</span><span class="map-hint">点击叶子节点查看关联内容</span></header><div class="industry-tree" id="industryTree"><div class="status-note">正在加载图景…</div></div><div class="map-x-scroll" id="mapXScroll"><div class="map-x-thumb" id="mapXThumb"></div></div></div></section>`;}
+function mapView(){const state=parseHash();const group=state.params.get('group')||'zero-carbon';const tabs=[["zero-carbon","零碳产业"],["ai-intelligent","AI与智能科技"],["general-tech","通用技术"]];const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};return `<section class="flat-content map-content-panel"><div class="map-head"><div><div class="eyebrow">行业图景</div><h1 class="section-title">追求完备而互斥</h1></div><div class="map-tools"><input id="mapSearch" value="${escapeHtml(mapSearchDraft)}" placeholder="搜索节点" aria-label="搜索行业图景节点"/><button class="secondary-btn" id="mapExpandAll" type="button">展开全部</button><button class="secondary-btn" id="mapCollapse" type="button">折叠到二级</button></div></div><div class="bookmark-tabs">${tabs.map(([key,label])=>`<button class="bookmark-tab ${group===key?'active':''}" data-map-group="${key}">${label}</button>`).join('')}</div><div class="map-shell"><header class="map-summary"><strong>${titleMap[group]||'零碳产业'}</strong><span id="industryMapMeta">正在加载图景…</span><span class="map-hint">点击叶子节点查看关联内容</span></header><div class="industry-tree" id="industryTree"><div class="status-note">正在加载图景…</div></div><div class="map-x-scroll" id="mapXScroll"><div class="map-x-thumb" id="mapXThumb"></div></div></div></section>`;}
 function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");const modelSelect=document.getElementById("modelSelect");if(modelSelect){modelSelect.value=selectedModel;modelSelect.addEventListener('change',()=>{selectedModel=modelSelect.value;localStorage.setItem('assistant_model',selectedModel);});}if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,120)}px`;});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const knowledgeToggle=document.getElementById('knowledgeToggle');if(knowledgeToggle)knowledgeToggle.addEventListener('click',()=>{const body=document.querySelector('.home-body');const expanded=!body?.classList.contains('knowledge-expanded');body?.classList.toggle('knowledge-expanded',expanded);knowledgeToggle.setAttribute('aria-expanded',expanded?'true':'false');const label=knowledgeToggle.querySelector('span');if(label)label.textContent=expanded?'收起':'展开';localStorage.setItem('knowledge_interaction_expanded',expanded?'1':'0');localStorage.removeItem('knowledge_interaction_collapsed');});const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});const createUserBtn=document.getElementById("createUserBtn");if(createUserBtn)createUserBtn.addEventListener("click",showCreateUserModal);}
 async function loadAssistantStatus(){
   const state=document.getElementById("conversationState");
@@ -453,7 +453,7 @@ function formatHomeDate(value,fallback='持续更新'){if(!value)return fallback
 function compactHomeText(value,limit=10){const text=String(value||'').replace(/\s+/g,'').trim();return text.length>limit?`${text.slice(0,Math.max(1,limit-1))}…`:text;}
 function homeBoundaryDefinition(item){const name=item.name||'该技术';const scope=String(item.scope||'').trim();if(scope&&scope!=='深度调研')return `${name}聚焦${scope.replace(/[。；;]+$/,'')}。`;const verdict=String(item.verdict||'').split(/[。；;]/).map(text=>text.trim()).find(Boolean);return verdict?`${verdict}。`:`${name}的技术定义与适用边界正在持续完善。`;}
 function homeBoundaryLines(item){const indicators=(item.key_indicators||[]).slice(0,3).map(ind=>`${ind.name||''}${ind.value&&ind.value!=='—'?`：${ind.value}${ind.unit&&ind.unit!=='—'?ind.unit:''}`:''}`);if(indicators.length)return indicators;const metrics=(item.metrics||[]).slice(0,3);return metrics.length?metrics:['关键指标边界待补充'];}
-async function loadHomeBoundaries(){const root=document.getElementById('homeBoundaryCards');if(!root)return;try{const res=await apiFetch('/api/dashboards');const data=await res.json();const all=data.items||[];const items=all.slice().sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0)).slice(0,3);if(!items.length){root.innerHTML='<div class="home-loading-card">尚无已发布的技术边界</div>';return;}root.innerHTML=items.map((item,index)=>{const reviewLabel=item.review_status==='validated'?'已审核':item.metric_review_status==='reviewed'?'指标已审阅':'持续更新';return `<button class="home-boundary-card ${index===0?'primary':''}" type="button" data-home-dashboard="${escapeHtml(item.id)}"><div class="boundary-card-meta"><time>${escapeHtml(formatHomeDate(item.updated_at))}</time><span>${reviewLabel}</span></div><h3>${escapeHtml(item.name||'未命名技术')}</h3><p class="boundary-card-definition"><strong>是什么</strong>${escapeHtml(homeBoundaryDefinition(item))}</p><div class="boundary-card-label">关键指标边界</div><ol>${homeBoundaryLines(item).map(line=>`<li>${escapeHtml(line)}</li>`).join('')}</ol><div class="boundary-card-action">查看边界详情 <span aria-hidden="true">→</span></div></button>`}).join('');root.querySelectorAll('[data-home-dashboard]').forEach(card=>card.addEventListener('click',()=>showDashboardDetail(card.dataset.homeDashboard)));}catch(err){root.innerHTML='<div class="home-loading-card">技术边界加载失败</div>';}}
+async function loadHomeBoundaries(){const root=document.getElementById('homeBoundaryCards');if(!root)return;try{const res=await apiFetch('/api/dashboards');const data=await res.json();const all=data.items||[];const items=all.slice().sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0)).slice(0,3);if(!items.length){root.innerHTML='<div class="home-loading-card">尚无已发布的技术边界</div>';return;}root.innerHTML=items.map((item,index)=>{const reviewLabel=item.review_status==='validated'?'已审核':item.metric_review_status==='reviewed'?'指标已审阅':'持续更新';return `<button class="home-boundary-card ${index===0?'primary':''}" type="button" data-home-dashboard="${escapeHtml(item.id)}"><div class="boundary-card-meta"><time>${escapeHtml(formatHomeDate(item.updated_at))}</time><span>${reviewLabel}</span></div><h3>${escapeHtml(item.name||'未命名技术')}</h3><p class="boundary-card-definition"><strong>是什么</strong><span class="boundary-card-def-text">${escapeHtml(homeBoundaryDefinition(item))}</span></p><div class="boundary-card-label">关键指标边界</div><ol>${homeBoundaryLines(item).map(line=>`<li>${escapeHtml(line)}</li>`).join('')}</ol><div class="boundary-card-action">查看边界详情 <span aria-hidden="true">→</span></div></button>`}).join('');root.querySelectorAll('[data-home-dashboard]').forEach(card=>card.addEventListener('click',()=>showDashboardDetail(card.dataset.homeDashboard)));}catch(err){root.innerHTML='<div class="home-loading-card">技术边界加载失败</div>';}}
 
 async function loadAlertIntel(){
   const body=document.getElementById('alertPanelBody');
@@ -555,11 +555,10 @@ async function loadDashboards(){
     const res=await apiFetch(`/api/dashboards${q?'?q='+q:''}`);
     const data=await res.json();
     const items=data.items||[];
-    if(!items.length){root.innerHTML='<div class="status-note">没有符合条件的仪表盘</div>';return;}
     const reviewed=items.filter(item=>item.featured&&item.review_status==='validated');
     const drafts=items.filter(item=>!reviewed.includes(item));
-    const reviewedHtml=reviewed.length?`<div class="dashboard-section-label"><strong>已审核深度报告</strong><span>结论、证据边界与待核实项已拆分</span></div><div class="dashboard-reviewed-layout">${researchKnowledgeFlowCard()}${dashboardCard(reviewed[0])}</div>${reviewed.slice(1).map(item=>dashboardCard(item)).join('')}`:'';
-    const draftsHtml=drafts.length?`<div class="dashboard-section-label draft-label"><strong>研究草稿与历史仪表盘</strong><span>仅作线索，不代表已完成深度判断</span></div>${drafts.map(item=>dashboardCard(item)).join('')}`:'';
+    const reviewedHtml=`<div class="dashboard-section-label"><strong>已审核深度报告</strong><span>结论、证据边界与待核实项已拆分</span></div><div class="dashboard-reviewed-layout">${researchKnowledgeFlowCard()}${reviewed.length?dashboardCard(reviewed[0]):reviewedEmptyCard()}</div>${reviewed.slice(1).map(item=>dashboardCard(item)).join('')}`;
+    const draftsHtml=drafts.length?`<div class="dashboard-section-label draft-label"><strong>研究草稿与历史仪表盘</strong><span>仅作线索，不代表已完成深度判断</span></div>${drafts.map(item=>dashboardCard(item)).join('')}`:(items.length?'':'<div class="status-note">没有符合条件的仪表盘</div>');
     root.innerHTML=`${reviewedHtml}${draftsHtml}`;
   }catch(err){
     root.innerHTML='<div class="status-note">仪表盘加载失败，请稍后重试</div>';
@@ -1323,3 +1322,86 @@ ${d.semantic_evidence?`
 function closeIntelDetail(){const m=document.getElementById('intelModal');if(m)m.style.display='none';document.body.style.overflow='';}
 window.addEventListener("hashchange",render);
 window.addEventListener("DOMContentLoaded",async()=>{await loadCurrentUser();render();});
+
+/* ── 资料库（in-app 视图，替代独立页跳转，保留左侧导航） ── */
+let libRefreshTimer=null,libOffset=0,libTotal=0,libIsAdmin=false;
+const libStatusLabels={pending:"待分类",processing:"分类中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引失败",embedding_skipped:"未索引",embedding_legacy_unindexed:"历史未索引",ready:"可检索"};
+function reviewedEmptyCard(){return `<div class="dashboard-card reviewed-empty"><div class="reviewed-empty-mark">无</div><strong>暂无已审核报告</strong><span>深度调研完成审核后将展示在这里</span></div>`;}
+function libraryView(){return `<section class="flat-content library"><div class="lib-head"><div><div class="eyebrow">资料库</div><h1 class="section-title">管理员上传的资料，登录用户可下载</h1></div><div class="filter-row"><select id="srcFilter" aria-label="来源类型"><option value="">全部来源</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select><select id="categoryFilter" aria-label="业务分类"><option value="">全部分类</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><a class="secondary-btn" id="uploadLink" href="uploads_admin.html" style="display:none;">上传资料</a></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>分类</th><th>状态</th><th>来源类型</th><th>密级</th><th>大小</th><th>上传者</th><th>时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;">暂无资料</div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;}
+function libFmtSize(n){if(!n)return "-";const u=["B","KB","MB","GB"];let i=0,s=n;while(s>=1024&&i<3){s/=1024;i++;}return s.toFixed(s<10?1:0)+" "+u[i];}
+function libFmtTime(iso){if(!iso)return "-";const d=new Date(iso);return isNaN(d)?"-":d.toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});}
+async function initLibrary(){
+  libOffset=0;
+  ["srcFilter","categoryFilter","statusFilter"].forEach(id=>{const el=document.getElementById(id);if(el)el.onchange=()=>{libOffset=0;loadLibrary();};});
+  const prev=document.getElementById("prevBtn"),next=document.getElementById("nextBtn");
+  if(prev)prev.onclick=()=>{libOffset=Math.max(0,libOffset-30);loadLibrary();};
+  if(next)next.onclick=()=>{if(libOffset+30<libTotal){libOffset+=30;loadLibrary();}};
+  try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";const link=document.getElementById("uploadLink");if(libIsAdmin&&link)link.style.display="";}}catch(e){}
+  try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();const select=document.getElementById("categoryFilter");if(select)select.innerHTML='<option value="">全部分类</option>'+data.categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");}}catch(e){}
+  loadLibrary();
+}
+async function loadLibrary(){
+  if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}
+  const tb=document.getElementById("rows");if(!tb)return;
+  const src=document.getElementById("srcFilter")?.value||"";
+  const category=document.getElementById("categoryFilter")?.value||"";
+  const status=document.getElementById("statusFilter")?.value||"";
+  let url="/api/uploads?limit=30&offset="+libOffset;
+  if(src)url+="&source_type="+encodeURIComponent(src);
+  if(category)url+="&primary_category="+encodeURIComponent(category);
+  if(status)url+="&classification_status="+encodeURIComponent(status);
+  let r=null;
+  try{r=await apiFetch(url);}catch(e){tb.innerHTML='<tr><td colspan="9">资料列表加载失败，请稍后重试</td></tr>';return;}
+  if(!r)return;
+  if(!r.ok){tb.innerHTML=`<tr><td colspan="9">资料列表加载失败 ${r.status}</td></tr>`;return;}
+  let data=null;
+  try{data=await r.json();}catch(e){tb.innerHTML='<tr><td colspan="9">资料列表解析失败</td></tr>';return;}
+  libTotal=data.count;
+  if(libOffset>0&&!data.files.length){libOffset=Math.max(0,libOffset-30);return loadLibrary();}
+  const emptyMsg=document.getElementById("emptyMsg");
+  if(emptyMsg)emptyMsg.style.display=data.files.length?"none":"block";
+  tb.innerHTML=data.files.map(f=>{
+    const conf=f.confidentiality?`<span class="tag conf-${escapeHtml(f.confidentiality)}">${escapeHtml(f.confidentiality)}</span>`:"-";
+    const aiMark=f.title_source==="manual"?"":`<span class="ai-mark ${escapeHtml(f.title_source||"")}">${f.title_source==="ai_filled"?"AI":"…"}</span>`;
+    const canRetry=libIsAdmin&&["failed","unclassified","legacy_unclassified"].includes(f.classification_status);
+    const canRetryEmbedding=libIsAdmin&&f.embedding_status==="failed";
+    const category=f.primary_category||"-";
+    const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
+    const statusDetail=f.embedding_error||f.classification_error||f.classification_reason||"";
+    return `<tr>
+      <td class="fname">${escapeHtml(f.title||f.original_filename)}${aiMark}<small>${escapeHtml(f.original_filename)}${f.note?" · "+escapeHtml(f.note):""}</small></td>
+      <td class="category-cell" title="${escapeHtml(category)}">${escapeHtml(category)}</td>
+      <td><span class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span></td>
+      <td><span class="src-badge">${escapeHtml(f.source_type||"-")}</span></td>
+      <td>${conf}</td>
+      <td class="size-cell">${libFmtSize(f.size_bytes)}</td>
+      <td>${escapeHtml(f.submitted_by)}</td>
+      <td class="size-cell">${libFmtTime(f.created_at)}</td>
+      <td><div class="row-actions"><button class="secondary-btn" data-download="${escapeHtml(f.id)}">下载</button>${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}${canRetryEmbedding?`<button class="secondary-btn" data-retry-embedding="${escapeHtml(f.id)}">重试索引</button>`:""}</div></td>
+    </tr>`;
+  }).join("");
+  const start=libTotal?libOffset+1:0,end=Math.min(libOffset+data.files.length,libTotal);
+  const count=document.getElementById("countInfo");
+  if(count)count.textContent=`共 ${libTotal} 条，当前 ${start}-${end}`;
+  const prevBtnEl=document.getElementById("prevBtn"),nextBtnEl=document.getElementById("nextBtn");
+  if(prevBtnEl)prevBtnEl.disabled=libOffset===0;
+  if(nextBtnEl)nextBtnEl.disabled=libOffset+30>=libTotal;
+  tb.querySelectorAll("button[data-download]").forEach(b=>b.onclick=()=>libDownload(b.dataset.download));
+  tb.querySelectorAll("button[data-retry]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retry,"classification/retry",b));
+  tb.querySelectorAll("button[data-retry-embedding]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retryEmbedding,"embedding/retry",b));
+  if(data.files.some(f=>["pending","processing"].includes(f.classification_status)||["pending","processing"].includes(f.embedding_status)))libRefreshTimer=setTimeout(loadLibrary,3000);
+}
+async function libRetry(id,path,button){
+  button.disabled=true;
+  try{
+    const r=await apiFetch("/api/uploads/"+encodeURIComponent(id)+"/"+path,{method:"POST"});
+    if(!r||!r.ok){const data=r?await r.json().catch(()=>({})):{};throw new Error(data.detail||"重试失败");}
+    await loadLibrary();
+  }catch(e){alert(e.message);button.disabled=false;}
+}
+function libDownload(id){
+  const token=window.Auth&&Auth.getToken?Auth.getToken():"";
+  fetch("/api/uploads/"+encodeURIComponent(id)+"/download",{headers:{Authorization:"Bearer "+token}})
+    .then(r=>{if(!r.ok)throw new Error("下载失败 "+r.status);return r.blob().then(b=>{const cd=r.headers.get("Content-Disposition")||"";let name="download";const utf8=cd.match(/filename\*=UTF-8''([^;]+)/i);const plain=cd.match(/filename="([^"]+)"/);if(utf8){try{name=decodeURIComponent(utf8[1]);}catch(e){name=utf8[1];}}else if(plain){name=plain[1];}const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),0);});})
+    .catch(e=>alert(e.message));
+}
