@@ -2122,7 +2122,7 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 
 /* ════════════════════════════════════════════
    首页右侧弹窗：技术预警 + 技术边界
-   默认展开 · 占页面宽度 1/3 · 纯覆盖不挤压主板块 · 收起把手在面板左缘垂直居中 · 点面板外任意处收起 · 右缘标签可再打开
+   默认展开 · 占页面宽度 1/3 · 纯覆盖不挤压主板块 · 收起把手在面板左缘垂直居中 · 点面板外任意处收起 · 收起时在重开标签泊位原地收纳(右对齐不越位) · 右缘标签可再打开
    ════════════════════════════════════════════ */
 .home-drawer{
   position:absolute;
@@ -2138,12 +2138,13 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
   border-radius:var(--radius-lg);
   box-shadow:0 24px 56px rgba(16,24,40,.16),0 6px 18px rgba(16,24,40,.08);
   overflow:hidden;
+  transform-origin:calc(100% - 18px) 50%;
   transition:transform .3s cubic-bezier(.2,.7,.3,1),opacity .24s ease,visibility .3s,box-shadow .3s;
   animation:homeDrawerIn .32s cubic-bezier(.2,.7,.3,1);
 }
-@keyframes homeDrawerIn{from{transform:translateX(calc(100% + 24px));opacity:0}to{transform:none;opacity:1}}
+@keyframes homeDrawerIn{from{transform:scaleX(.06);opacity:0}to{transform:none;opacity:1}}
 .home-body.drawer-collapsed .home-drawer{
-  transform:translateX(calc(100% + 24px));
+  transform:scaleX(.06);
   opacity:0;
   visibility:hidden;
   box-shadow:none;
@@ -2256,5 +2257,6 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
   .home-drawer{top:12px;right:12px;bottom:12px}
   .home-drawer-collapse{top:50%;right:calc(12px + var(--drawer-w))}
   .home-drawer-tab{right:12px}
+  .home-drawer{transform-origin:calc(100% - 18px) 50%}
   .home-drawer-tab{top:auto;bottom:24px;transform:none}
 }

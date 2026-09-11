@@ -32,7 +32,7 @@ def test_home_layout_is_boundary_alert_and_knowledge_workbench():
     assert "--drawer-w:max(340px,33.333vw)" in css
     assert ".home-drawer{" in css
     assert "home-drawer-tab" in css
-    assert "transform:translateX(calc(100% + 24px))" in css
+    assert "transform:scaleX(.06)" in css
     assert ".home-drawer-tab{" in css
     assert ".home-knowledge-section" in css
     assert "margin-left:calc(var(--drawer-w)" not in css
