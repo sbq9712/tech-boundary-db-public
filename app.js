@@ -535,15 +535,16 @@ function renderHomeAlertPage(){
     const publishedTime=item.published_at||item.publish_date||'';
     const domain=item.domain_name||item.domain||String(item.info_item_id||'').split('_')[1]||'待归类';
     const tag=String(item.tag||'').trim();
-    const topic=String(item.topic||'').trim();
-    let reason=String(item.alert_reason||item.reviewer_comment||item.alert_body||item.summary||(item.content||'').slice(0,240)||'').trim();
-    if(reason&&tag&&reason.startsWith(tag))reason=reason.slice(tag.length).replace(/^[·\s・]+/,'').trim();
-    const reasonText=topic||reason||'持续跟踪';
+    /* 预警原因：与广度追踪同源（wr 字段，"标签||正文"，|| 换行为广度页原样版式）；
+       门户已有"预警原因"小标签，正文中不再重复前缀 */
+    const reasonText=String(item.alert_reason||'').trim().replace(/\|\|/g,'\n')
+      ||String(item.reviewer_comment||item.alert_body||item.summary||(item.content||'').slice(0,240)||'').trim()
+      ||'持续跟踪';
     const target=homeAlertTarget(item);
     const reasonId=`home-alert-reason-${start+index}`;
     const tagClass=HOME_ALERT_TAG_CLASS[tag]||'';
     const sev=String(item.alert_color||'').toLowerCase().replace(/[^a-z]/g,'')||'normal';
-    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-label">预警原因</span><span class="home-alert-reason-text" id="${reasonId}">${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开</button></div></article>`;
+    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-label">预警原因</span><span class="home-alert-reason-text" id="${reasonId}">${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开全部</button></div></article>`;
   }).join('')}</div>`;
   requestAnimationFrame(()=>body.querySelectorAll('.home-alert-reason-text').forEach(reason=>{
     const toggle=reason.parentElement?.querySelector('[data-alert-reason-toggle]');
@@ -561,8 +562,9 @@ async function loadAlertIntel(){
       if(!reason)return;
       const expanded=toggle.getAttribute('aria-expanded')==='true';
       reason.classList.toggle('expanded',!expanded);
+      reason.closest('.home-alert-reason')?.classList.toggle('expanded',!expanded);
       toggle.setAttribute('aria-expanded',expanded?'false':'true');
-      toggle.textContent=expanded?'展开':'收起';
+      toggle.textContent=expanded?'展开全部':'收起';
     });
     body.dataset.bound='1';
   }

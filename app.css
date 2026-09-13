@@ -990,10 +990,11 @@ a:hover{color:var(--brand-lighter)}
   min-width:0;
   color:var(--text-tertiary);
   font-size:11.5px;
-  line-height:1.5;
+  line-height:1.55;
+  white-space:pre-line;
   display:-webkit-box;
   -webkit-box-orient:vertical;
-  -webkit-line-clamp:1;
+  -webkit-line-clamp:2;
   overflow:hidden;
 }
 .home-alert-reason-text.expanded{
@@ -1001,18 +1002,27 @@ a:hover{color:var(--brand-lighter)}
   -webkit-line-clamp:unset;
   overflow:visible;
 }
+/* 展开后容器转为块级流：标签在首、"收起"内联跟在正文末尾 */
+.home-alert-reason.expanded{display:block}
+.home-alert-reason.expanded .home-alert-reason-toggle{
+  display:inline;
+  margin:0 0 0 6px;
+  vertical-align:baseline;
+}
 .home-alert-reason-toggle{
   flex:0 0 auto;
+  align-self:flex-end;
   margin:0;
   padding:0;
   border:0;
   background:transparent;
   color:var(--brand);
-  font:600 11px/1.5 var(--sans);
+  font:600 11px/1.55 var(--sans);
   cursor:pointer;
   white-space:nowrap;
 }
 .home-alert-reason-toggle:hover{text-decoration:underline}
+.home-alert-reason-toggle:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:3px}
 
 .home-knowledge-section{
   min-height:360px;
@@ -1584,7 +1594,7 @@ a:hover{color:var(--brand-lighter)}
 
 /* model picker */
 .model-picker{
-  flex:0 0 180px;
+  flex:0 0 156px; /* 13/15 × 180px，按视觉规范收窄 */
   display:flex;
   align-items:center;
   gap:8px;

@@ -46,6 +46,7 @@ def main() -> None:
             "domain_name": (row.get("c", "") or "未分类").split("/")[-1],
             "tag": row.get("tg", ""),
             "topic": row.get("tp", ""),
+            "alert_reason": row.get("wr", ""),
             "reviewer_comment": " · ".join(
                 value for value in (row.get("tg", ""), row.get("tp", "")) if value
             ) or "高信号变化",
