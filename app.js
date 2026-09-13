@@ -212,11 +212,20 @@ function renderConversationMessage(msg,index){
   const actions=!isStreaming&&!msg.error&&content?`<div class="qa-actions"><button class="qa-action-btn" type="button" data-qa-action="copy" data-msg-idx="${index}" title="复制回答">复制</button>${isLast?`<button class="qa-action-btn" type="button" data-qa-action="regenerate" data-msg-idx="${index}" title="重新生成最后一条回答">重新生成</button>`:''}<button class="qa-action-btn" type="button" data-qa-action="export" data-msg-idx="${index}" title="导出 Markdown">导出</button></div>`:'';
   return `<div class="qa-message assistant assistant-msg ${isStreaming?'streaming':''}" data-message-index="${index}"><div class="qa-message-content"><div class="qa-message-bubble"><div class="response-text">${body}</div></div>${msg.status?`<div class="qa-status-line">${escapeHtml(msg.status)}</div>`:''}${!isStreaming&&!msg.error?renderInlineResources(msg.extra):''}${actions}</div></div>`;
 }
+/* 模型显示名：网关返回的模型 ID 大小写不一（各厂商官方命名不同，值不可改），
+   展示层统一为「全大写型号 + 已知能力描述」，value 仍发送原始 ID。 */
+const MODEL_LABELS={
+  'glm-5.2':'GLM-5.2 深度',
+  'glm-5.1':'GLM-5.1 Agent',
+  'glm-4.5-flash':'GLM-4.5 Flash 快速',
+  'kimi-k2.6':'KIMI-K2.6',
+  'deepseek-v4-pro':'DEEPSEEK-V4-PRO',
+  'minimax-m2.7':'MINIMAX-M2.7',
+};
 function modelLabel(model){
-  if(model==='glm-5.2')return 'GLM-5.2 深度';
-  if(model==='glm-5.1')return 'GLM-5.1 Agent';
-  if(model==='glm-4.5-flash')return 'GLM-4.5 Flash 快速';
-  return model;
+  const key=String(model||'').trim().toLowerCase();
+  if(MODEL_LABELS[key])return MODEL_LABELS[key];
+  return String(model||'').trim().toUpperCase();
 }
 function renderModelOptions(){return assistantModels.map(model=>`<option value="${escapeHtml(model)}" ${model===selectedModel?'selected':''}>${escapeHtml(modelLabel(model))}</option>`).join('');}
 async function loadAssistantModels(){
@@ -250,8 +259,8 @@ function renderSidebarConversations(){
     const title=escapeHtml(item.title||'未命名对话');
     const pending=Boolean(item.pending);
     const active=pending||item.id===activeSessionId;
-    if(pending)return `<div class="sidebar-conversation-row active pending"><div class="sidebar-conversation-item" aria-current="page"><span>${title}</span></div></div>`;
-    return `<div class="sidebar-conversation-row ${active?'active':''}"><button class="sidebar-conversation-item" type="button" data-conversation-id="${id}" title="${title}" aria-current="${active?'page':'false'}"><span>${title}</span></button><button class="sidebar-conversation-delete" type="button" data-delete-conversation="${id}" title="删除此对话" aria-label="删除对话：${title}">×</button></div>`;
+    if(pending)return `<div class="sidebar-conversation-row active pending"><div class="sidebar-conversation-item" aria-current="page"><span class="sidebar-conversation-pendot" aria-hidden="true"></span><span class="sidebar-conversation-text">${title}</span></div></div>`;
+    return `<div class="sidebar-conversation-row ${active?'active':''}"><button class="sidebar-conversation-item" type="button" data-conversation-id="${id}" title="${title}" aria-current="${active?'page':'false'}"><span class="sidebar-conversation-text">${title}</span></button><button class="sidebar-conversation-delete" type="button" data-delete-conversation="${id}" title="删除此对话" aria-label="删除对话：${title}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>`;
   }).join('');
 }
 async function loadConversations(preferredId=null){
@@ -363,7 +372,7 @@ function shell(state){
     const item=`<button class="sidebar-nav-item ${state.route===key?'active':''}" data-route="${key}">${r.label}</button>`;
     if(key!=='home'||state.route!=='home')return item;
     return item+`<section class="sidebar-conversation-hub" aria-label="门户会话">
-      <button class="sidebar-new-conversation" id="sidebarNewConversationBtn" type="button"><span aria-hidden="true">＋</span><span>新建对话</span></button>
+      <div class="sidebar-conversation-head"><span class="sidebar-conversation-label">会话</span><button class="sidebar-conversation-add" id="sidebarNewConversationBtn" type="button" title="新建对话" aria-label="新建对话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>
       <div class="sidebar-conversation-list" id="sidebarConversationList" tabindex="0" aria-label="历史对话列表"><div class="sidebar-conversation-empty">正在加载…</div></div>
     </section>`;
   }).join("");
@@ -376,7 +385,7 @@ function homeView(){
     <div class="home-drawer-body">
   <section class="home-section home-alert-section" aria-labelledby="homeAlertTitle">
     <div class="home-section-heading compact">
-      <div class="home-alert-heading"><h2 id="homeAlertTitle">技术预警</h2><div class="home-alert-pagination" aria-label="技术预警翻页"><button id="homeAlertPrev" type="button" aria-label="上一页" title="上一页">‹</button><span id="homeAlertPageLabel">—</span><button id="homeAlertNext" type="button" aria-label="下一页" title="下一页">›</button></div></div>
+      <div class="home-alert-heading"><div class="home-alert-title-group"><h2 id="homeAlertTitle">技术预警</h2><span class="home-alert-count" id="homeAlertCount" hidden></span></div><div class="home-alert-pagination" aria-label="技术预警翻页"><button id="homeAlertPrev" type="button" aria-label="上一页" title="上一页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button><span id="homeAlertPageLabel">—</span><button id="homeAlertNext" type="button" aria-label="下一页" title="下一页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></div></div>
     </div>
     <div class="home-alert-table-wrap" id="alertPanelBody">
       <div class="alert-empty">正在加载技术预警…</div>
@@ -494,6 +503,7 @@ function homeBoundaryLines(item){const indicators=(item.key_indicators||[]).slic
 async function loadHomeBoundaries(){const root=document.getElementById('homeBoundaryCards');if(!root)return;try{const res=await apiFetch('/api/dashboards');const data=await res.json();const all=data.items||[];const items=all.slice().sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0)).slice(0,3);if(!items.length){root.innerHTML='<div class="home-loading-card">尚无已发布的技术边界</div>';return;}root.innerHTML=items.map((item,index)=>{const reviewLabel=item.review_status==='validated'?'已审核':item.metric_review_status==='reviewed'?'指标已审阅':'持续更新';return `<button class="home-boundary-card ${index===0?'primary':''}" type="button" data-home-dashboard="${escapeHtml(item.id)}"><div class="boundary-card-meta"><time>${escapeHtml(formatHomeDate(item.updated_at))}</time><span>${reviewLabel}</span></div><h3>${escapeHtml(item.name||'未命名技术')}</h3><p class="boundary-card-definition"><strong>是什么</strong><span class="boundary-card-def-text">${escapeHtml(homeBoundaryDefinition(item))}</span></p><div class="boundary-card-label">关键指标边界</div><ol>${homeBoundaryLines(item).map(line=>`<li>${escapeHtml(line)}</li>`).join('')}</ol><div class="boundary-card-action">查看边界详情 <span aria-hidden="true">→</span></div></button>`}).join('');root.querySelectorAll('[data-home-dashboard]').forEach(card=>card.addEventListener('click',()=>showDashboardDetail(card.dataset.homeDashboard)));}catch(err){root.innerHTML='<div class="home-loading-card">技术边界加载失败</div>';}}
 
 const HOME_ALERT_PAGE_SIZE=5;
+const HOME_ALERT_TAG_CLASS={'技术突破':'t-breakthrough','政策监管':'t-policy','产业进展':'t-industry','行业观察':'t-watch'};
 let homeAlertItems=[];
 let homeAlertPage=1;
 function homeAlertTarget(item){
@@ -518,14 +528,22 @@ function renderHomeAlertPage(){
   if(pageLabel)pageLabel.textContent=`${homeAlertPage} / ${pages}`;
   if(previous)previous.disabled=homeAlertPage<=1;
   if(next)next.disabled=homeAlertPage>=pages;
+  const countLabel=document.getElementById('homeAlertCount');
+  if(countLabel){countLabel.textContent=`${homeAlertItems.length} 条`;countLabel.hidden=false;}
   body.innerHTML=`<div class="home-alert-list">${rows.map((item,index)=>{
     const title=item.alert_title||item.title||'未命名情报';
     const publishedTime=item.published_at||item.publish_date||'';
     const domain=item.domain_name||item.domain||String(item.info_item_id||'').split('_')[1]||'待归类';
-    const reason=item.alert_reason||item.reviewer_comment||item.alert_body||item.summary||(item.content||'').slice(0,240)||'持续跟踪';
+    const tag=String(item.tag||'').trim();
+    const topic=String(item.topic||'').trim();
+    let reason=String(item.alert_reason||item.reviewer_comment||item.alert_body||item.summary||(item.content||'').slice(0,240)||'').trim();
+    if(reason&&tag&&reason.startsWith(tag))reason=reason.slice(tag.length).replace(/^[·\s・]+/,'').trim();
+    const reasonText=topic||reason||'持续跟踪';
     const target=homeAlertTarget(item);
     const reasonId=`home-alert-reason-${start+index}`;
-    return `<article class="home-alert-item"><div class="home-alert-primary"><span class="home-alert-domain">${escapeHtml(domain)}</span><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><div class="home-alert-reason"><span class="home-alert-reason-label">预警原因：</span><span class="home-alert-reason-text" id="${reasonId}">${escapeHtml(reason)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开</button></div></article>`;
+    const tagClass=HOME_ALERT_TAG_CLASS[tag]||'';
+    const sev=String(item.alert_color||'').toLowerCase().replace(/[^a-z]/g,'')||'normal';
+    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-label">预警原因</span><span class="home-alert-reason-text" id="${reasonId}">${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开</button></div></article>`;
   }).join('')}</div>`;
   requestAnimationFrame(()=>body.querySelectorAll('.home-alert-reason-text').forEach(reason=>{
     const toggle=reason.parentElement?.querySelector('[data-alert-reason-toggle]');
@@ -560,11 +578,15 @@ async function loadAlertIntel(){
       body.innerHTML='<div class="alert-empty">当前没有活跃预警情报</div>';
       const pageLabel=document.getElementById('homeAlertPageLabel');
       if(pageLabel)pageLabel.textContent='0 / 0';
+      const emptyCount=document.getElementById('homeAlertCount');
+      if(emptyCount){emptyCount.textContent='0 条';emptyCount.hidden=false;}
       return;
     }
     renderHomeAlertPage();
   }catch(err){
     body.innerHTML='<div class="alert-empty">技术预警加载失败</div>';
+    const failCount=document.getElementById('homeAlertCount');
+    if(failCount)failCount.hidden=true;
   }
 }
 async function loadIntelMeta(){
