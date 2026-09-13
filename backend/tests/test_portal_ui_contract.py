@@ -105,7 +105,7 @@ def test_home_exposes_model_selector_and_sends_model_param():
     assert "/api/assistant/models" in js
     assert "glm-5.1" in js
     assert "method:'POST'" in js
-    assert "session_id:activeSessionId||null" in js
+    assert "session_id:requestedSessionId||null" in js
     assert "AbortController" in js
     assert ".model-select" in css
 
