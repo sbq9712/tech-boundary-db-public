@@ -547,7 +547,7 @@ function renderHomeAlertPage(){
       if(nl>=0){
         const title=rest.slice(0,nl).trim();
         const body=rest.slice(nl+1).replace(/^[\n]+/,'').trim();
-        reasonText=((cat?cat+'\n':'')+(title?title+':' : '')+body).trim();
+        reasonText=((cat?cat+'\n':'')+(title?title+'：' : '')+body).trim();
       }else{
         reasonText=((cat?cat+'\n':'')+rest).trim();
       }
@@ -557,7 +557,7 @@ function renderHomeAlertPage(){
     const reasonId=`home-alert-reason-${start+index}`;
     const tagClass=HOME_ALERT_TAG_CLASS[tag]||'';
     const sev=String(item.alert_color||'').toLowerCase().replace(/[^a-z]/g,'')||'normal';
-    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-text" id="${reasonId}"><span class="home-alert-reason-label">预警原因</span>:${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开全部</button></div></article>`;
+    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-text" id="${reasonId}"><span class="home-alert-reason-label">预警原因</span>：${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开全部</button></div></article>`;
   }).join('')}</div>`;
   requestAnimationFrame(()=>body.querySelectorAll('.home-alert-reason-text').forEach(reason=>{
     const toggle=reason.parentElement?.querySelector('[data-alert-reason-toggle]');
