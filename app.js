@@ -356,7 +356,7 @@ document.addEventListener('click',event=>{
 });
 function parseHash(){const raw=(location.hash||"#home").slice(1);const [routePart,queryPart=""]=raw.split("?");return {route:routes[routePart]?routePart:"home",params:new URLSearchParams(queryPart)};}
 function setRoute(route,params){const q=params?`?${params.toString()}`:"";location.hash=route+q;}
-function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route==="home"){activeSessionId=null;activeSessionMessages=[];}if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){loadAssistantModels();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
+function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}closeUploadModal();if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route==="home"){activeSessionId=null;activeSessionMessages=[];}if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){loadAssistantModels();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
 async function ensureCurrentUser(){if(!currentUser){await loadCurrentUser();}return currentUser;}
 function loadCurrentUser(){return apiFetch("/api/auth/me").then(r=>r.ok?r.json():null).then(d=>{if(d){currentUser=d;}}).catch(()=>{});}
 function isAdmin(){return currentUser&&currentUser.role==="admin";}
@@ -372,7 +372,7 @@ function shell(state){
     const item=`<button class="sidebar-nav-item ${state.route===key?'active':''}" data-route="${key}">${r.label}</button>`;
     if(key!=='home'||state.route!=='home')return item;
     return item+`<section class="sidebar-conversation-hub" aria-label="门户会话">
-      <div class="sidebar-conversation-head"><span class="sidebar-conversation-label">会话</span><button class="sidebar-conversation-add" id="sidebarNewConversationBtn" type="button" title="新建对话" aria-label="新建对话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>
+      <button class="sidebar-conversation-new" id="sidebarNewConversationBtn" type="button" title="新建对话" aria-label="新建对话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>新对话</span></button>
       <div class="sidebar-conversation-list" id="sidebarConversationList" tabindex="0" aria-label="历史对话列表"><div class="sidebar-conversation-empty">正在加载…</div></div>
     </section>`;
   }).join("");
@@ -1461,7 +1461,7 @@ window.addEventListener("DOMContentLoaded",async()=>{await loadCurrentUser();ren
 let libRefreshTimer=null,libOffset=0,libTotal=0,libIsAdmin=false;
 const libStatusLabels={pending:"待分类",processing:"分类中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引失败",embedding_skipped:"未索引",embedding_legacy_unindexed:"历史未索引",ready:"可检索"};
 function reviewedEmptyCard(){return `<div class="dashboard-card reviewed-empty"><div class="reviewed-empty-mark">无</div><strong>暂无已审核报告</strong><span>深度调研完成审核后将展示在这里</span></div>`;}
-function libraryView(){return `<section class="flat-content library"><div class="lib-head"><div><h1 class="section-title">管理员上传的资料，登录用户可下载</h1></div><div class="filter-row"><select id="srcFilter" aria-label="来源类型"><option value="">全部来源</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select><select id="categoryFilter" aria-label="业务分类"><option value="">全部分类</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><a class="primary-btn" id="uploadLink" href="uploads_admin.html" style="display:none;">上传资料</a></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>分类</th><th>状态</th><th>来源类型</th><th>密级</th><th>大小</th><th>上传者</th><th>时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;}
+function libraryView(){return `<section class="flat-content library"><div class="lib-head"><div><h1 class="section-title">管理员上传的资料，登录用户可下载</h1></div><div class="filter-row"><select id="srcFilter" aria-label="来源类型"><option value="">全部来源</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select><select id="categoryFilter" aria-label="业务分类"><option value="">全部分类</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>分类</th><th>状态</th><th>来源类型</th><th>密级</th><th>大小</th><th>上传者</th><th>时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;}
 function libFmtSize(n){if(!n)return "-";const u=["B","KB","MB","GB"];let i=0,s=n;while(s>=1024&&i<3){s/=1024;i++;}return s.toFixed(s<10?1:0)+" "+u[i];}
 function libFmtTime(iso){if(!iso)return "-";const d=new Date(iso);return isNaN(d)?"-":d.toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});}
 async function initLibrary(){
@@ -1470,8 +1470,8 @@ async function initLibrary(){
   const prev=document.getElementById("prevBtn"),next=document.getElementById("nextBtn");
   if(prev)prev.onclick=()=>{libOffset=Math.max(0,libOffset-30);loadLibrary();};
   if(next)next.onclick=()=>{if(libOffset+30<libTotal){libOffset+=30;loadLibrary();}};
-  try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";const link=document.getElementById("uploadLink");if(libIsAdmin&&link)link.style.display="";}}catch(e){}
-  try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();const select=document.getElementById("categoryFilter");if(select)select.innerHTML='<option value="">全部分类</option>'+data.categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");}}catch(e){}
+  try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";const link=document.getElementById("uploadLink");if(libIsAdmin&&link){link.style.display="";link.onclick=openUploadModal;}}}catch(e){}
+  try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];const select=document.getElementById("categoryFilter");if(select)select.innerHTML='<option value="">全部分类</option>'+data.categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");}}catch(e){}
   loadLibrary();
 }
 async function loadLibrary(){
@@ -1551,4 +1551,117 @@ function libDownload(id){
   fetch("/api/uploads/"+encodeURIComponent(id)+"/download",{headers:{Authorization:"Bearer "+token}})
     .then(r=>{if(!r.ok)throw new Error("下载失败 "+r.status);return r.blob().then(b=>{const cd=r.headers.get("Content-Disposition")||"";let name="download";const utf8=cd.match(/filename\*=UTF-8''([^;]+)/i);const plain=cd.match(/filename="([^"]+)"/);if(utf8){try{name=decodeURIComponent(utf8[1]);}catch(e){name=utf8[1];}}else if(plain){name=plain[1];}const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),0);});})
     .catch(e=>alert(e.message));
+}
+// ── 上传资料：in-app 弹窗，替代 uploads_admin.html 独立页跳转，保留左侧导航 ──
+let upPending=[],upTaxonomy=null;
+const UPLOAD_ALLOWED=[".pdf",".docx",".xlsx",".md",".markdown",".txt",".csv"];
+function openUploadModal(){
+  if(!libIsAdmin)return;
+  if(document.getElementById("uploadModalOverlay"))return;
+  const overlay=document.createElement("div");
+  overlay.id="uploadModalOverlay";
+  overlay.style.cssText="position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow-y:auto;";
+  overlay.innerHTML=`<div class="lib-upload-dialog" role="dialog" aria-modal="true" aria-label="上传资料">
+    <div class="lib-upload-head"><h2>上传资料</h2><button class="lib-upload-close" id="upCloseBtn" type="button" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="lib-upload-body">
+      <div class="lib-upload-drop" id="upDrop"><input id="upInput" type="file" multiple hidden accept="${UPLOAD_ALLOWED.join(",")}"><div class="lib-upload-hint">拖拽文件到此处，或 <button class="lib-upload-pick" id="upPick" type="button">点击选择文件</button></div><div class="lib-upload-types">支持 PDF / Word / Excel / Markdown / TXT / CSV，文件大小与数量不限</div></div>
+      <div class="lib-upload-list" id="upList"></div>
+      <div class="lib-upload-field"><label for="upTitle">资料标题</label><input id="upTitle" class="lib-upload-input" type="text" placeholder="留空则自动识别（多文件时不可指定）"></div>
+      <div class="lib-upload-row">
+        <div class="lib-upload-field"><label for="upConf">密级</label><select id="upConf" class="lib-upload-input"><option value="">不指定</option><option>公开</option><option>内部</option><option>管理员</option></select></div>
+        <div class="lib-upload-field"><label for="upSrc">来源类型</label><select id="upSrc" class="lib-upload-input"><option value="">不指定</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select></div>
+      </div>
+      <div class="lib-upload-field"><label for="upCategory">业务分类</label><select id="upCategory" class="lib-upload-input"><option value="">不指定</option></select></div>
+      <div class="lib-upload-field"><label for="upNote">备注</label><textarea id="upNote" class="lib-upload-input" rows="2" placeholder="选填"></textarea></div>
+      <div class="lib-upload-result" id="upResult" style="display:none;"></div>
+    </div>
+    <div class="lib-upload-actions"><button class="secondary-btn" id="upCancel" type="button">取消</button><button class="primary-btn" id="upSubmit" type="button" disabled>上传</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const drop=document.getElementById("upDrop"),input=document.getElementById("upInput");
+  drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("drag");});
+  drop.addEventListener("dragleave",()=>drop.classList.remove("drag"));
+  drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("drag");upAddFiles(e.dataTransfer.files);});
+  document.getElementById("upPick").onclick=()=>input.click();
+  input.onchange=()=>{upAddFiles(input.files);input.value="";};
+  document.getElementById("upCloseBtn").onclick=closeUploadModal;
+  document.getElementById("upCancel").onclick=closeUploadModal;
+  document.getElementById("upSubmit").onclick=upSubmit;
+  overlay.addEventListener("click",e=>{if(e.target===overlay)closeUploadModal();});
+  document.addEventListener("keydown",upEscClose);
+  upEnsureTaxonomy();
+}
+function closeUploadModal(){
+  const overlay=document.getElementById("uploadModalOverlay");
+  if(overlay)overlay.remove();
+  upPending=[];
+  document.removeEventListener("keydown",upEscClose);
+}
+function upEscClose(e){if(e.key==="Escape")closeUploadModal();}
+function upAddFiles(fileList){
+  const rejected=[];
+  for(const f of fileList){
+    const dot=f.name.lastIndexOf(".");
+    const ext=dot>=0?f.name.slice(dot).toLowerCase():"";
+    if(!UPLOAD_ALLOWED.includes(ext)){rejected.push(f.name);continue;}
+    if(upPending.some(x=>x.name===f.name&&x.size===f.size))continue;
+    upPending.push(f);
+  }
+  if(rejected.length)upShowResult("不支持的文件类型："+rejected.join("、")+"（仅支持 PDF / Word / Excel / Markdown / TXT / CSV）","err");
+  upRenderList();
+}
+function upRenderList(){
+  const list=document.getElementById("upList");if(!list)return;
+  list.innerHTML=upPending.map((f,i)=>`<div class="lib-upload-file"><span class="lib-upload-file-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span><span class="lib-upload-file-size">${libFmtSize(f.size)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></div>`).join("");
+  list.querySelectorAll("button[data-up-rm]").forEach(b=>b.onclick=()=>{upPending.splice(Number(b.dataset.upRm),1);upRenderList();});
+  const title=document.getElementById("upTitle"),submit=document.getElementById("upSubmit");
+  if(title)title.disabled=upPending.length>1;
+  if(submit)submit.disabled=upPending.length===0;
+}
+function upShowResult(msg,cls){
+  const el=document.getElementById("upResult");if(!el)return;
+  el.textContent=msg||"";
+  el.className="lib-upload-result"+(msg&&cls?" "+cls:"");
+  el.style.display=msg?"block":"none";
+}
+function upFillTaxonomy(){
+  const select=document.getElementById("upCategory");
+  if(!select||select.options.length>1)return;
+  select.innerHTML='<option value="">不指定</option>'+upTaxonomy.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.includes("/")?c.split("/").join(" › "):c)}</option>`).join("");
+}
+async function upEnsureTaxonomy(){
+  if(upTaxonomy){upFillTaxonomy();return;}
+  try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];upFillTaxonomy();}}catch(e){}
+}
+async function upSubmit(){
+  if(!upPending.length)return;
+  const submit=document.getElementById("upSubmit"),cancel=document.getElementById("upCancel");
+  if(!submit||submit.disabled)return;
+  const fd=new FormData();
+  upPending.forEach(f=>fd.append("files",f));
+  const title=document.getElementById("upTitle").value.trim();
+  if(title&&upPending.length===1)fd.append("title",title);
+  const conf=document.getElementById("upConf").value,src=document.getElementById("upSrc").value,cat=document.getElementById("upCategory").value,note=document.getElementById("upNote").value.trim();
+  if(conf)fd.append("confidentiality",conf);
+  if(src)fd.append("source_type",src);
+  if(cat)fd.append("primary_category",cat);
+  if(note)fd.append("note",note);
+  submit.disabled=true;cancel.disabled=true;
+  upShowResult("正在上传…","");
+  try{
+    const r=await apiFetch("/api/uploads",{method:"POST",body:fd});
+    if(r&&r.ok){
+      const data=await r.json().catch(()=>({}));
+      const pendingCount=(data.files||[]).filter(f=>f.classification_status==="pending").length;
+      upShowResult("成功落盘 "+data.count+" 个文件，后台正在"+(pendingCount?"分类和索引":"建立索引"),"ok");
+      setTimeout(()=>{closeUploadModal();loadLibrary();},1200);
+    }else{
+      const j=r?await r.json().catch(()=>({})):{};
+      upShowResult(j.detail||("上传失败 "+(r?r.status:"")),"err");
+      submit.disabled=false;cancel.disabled=false;
+    }
+  }catch(e){
+    upShowResult("网络错误："+e.message,"err");
+    submit.disabled=false;cancel.disabled=false;
+  }
 }
