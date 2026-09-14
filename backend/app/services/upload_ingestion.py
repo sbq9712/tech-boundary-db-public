@@ -709,6 +709,11 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
             )
 
         result = request_incremental_index(record, text)
+        # 纵深防御：若记录在索引写入期间被删除（正常流程已被 409 守卫阻止），
+        # 不把 ready 状态写回不存在的行，并立即从问答索引移除刚写入的内容。
+        if db.get(UploadedFile, uid) is None:
+            request_incremental_index_delete(str(uid))
+            return False
         return _commit_embedding_result(
             db,
             uid,

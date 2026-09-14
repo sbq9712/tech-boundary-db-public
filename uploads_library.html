@@ -194,7 +194,7 @@
       tb.querySelectorAll("button[data-download]").forEach(b=>b.onclick=()=>download(b.dataset.download));
       tb.querySelectorAll("button[data-retry]").forEach(b=>b.onclick=()=>retryClassification(b.dataset.retry,b));
       tb.querySelectorAll("button[data-retry-embedding]").forEach(b=>b.onclick=()=>retryEmbedding(b.dataset.retryEmbedding,b));
-      tb.querySelectorAll("button[data-del]").forEach(b=>b.onclick=()=>del(b.dataset.del,b.dataset.name,b));
+      tb.querySelectorAll("button[data-del]").forEach(b=>b.onclick=()=>del(encodeURIComponent(b.dataset.del),b.dataset.name,b));
       if(data.files.some(f=>["pending","processing"].includes(f.classification_status)||["pending","processing"].includes(f.embedding_status))){
         refreshTimer=setTimeout(load,3000);
       }

@@ -391,6 +391,10 @@ def delete_upload(
     record = db.get(UploadedFile, uuid.UUID(file_id))
     if record is None:
         raise HTTPException(404, "资料不存在")
+    # 防竞态：分类/索引处理进行中时不允许删除，否则后台任务可能在记录删除后
+    # 仍把内容写入问答索引，造成"已删除却可检索"。
+    if record.classification_status == "processing" or record.embedding_status == "processing":
+        raise HTTPException(409, "资料正在分类或建立索引，请稍后再删除")
     try:
         result = delete_uploaded_file(db, record)
     except RuntimeError as exc:
