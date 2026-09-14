@@ -20,8 +20,6 @@ from rank_bm25 import BM25Okapi
 
 
 INDEX_VERSION = 1
-MAX_CHUNKS_PER_DOCUMENT = 2_000
-MAX_CHUNK_CHARS = 8_000
 
 
 def _tokens(text: str) -> list[str]:
@@ -122,13 +120,11 @@ class IncrementalIndex:
     ) -> dict[str, int | str]:
         if not chunks:
             raise ValueError("at least one chunk is required")
-        if len(chunks) > MAX_CHUNKS_PER_DOCUMENT:
-            raise ValueError("too many chunks")
         texts = []
         for chunk in chunks:
             text = str(chunk.get("text", "")).strip()
-            if not text or len(text) > MAX_CHUNK_CHARS:
-                raise ValueError("chunk text is empty or too long")
+            if not text:
+                raise ValueError("chunk text is empty")
             texts.append(text)
 
         async with self._lock:
