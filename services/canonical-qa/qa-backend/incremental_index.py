@@ -193,6 +193,37 @@ class IncrementalIndex:
 
         return {"document_id": document_id, "chunk_count": len(texts), "total_chunks": self.record_count}
 
+    async def remove_document(self, document_id: str) -> int:
+        """Remove every chunk belonging to one uploaded document; return the count removed."""
+        async with self._lock:
+            with self._state_lock:
+                if not self.record_count:
+                    return 0
+                kept = [
+                    (vector, meta, tokens)
+                    for vector, meta, tokens in zip(self.embeddings, self.meta, self.corpus_tokens)
+                    if str(meta.get("document_id")) != document_id
+                ]
+                removed = self.record_count - len(kept)
+                if not removed:
+                    return 0
+                if kept:
+                    next_embeddings = np.asarray([item[0] for item in kept], dtype=np.float32)
+                    next_meta = [item[1] for item in kept]
+                    next_corpus = [item[2] for item in kept]
+                    next_bm25 = BM25Okapi(next_corpus)
+                else:
+                    next_embeddings = np.empty((0, 1024), dtype=np.float32)
+                    next_meta = []
+                    next_corpus = []
+                    next_bm25 = None
+                self._persist(next_embeddings, next_meta, next_corpus)
+                self.embeddings = next_embeddings
+                self.meta = next_meta
+                self.corpus_tokens = next_corpus
+                self.bm25 = next_bm25
+        return removed
+
     def vector_search(self, query_vector: np.ndarray, top_k: int) -> list[dict[str, Any]]:
         with self._state_lock:
             if not self.record_count:

@@ -18,6 +18,7 @@
     .btn:hover{ background:var(--bg-hover); }
     .btn.primary{ background:var(--brand); color:#fff; border-color:var(--brand); }
     .btn.primary:hover{ background:var(--brand-light); }
+    .lib-delete-btn:hover:not(:disabled){ border-color:rgba(239,68,68,.35); background:rgba(239,68,68,.08); color:var(--red,#ef4444); }
     table{ width:100%; border-collapse:collapse; background:var(--bg-canvas); border:1px solid var(--border-subtle); border-radius:var(--radius-lg); overflow:hidden; }
     thead th{ text-align:left; padding:11px 14px; font-size:12px; font-weight:500; color:var(--text-tertiary); background:var(--bg-panel); border-bottom:1px solid var(--border-standard); white-space:nowrap; }
     tbody td{ padding:11px 14px; font-size:13px; border-bottom:1px solid var(--border-subtle); vertical-align:middle; }
@@ -183,7 +184,7 @@
           <td class="size-cell">${fmtSize(f.size_bytes)}</td>
           <td>${esc(f.submitted_by)}</td>
           <td class="size-cell">${fmtTime(f.created_at)}</td>
-          <td><div class="row-actions"><button class="btn" data-download="${esc(f.id)}">下载</button>${canRetry?`<button class="btn" data-retry="${esc(f.id)}">重试分类</button>`:""}${canRetryEmbedding?`<button class="btn" data-retry-embedding="${esc(f.id)}">重试索引</button>`:""}</div></td>
+          <td><div class="row-actions"><button class="btn" data-download="${esc(f.id)}">下载</button>${canRetry?`<button class="btn" data-retry="${esc(f.id)}">重试分类</button>`:""}${canRetryEmbedding?`<button class="btn" data-retry-embedding="${esc(f.id)}">重试索引</button>`:""}${isAdmin?`<button class="btn lib-delete-btn" data-del="${esc(f.id)}" data-name="${esc(f.title||f.original_filename)}">删除</button>`:""}</div></td>
         </tr>`;
       }).join("");
       const start=total?offset+1:0, end=Math.min(offset+data.files.length,total);
@@ -193,6 +194,7 @@
       tb.querySelectorAll("button[data-download]").forEach(b=>b.onclick=()=>download(b.dataset.download));
       tb.querySelectorAll("button[data-retry]").forEach(b=>b.onclick=()=>retryClassification(b.dataset.retry,b));
       tb.querySelectorAll("button[data-retry-embedding]").forEach(b=>b.onclick=()=>retryEmbedding(b.dataset.retryEmbedding,b));
+      tb.querySelectorAll("button[data-del]").forEach(b=>b.onclick=()=>del(b.dataset.del,b.dataset.name,b));
       if(data.files.some(f=>["pending","processing"].includes(f.classification_status)||["pending","processing"].includes(f.embedding_status))){
         refreshTimer=setTimeout(load,3000);
       }
@@ -216,6 +218,17 @@
       }catch(e){ alert(e.message); button.disabled=false; }
     }
 
+    async function del(id,name,btn){
+      if(!confirm("删除「"+(name||"未命名资料")+"」？将同时删除文件与问答索引，不可恢复。"))return;
+      btn.disabled=true;
+      try{
+        const token=Auth.getToken();
+        const r=await fetch(API+"/uploads/"+id,{method:"DELETE",headers:{Authorization:"Bearer "+token}});
+        if(r.status===401){ Auth.logout(); return; }
+        if(!r.ok){ const j=await r.json().catch(()=>({})); alert(j.detail||("删除失败 "+r.status)); btn.disabled=false; return; }
+        load();
+      }catch(e){ alert("网络错误："+e.message); btn.disabled=false; }
+    }
     function download(id){
       // 带鉴权下载：先取 token，再 fetch blob 触发下载
       const token=Auth.getToken();

@@ -2327,6 +2327,7 @@ a:hover{color:var(--brand-lighter)}
 .library .lib-foot{margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .library .lib-count{color:var(--text-tertiary);font-size:12px;font-variant-numeric:tabular-nums}
 .library .secondary-btn:disabled{opacity:.45;cursor:not-allowed}
+.library .lib-delete-btn:hover:not(:disabled){border-color:var(--red-bg);background:var(--red-bg);color:var(--red)}
 @media(max-width:640px){
   .library .lib-head{flex-direction:column;align-items:stretch}
   .library .filter-row{width:100%}

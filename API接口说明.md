@@ -836,6 +836,10 @@ GET /api/info-items?status=draft,ai_suggested
 
 文件先持久落盘并登记 SHA-256。未手工指定分类时返回 `pending`，后台再调用内网/本地模型分类；分类完成后提取全文（不限长）、按 2000 字符/200 重叠分块，并调用 canonical QA 内部 embedding 接口写入增量索引。分类失败或 embedding 失败都不会删除文件。
 
+### `DELETE /api/uploads/{file_id}`
+
+仅管理员。三处同步删除：canonical-qa 增量索引（幂等，未索引视为成功）→ 落盘文件 → 数据库记录。索引删除失败时返回 502 且资料保持原状；资料不存在返回 404。成功返回 `{"ok":true,"removed_chunks":N,"index_skipped":false}`。
+
 ### `GET /api/uploads`
 
 查询参数：`limit`、`offset`、`source_type`、`primary_category`、`classification_status`。响应包含总数 `count` 和 `files`；每条记录另返回 `embedding_status`、`embedding_model`、`embedding_dim`、`chunk_count`、`embedding_error` 和 `ingestion_status`。

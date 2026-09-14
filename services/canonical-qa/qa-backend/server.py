@@ -513,6 +513,25 @@ async def index_upsert(
     return {"status": "ready", **result}
 
 
+class IndexDeleteRequest(BaseModel):
+    document_id: str = Field(min_length=1)
+
+
+@app.post("/api/index/delete")
+async def index_delete(
+    req: IndexDeleteRequest,
+    x_techdb_index_token: str | None = Header(default=None),
+):
+    """Remove one uploaded document from the incremental index (idempotent)."""
+    _check_index_token(x_techdb_index_token)
+    try:
+        removed = await _incremental_index.remove_document(req.document_id)
+    except Exception as exc:
+        print(f"[index] delete failed for {req.document_id}: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail="embedding index is unavailable") from exc
+    return {"status": "ok", "document_id": req.document_id, "removed_chunks": removed}
+
+
 @app.post("/api/chat/stream")
 async def chat_stream(req: ChatRequest):
     """Streaming chat endpoint using SSE."""

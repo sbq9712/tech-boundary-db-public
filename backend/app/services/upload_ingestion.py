@@ -16,6 +16,7 @@ from pathlib import Path
 import httpx
 from fastapi import UploadFile
 from sqlalchemy import select, update
+from sqlalchemy.orm import Session
 
 from app.core.classification import (
     AI_CONFIDENTIALITY_LEVELS,
@@ -521,6 +522,56 @@ def request_incremental_index(record: UploadedFile, text: str) -> dict:
     if result.get("status") != "ready":
         raise RuntimeError("canonical-qa 未确认增量索引已写入")
     return result
+
+
+def request_incremental_index_delete(document_id: str) -> dict:
+    """Remove one uploaded document from the canonical-qa incremental index.
+
+    Returns {"removed_chunks": int, "skipped": bool}. ``skipped`` 只在检索服务
+    未配置时为 True（该环境下资料本就未写入问答索引）。
+    """
+    base_url = os.getenv("TECHDB_QA_SERVICE_URL", "").strip().rstrip("/")
+    if not base_url:
+        return {"removed_chunks": 0, "skipped": True}
+    timeout = float(os.getenv("TECHDB_QA_INDEX_TIMEOUT_SECONDS", "300"))
+    token = os.getenv("TECHDB_QA_INDEX_TOKEN", "").strip()
+    headers = {"X-TechDB-Index-Token": token} if token else {}
+    with httpx.Client(timeout=timeout) as client:
+        response = client.post(
+            f"{base_url}/api/index/delete",
+            headers=headers,
+            json={"document_id": document_id},
+        )
+        if response.status_code == httpx.codes.NOT_FOUND:
+            # 未索引过（或已删除）：幂等成功
+            return {"removed_chunks": 0, "skipped": False}
+        response.raise_for_status()
+        result = response.json()
+    if result.get("status") != "ok":
+        raise RuntimeError("canonical-qa 未确认增量索引已删除")
+    return {"removed_chunks": int(result.get("removed_chunks") or 0), "skipped": False}
+
+
+def delete_uploaded_file(db: Session, record: UploadedFile) -> dict:
+    """Delete one uploaded file everywhere: QA index → disk → database.
+
+    任一步失败即中止并抛出 RuntimeError/UploadValidationError，保证不出现
+    "记录已删但问答仍可检索"或"索引已删但记录还在且重试无门"的状态。
+    """
+    index_result = request_incremental_index_delete(str(record.id))
+    try:
+        path = safe_upload_path(record.stored_filename)
+    except ValueError:
+        path = None
+    if path is not None and path.is_file():
+        path.unlink()
+    db.delete(record)
+    db.commit()
+    return {
+        "ok": True,
+        "removed_chunks": index_result.get("removed_chunks", 0),
+        "index_skipped": bool(index_result.get("skipped")),
+    }
 
 
 def _commit_embedding_result(db, file_id: uuid.UUID, **values) -> bool:

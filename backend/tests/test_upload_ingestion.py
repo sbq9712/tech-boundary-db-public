@@ -375,3 +375,89 @@ def test_classification_does_not_retry_on_client_error(monkeypatch):
     with pytest.raises(upload_ingestion.httpx.HTTPStatusError):
         upload_ingestion.request_ai_classification("资料文本", taxonomy)
     assert calls["n"] == 1
+
+def test_request_incremental_index_delete_posts_document_id(monkeypatch):
+    """删除请求携带 document_id 与令牌，返回移除的块数。"""
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"status": "ok", "removed_chunks": 3}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def post(self, url, **kwargs):
+            captured["url"] = url
+            captured.update(kwargs)
+            return FakeResponse()
+
+    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+    monkeypatch.setenv("TECHDB_QA_INDEX_TOKEN", "del-token")
+    monkeypatch.setattr(upload_ingestion.httpx, "Client", FakeClient)
+
+    result = upload_ingestion.request_incremental_index_delete("doc-1")
+
+    assert result == {"removed_chunks": 3, "skipped": False}
+    assert captured["url"] == "http://canonical-qa:8765/api/index/delete"
+    assert captured["headers"] == {"X-TechDB-Index-Token": "del-token"}
+    assert captured["json"] == {"document_id": "doc-1"}
+
+
+def test_request_incremental_index_delete_skips_when_unconfigured(monkeypatch):
+    """未配置检索服务时跳过索引删除（该环境本就未入索引），不阻断本地删除。"""
+    monkeypatch.delenv("TECHDB_QA_SERVICE_URL", raising=False)
+
+    result = upload_ingestion.request_incremental_index_delete("doc-2")
+
+    assert result == {"removed_chunks": 0, "skipped": True}
+
+
+def test_delete_uploaded_file_removes_index_disk_and_record(tmp_path, monkeypatch):
+    """删除编排：先删问答索引，再删落盘文件，最后删数据库记录。"""
+    calls = []
+    monkeypatch.setattr(
+        upload_ingestion,
+        "request_incremental_index_delete",
+        lambda document_id: calls.append(document_id) or {"removed_chunks": 2, "skipped": False},
+    )
+
+    stored_dir = tmp_path / "ab"
+    stored_dir.mkdir(parents=True)
+    stored = stored_dir / "abc.txt"
+    stored.write_text("内容", encoding="utf-8")
+    monkeypatch.setattr(upload_ingestion, "upload_root", lambda: tmp_path)
+
+    db = SimpleNamespace(
+        delete=lambda record: calls.append("db-delete"),
+        commit=lambda: calls.append("db-commit"),
+    )
+    file_id = uuid.uuid4()
+    record = SimpleNamespace(
+        id=file_id,
+        stored_filename="ab/abc.txt",
+    )
+    monkeypatch.setattr(
+        upload_ingestion,
+        "safe_upload_path",
+        lambda name: tmp_path / name,
+    )
+
+    result = upload_ingestion.delete_uploaded_file(db, record)
+
+    assert result == {"ok": True, "removed_chunks": 2, "index_skipped": False}
+    assert calls[0] == str(file_id), "必须先删除问答索引"
+    assert "db-delete" in calls and "db-commit" in calls
+    assert not stored.exists(), "落盘文件必须被删除"

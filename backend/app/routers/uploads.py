@@ -28,6 +28,7 @@ from app.services.upload_ingestion import (
     StoredUpload,
     UploadValidationError,
     classification_status_for,
+    delete_uploaded_file,
     ensure_extractable,
     load_taxonomy,
     persist_upload,
@@ -378,3 +379,20 @@ def download_upload(
             "Content-Length": str(record.size_bytes),
         },
     )
+
+@router.delete("/uploads/{file_id}")
+def delete_upload(
+    file_id: str,
+    current_user: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    # 删除一条已上传资料：问答索引 -> 落盘文件 -> 数据库记录，三处同步删除。
+    _uuid_or_400(file_id)
+    record = db.get(UploadedFile, uuid.UUID(file_id))
+    if record is None:
+        raise HTTPException(404, "资料不存在")
+    try:
+        result = delete_uploaded_file(db, record)
+    except RuntimeError as exc:
+        raise HTTPException(502, "问答索引删除失败，资料未被删除：" + str(exc)) from exc
+    return result
