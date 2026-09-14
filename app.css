@@ -150,6 +150,7 @@ a:hover{color:var(--brand-lighter)}
 .sidebar-conversation-new{
   display:flex;
   align-items:center;
+  justify-content:center;
   gap:6px;
   width:100%;
   min-height:28px;
