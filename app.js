@@ -1212,7 +1212,7 @@ function renderCitations(citations,stats){
   const count=Number(stats.knowledge_base||citations.length||0);
   return `<div class="qa-citations-block"><div class="qa-citations-title"><strong>来源引用</strong><span>检索 ${count} 条索引记录</span></div>${citations.map((c,index)=>{const id=Number(c.id||index+1);const meta=[c.date,c.source,c.tag].filter(Boolean).map(item=>`<span>${escapeHtml(item)}</span>`).join('');const link=c.url?`<a class="qa-citation-link" href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">原文</a>`:'';return `<article class="qa-citation-item" data-citation-card="${id}"><div class="qa-citation-header"><span class="qa-citation-number">[${id}]</span><span class="qa-citation-title">${escapeHtml(c.title||'未命名情报')}</span></div><div class="qa-citation-meta">${meta}${link}</div>${c.body_snippet?`<p class="qa-citation-snippet">${escapeHtml(c.body_snippet)}</p>`:''}</article>`;}).join('')}</div>`;
 }
-function escapeHtml(s){return String(s).replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));}
+function escapeHtml(s){return String(s).replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
 
 // ═══════════════════════════════════════════════════════
 // USER MANAGEMENT
@@ -1465,7 +1465,7 @@ function libraryView(){return `<section class="flat-content library"><div class=
 function libFmtSize(n){if(!n)return "-";const u=["B","KB","MB","GB"];let i=0,s=n;while(s>=1024&&i<3){s/=1024;i++;}return s.toFixed(s<10?1:0)+" "+u[i];}
 function libFmtTime(iso){if(!iso)return "-";const d=new Date(iso);return isNaN(d)?"-":d.toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});}
 async function initLibrary(){
-  libOffset=0;
+  libOffset=0;libIsAdmin=false;
   ["srcFilter","categoryFilter","statusFilter"].forEach(id=>{const el=document.getElementById(id);if(el)el.onchange=()=>{libOffset=0;loadLibrary();};});
   const prev=document.getElementById("prevBtn"),next=document.getElementById("nextBtn");
   if(prev)prev.onclick=()=>{libOffset=Math.max(0,libOffset-30);loadLibrary();};
@@ -1553,7 +1553,7 @@ function libDownload(id){
     .catch(e=>alert(e.message));
 }
 // ── 上传资料：in-app 弹窗，替代 uploads_admin.html 独立页跳转，保留左侧导航 ──
-let upPending=[],upTaxonomy=null;
+let upPending=[],upTaxonomy=null,upCloseTimer=null;
 const UPLOAD_ALLOWED=[".pdf",".docx",".xlsx",".md",".markdown",".txt",".csv"];
 function openUploadModal(){
   if(!libIsAdmin)return;
@@ -1592,6 +1592,7 @@ function openUploadModal(){
   upEnsureTaxonomy();
 }
 function closeUploadModal(){
+  if(upCloseTimer){clearTimeout(upCloseTimer);upCloseTimer=null;}
   const overlay=document.getElementById("uploadModalOverlay");
   if(overlay)overlay.remove();
   upPending=[];
@@ -1599,15 +1600,16 @@ function closeUploadModal(){
 }
 function upEscClose(e){if(e.key==="Escape")closeUploadModal();}
 function upAddFiles(fileList){
-  const rejected=[];
+  const rejected=[],duplicated=[];
   for(const f of fileList){
     const dot=f.name.lastIndexOf(".");
     const ext=dot>=0?f.name.slice(dot).toLowerCase():"";
     if(!UPLOAD_ALLOWED.includes(ext)){rejected.push(f.name);continue;}
-    if(upPending.some(x=>x.name===f.name&&x.size===f.size))continue;
+    if(upPending.some(x=>x.name===f.name&&x.size===f.size)){duplicated.push(f.name);continue;}
     upPending.push(f);
   }
   if(rejected.length)upShowResult("不支持的文件类型："+rejected.join("、")+"（仅支持 PDF / Word / Excel / Markdown / TXT / CSV）","err");
+  else if(duplicated.length)upShowResult("已添加过（未重复加入）："+duplicated.join("、"),"");
   upRenderList();
 }
 function upRenderList(){
@@ -1631,7 +1633,11 @@ function upFillTaxonomy(){
 }
 async function upEnsureTaxonomy(){
   if(upTaxonomy){upFillTaxonomy();return;}
-  try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];upFillTaxonomy();}}catch(e){}
+  try{
+    const r=await apiFetch("/api/uploads/taxonomy");
+    if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];upFillTaxonomy();return;}
+    throw new Error("taxonomy "+(r?r.status:""));
+  }catch(e){upShowResult("业务分类目录加载失败：可稍后重开弹窗重试，或留空由系统自动分类","err");}
 }
 async function upSubmit(){
   if(!upPending.length)return;
@@ -1654,7 +1660,7 @@ async function upSubmit(){
       const data=await r.json().catch(()=>({}));
       const pendingCount=(data.files||[]).filter(f=>f.classification_status==="pending").length;
       upShowResult("成功落盘 "+data.count+" 个文件，后台正在"+(pendingCount?"分类和索引":"建立索引"),"ok");
-      setTimeout(()=>{closeUploadModal();loadLibrary();},1200);
+      upCloseTimer=setTimeout(()=>{upCloseTimer=null;closeUploadModal();loadLibrary();},1200);
     }else{
       const j=r?await r.json().catch(()=>({})):{};
       upShowResult(j.detail||("上传失败 "+(r?r.status:"")),"err");
