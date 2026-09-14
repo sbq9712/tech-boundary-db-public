@@ -535,16 +535,29 @@ function renderHomeAlertPage(){
     const publishedTime=item.published_at||item.publish_date||'';
     const domain=item.domain_name||item.domain||String(item.info_item_id||'').split('_')[1]||'待归类';
     const tag=String(item.tag||'').trim();
-    /* 预警原因：与广度追踪同源（wr 字段，"标签||正文"，|| 换行为广度页原样版式）；
-       门户已有"预警原因"小标签，正文中不再重复前缀 */
-    const reasonText=String(item.alert_reason||'').trim().replace(/\|\|/g,'\n')
-      ||String(item.reviewer_comment||item.alert_body||item.summary||(item.content||'').slice(0,240)||'').trim()
-      ||'持续跟踪';
+    /* 预警原因：与广度追踪同源（wr 字段「类别||标题⏎⏎正文」），
+       门户版式改写为「类别⏎标题:正文」，红色前缀"预警原因:"由标签渲染 */
+    const rawReason=String(item.alert_reason||'').replace(/\r\n?/g,'\n').trim();
+    let reasonText='';
+    const reasonSep=rawReason.indexOf('||');
+    if(reasonSep>=0){
+      const cat=rawReason.slice(0,reasonSep).trim();
+      const rest=rawReason.slice(reasonSep+2).trim();
+      const nl=rest.search(/\n/);
+      if(nl>=0){
+        const title=rest.slice(0,nl).trim();
+        const body=rest.slice(nl+1).replace(/^[\n]+/,'').trim();
+        reasonText=((cat?cat+'\n':'')+(title?title+':' : '')+body).trim();
+      }else{
+        reasonText=((cat?cat+'\n':'')+rest).trim();
+      }
+    }
+    reasonText=(reasonText||rawReason||String(item.reviewer_comment||item.alert_body||item.summary||(item.content||'').slice(0,240)||'').trim())||'持续跟踪';
     const target=homeAlertTarget(item);
     const reasonId=`home-alert-reason-${start+index}`;
     const tagClass=HOME_ALERT_TAG_CLASS[tag]||'';
     const sev=String(item.alert_color||'').toLowerCase().replace(/[^a-z]/g,'')||'normal';
-    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-label">预警原因</span><span class="home-alert-reason-text" id="${reasonId}">${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开全部</button></div></article>`;
+    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-text" id="${reasonId}"><span class="home-alert-reason-label">预警原因</span>:${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开全部</button></div></article>`;
   }).join('')}</div>`;
   requestAnimationFrame(()=>body.querySelectorAll('.home-alert-reason-text').forEach(reason=>{
     const toggle=reason.parentElement?.querySelector('[data-alert-reason-toggle]');

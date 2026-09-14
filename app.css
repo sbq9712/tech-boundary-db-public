@@ -177,7 +177,7 @@ a:hover{color:var(--brand-lighter)}
 .sidebar-conversation-add:hover{background:var(--brand-bg);color:var(--brand)}
 .sidebar-conversation-add:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
 .sidebar-conversation-list{
-  max-height:172px;
+  max-height:168px;
   overflow-y:hidden;
   display:flex;
   flex-direction:column;
@@ -978,13 +978,14 @@ a:hover{color:var(--brand-lighter)}
 .home-alert-title:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:4px}
 .home-alert-reason{
   display:flex;
-  align-items:baseline;
+  align-items:flex-start;
   gap:7px;
   margin-top:8px;
   padding-top:7px;
   border-top:1px solid var(--border-subtle);
 }
-.home-alert-reason-label{flex:0 0 auto;color:var(--text-quaternary);font-size:10px;font-weight:600;letter-spacing:.02em}
+/* "预警原因"四字仅标红，字体与正文完全一致 */
+.home-alert-reason-label{color:var(--red)}
 .home-alert-reason-text{
   flex:1 1 auto;
   min-width:0;
