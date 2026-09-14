@@ -536,7 +536,7 @@ function renderHomeAlertPage(){
     const domain=item.domain_name||item.domain||String(item.info_item_id||'').split('_')[1]||'待归类';
     const tag=String(item.tag||'').trim();
     /* 预警原因：与广度追踪同源（wr 字段「类别||标题⏎⏎正文」），
-       门户版式改写为「类别⏎标题:正文」，红色前缀"预警原因:"由标签渲染 */
+       门户版式改写为「类别⏎标题：正文」，红色加粗前缀"预警原因"与全角冒号由标签渲染 */
     const rawReason=String(item.alert_reason||'').replace(/\r\n?/g,'\n').trim();
     let reasonText='';
     const reasonSep=rawReason.indexOf('||');
