@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote
@@ -167,6 +168,7 @@ async def upload_files(
 
     stored_items: list[StoredUpload] = []
     records: list[UploadedFile] = []
+    extraction_failures: list[str] = []
     try:
         for upload in files:
             stored = await persist_upload(upload)
@@ -174,7 +176,12 @@ async def upload_files(
 
             original_filename = upload.filename or stored.path.name
             # 上传即校验：提取不出文本的文件直接拒绝并告知原因（不再落库为"未分类"）。
-            ensure_extractable(stored.path, original_filename)
+            # 解析放在线程池，避免大文档解析阻塞事件循环。
+            try:
+                await asyncio.to_thread(ensure_extractable, stored.path, original_filename)
+            except UploadValidationError as exc:
+                extraction_failures.append(str(exc))
+                continue
             manual_title = title.strip() if title and title.strip() else None
             fallback_title = stored.path.stem if not original_filename else original_filename.rsplit(".", 1)[0]
             record = UploadedFile(
@@ -204,6 +211,11 @@ async def upload_files(
             )
             db.add(record)
             records.append(record)
+        if extraction_failures:
+            raise UploadValidationError(
+                "；".join(extraction_failures),
+                status_code=422,
+            )
         db.commit()
         for record in records:
             db.refresh(record)

@@ -184,6 +184,29 @@ def test_ensure_extractable_rejects_textless_file(tmp_path):
     upload_ingestion.ensure_extractable(ok, "ok.md")
 
 
+def test_chunk_text_terminates_on_adversarial_newlines():
+    """每行恰好在切分窗口尾部出现换行时也必须推进并终止（回归 codex P0-4 争议项）。"""
+    text = ("\n".join("甲" * 1999 for _ in range(200)),)
+    text = text[0]
+
+    chunks = upload_ingestion.chunk_text(text)
+
+    assert chunks, "必须产出分块"
+    total = sum(len(chunk["text"]) for chunk in chunks)
+    # 无限循环不会返回；若返回，说明每轮 start 至少前进 INDEX_CHUNK_CHARS//2 - OVERLAP
+    assert total >= len(text) - upload_ingestion.INDEX_CHUNK_OVERLAP
+
+
+def test_chunk_text_handles_single_giant_line():
+    """整篇无换行（10000 字符单行）时按硬边界切分且终止。"""
+    text = "乙" * 10_000
+
+    chunks = upload_ingestion.chunk_text(text)
+
+    assert all(0 < len(chunk["text"]) <= upload_ingestion.INDEX_CHUNK_CHARS for chunk in chunks)
+    assert len(chunks) >= 5
+
+
 def test_chunk_text_does_not_skip_text_at_line_boundary():
     text = "A" * 1_500 + "\n" + "B" * 1_500
 

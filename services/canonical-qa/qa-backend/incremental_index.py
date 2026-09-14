@@ -101,6 +101,12 @@ class IncrementalIndex:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temp_name, self.path)
+            # fsync 父目录，确保 rename 在断电后也不丢失
+            dir_fd = os.open(self.path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
         finally:
             Path(temp_name).unlink(missing_ok=True)
 
