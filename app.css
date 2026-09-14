@@ -381,6 +381,10 @@ a:hover{color:var(--brand-lighter)}
 
 /* ── Buttons ── */
 .primary-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height:1;
   border:0;
   border-radius:var(--radius-md);
   background:var(--brand);
