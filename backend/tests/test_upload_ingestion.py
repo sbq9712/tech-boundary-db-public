@@ -144,6 +144,46 @@ def test_chunk_text_is_bounded_and_overlapping():
     assert chunks[0]["text"][-upload_ingestion.INDEX_CHUNK_OVERLAP :] == chunks[1]["text"][: upload_ingestion.INDEX_CHUNK_OVERLAP]
 
 
+def test_upload_size_and_batch_caps_are_removed():
+    """上传不再限制单文件/单批大小与份数（2026-09 需求）。"""
+    assert not hasattr(upload_ingestion, "MAX_FILE_BYTES")
+    assert not hasattr(upload_ingestion, "MAX_BATCH_FILES")
+    assert not hasattr(upload_ingestion, "MAX_BATCH_BYTES")
+    assert not hasattr(upload_ingestion, "MAX_INDEX_TEXT_CHARS")
+
+
+def test_extract_text_without_budget_returns_full_document(tmp_path):
+    """max_chars=None 时整篇提取，不受旧 50 万字符上限约束。"""
+    body = "甲" * 500_001
+    path = tmp_path / "big.txt"
+    path.write_text(body, encoding="utf-8")
+
+    extracted = upload_ingestion.extract_text(path, "big.txt", None)
+
+    assert extracted is not None
+    assert len(extracted) == len(body)
+
+    # 默认预算（分类采样）仍然截断
+    sampled = upload_ingestion.extract_text(path, "big.txt")
+    assert len(sampled) <= upload_ingestion.CLASSIFICATION_BUDGET_CHARS
+
+
+def test_ensure_extractable_rejects_textless_file(tmp_path):
+    """上传时同步拒绝无法提取文本的文件，并给出原因。"""
+    path = tmp_path / "empty.md"
+    path.write_text("   \n\n  ", encoding="utf-8")
+
+    with pytest.raises(upload_ingestion.UploadValidationError) as excinfo:
+        upload_ingestion.ensure_extractable(path, "empty.md")
+    assert excinfo.value.status_code == 422
+    assert "empty.md" in str(excinfo.value)
+
+    # 可以提取文本的文件不应抛错
+    ok = tmp_path / "ok.md"
+    ok.write_text("# 正常资料\n有内容。", encoding="utf-8")
+    upload_ingestion.ensure_extractable(ok, "ok.md")
+
+
 def test_chunk_text_does_not_skip_text_at_line_boundary():
     text = "A" * 1_500 + "\n" + "B" * 1_500
 

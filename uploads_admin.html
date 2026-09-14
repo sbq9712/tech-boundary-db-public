@@ -133,14 +133,11 @@
     const fileInput=document.getElementById("fileInput");
     const fileList=document.getElementById("fileList");
     const ALLOWED=[".pdf",".docx",".xlsx",".md",".markdown",".txt",".csv",".png",".jpg",".jpeg"];
-    const MAX=50*1024*1024;
 
     function addFiles(fs){
       for(const f of fs){
         const ext="."+f.name.split(".").pop().toLowerCase();
         if(!ALLOWED.includes(ext)){ showResult("不支持的类型："+f.name,"err"); continue; }
-        if(f.size>MAX){ showResult("文件过大（>50MB）："+f.name,"err"); continue; }
-        if(pending.length>=20){ showResult("单批最多 20 个文件","err"); break; }
         pending.push(f);
       }
       render();

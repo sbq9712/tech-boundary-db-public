@@ -23,12 +23,11 @@ from app.core.security import get_current_user, require_admin
 from app.db.session import get_db
 from app.models.uploaded_file import UploadedFile
 from app.services.upload_ingestion import (
-    MAX_BATCH_BYTES,
-    MAX_BATCH_FILES,
     SOURCE_TYPES,
     StoredUpload,
     UploadValidationError,
     classification_status_for,
+    ensure_extractable,
     load_taxonomy,
     persist_upload,
     process_uploaded_file,
@@ -146,8 +145,6 @@ async def upload_files(
 ) -> dict:
     if not files:
         raise HTTPException(400, "未提供文件")
-    if len(files) > MAX_BATCH_FILES:
-        raise HTTPException(400, f"单批最多 {MAX_BATCH_FILES} 个文件")
     if title and len(files) > 1:
         raise HTTPException(400, "批量上传不能共用标题，请留空让系统逐文件生成")
     try:
@@ -170,18 +167,14 @@ async def upload_files(
 
     stored_items: list[StoredUpload] = []
     records: list[UploadedFile] = []
-    total_size = 0
     try:
         for upload in files:
             stored = await persist_upload(upload)
             stored_items.append(stored)
-            total_size += stored.size_bytes
-            if total_size > MAX_BATCH_BYTES:
-                raise UploadValidationError(
-                    f"单批总量超过 {MAX_BATCH_BYTES // 1024 // 1024}MB", status_code=413
-                )
 
             original_filename = upload.filename or stored.path.name
+            # 上传即校验：提取不出文本的文件直接拒绝并告知原因（不再落库为"未分类"）。
+            ensure_extractable(stored.path, original_filename)
             manual_title = title.strip() if title and title.strip() else None
             fallback_title = stored.path.stem if not original_filename else original_filename.rsplit(".", 1)[0]
             record = UploadedFile(

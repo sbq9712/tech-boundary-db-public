@@ -830,11 +830,11 @@ GET /api/info-items?status=draft,ai_suggested
 
 ### `POST /api/uploads`
 
-`multipart/form-data`。`files` 可重复，单批最多 20 份/200MB，单文件最多 50MB。可选字段：`title`、`confidentiality`、`source_type`、`note`、`primary_category`。批量上传不能填写共享标题。
+`multipart/form-data`。`files` 可重复，不限制份数、单文件或单批大小。可选字段：`title`、`confidentiality`、`source_type`、`note`、`primary_category`。批量上传不能填写共享标题。上传时同步校验文本可提取性：无法提取文本（如扫描版/纯图片 PDF、加密文档、空文档）的文件会被整批拒绝（HTTP 422），并在 `detail` 中逐个列出文件名与原因。
 
 `confidentiality` 只接受 `公开`、`内部`、`管理员`。历史值（如“付费来源”“秘密”）兼容导入时归一为 `内部`；AI 自动补齐只允许 `公开` 或 `内部`，`管理员` 需要上传者明确选择。密级当前仅作元数据标签，不单独改变下载权限；“付费数据库”属于 `source_type`，不是密级。
 
-文件先持久落盘并登记 SHA-256。未手工指定分类时返回 `pending`，后台再调用内网/本地模型分类；分类完成后提取文本、分块，并调用 canonical QA 内部 embedding 接口写入增量索引。分类失败或 embedding 失败都不会删除文件。
+文件先持久落盘并登记 SHA-256。未手工指定分类时返回 `pending`，后台再调用内网/本地模型分类；分类完成后提取全文（不限长）、按 2000 字符/200 重叠分块，并调用 canonical QA 内部 embedding 接口写入增量索引。分类失败或 embedding 失败都不会删除文件。
 
 ### `GET /api/uploads`
 

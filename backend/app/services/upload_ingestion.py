@@ -28,13 +28,9 @@ from app.models.uploaded_file import UploadedFile
 
 logger = logging.getLogger(__name__)
 
-MAX_FILE_BYTES = 50 * 1024 * 1024
-MAX_BATCH_FILES = 20
-MAX_BATCH_BYTES = 200 * 1024 * 1024
 STREAM_CHUNK_BYTES = 1024 * 1024
 # 分类输入取整篇代表性采样（头/中/尾），而非只截前若干字，避免封面/目录主导模型判断。
 CLASSIFICATION_BUDGET_CHARS = 40_000
-MAX_INDEX_TEXT_CHARS = 500_000
 INDEX_CHUNK_CHARS = 2_000
 INDEX_CHUNK_OVERLAP = 200
 INDEX_MODEL = "bge-m3"
@@ -172,11 +168,6 @@ async def persist_upload(upload: UploadFile) -> StoredUpload:
         with open(temp, "xb") as handle:
             while chunk := await upload.read(STREAM_CHUNK_BYTES):
                 size += len(chunk)
-                if size > MAX_FILE_BYTES:
-                    raise UploadValidationError(
-                        f"文件过大（>{MAX_FILE_BYTES // 1024 // 1024}MB）：{filename}",
-                        status_code=413,
-                    )
                 digest.update(chunk)
                 handle.write(chunk)
             if size == 0:
@@ -213,8 +204,15 @@ def classification_status_for(category: str) -> str:
     return "classified"
 
 
-def _append_limited(parts: list[str], text: str, max_chars: int = CLASSIFICATION_BUDGET_CHARS) -> bool:
+def _append_limited(
+    parts: list[str],
+    text: str,
+    max_chars: int | None = CLASSIFICATION_BUDGET_CHARS,
+) -> bool:
     if not text:
+        return False
+    if max_chars is None:  # 不限长：整篇保留
+        parts.append(text)
         return False
     current = sum(len(item) for item in parts)
     if current >= max_chars:
@@ -226,14 +224,16 @@ def _append_limited(parts: list[str], text: str, max_chars: int = CLASSIFICATION
 def extract_text(
     path: Path,
     original_filename: str,
-    max_chars: int = CLASSIFICATION_BUDGET_CHARS,
+    max_chars: int | None = CLASSIFICATION_BUDGET_CHARS,
 ) -> str | None:
+    """提取文本；``max_chars=None`` 表示不限长，整篇提取（用于建索引）。"""
     ext = file_extension(original_filename)
     try:
         if ext in (".md", ".markdown", ".txt", ".csv"):
             with open(path, "rb") as handle:
-                raw = handle.read(max_chars * 4)
-            return raw.decode("utf-8", errors="replace")[:max_chars].strip() or None
+                raw = handle.read() if max_chars is None else handle.read(max_chars * 4)
+            text = raw.decode("utf-8", errors="replace")
+            return (text[:max_chars] if max_chars is not None else text).strip() or None
 
         parts: list[str] = []
         if ext == ".pdf":
@@ -270,6 +270,20 @@ def extract_text(
     except Exception as exc:
         logger.warning("text extraction failed for %s: %s", original_filename, exc)
         return None
+
+
+def ensure_extractable(path: Path, original_filename: str) -> None:
+    """上传时同步校验：无法提取文本的文件直接拒绝，并告知用户原因。
+
+    只需判断"能否提取出文本"，用小预算快速采样即可；完整提取在后台建索引时进行。
+    """
+    sample = extract_text(path, original_filename)
+    if not sample:
+        raise UploadValidationError(
+            f"无法从文件中提取文本内容，上传失败：{original_filename}"
+            "（可能是扫描版/纯图片 PDF、加密文档或空文档，请改用含文字层的文件）",
+            status_code=422,
+        )
 
 
 def representative_sample(text: str | None, budget: int) -> str:
@@ -559,7 +573,7 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
             )
             return False
 
-        text = extract_text(path, record.original_filename, MAX_INDEX_TEXT_CHARS)
+        text = extract_text(path, record.original_filename, None)
         if record.classification_status in {"pending", "processing"}:
             taxonomy = load_taxonomy()
             classification_claimed = True
@@ -579,16 +593,18 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
                 else:
                     classification_claimed = True
             if not text:
+                # 上传时已同步校验过可提取；此处为兜底（文件在处理前被损坏/替换等）。
+                # 与用户约定一致：提取失败是失败，不再标记"未分类"。
                 _commit_processing_result(
                     db,
                     uid,
                     taxonomy_version=taxonomy.version,
                     primary_category="未分类",
                     secondary_categories=[],
-                    classification_status="unclassified",
+                    classification_status="failed",
                     classification_source="system",
                     classification_reason="当前文件无法提取可分类文本",
-                    classification_error=None,
+                    classification_error="无法提取可分类文本（可能是扫描版/纯图片 PDF、加密文档或空文档）",
                     classified_at=datetime.now(timezone.utc),
                 )
             else:
@@ -618,14 +634,25 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
                     return False
             db.refresh(record)
 
-        if not text or record.primary_category == "不相关":
+        if not text:
+            return _commit_embedding_result(
+                db,
+                uid,
+                embedding_status="failed",
+                embedding_model=INDEX_MODEL,
+                embedding_dim=INDEX_DIM,
+                embedding_error="无法提取可索引文本（可能是扫描版/纯图片 PDF、加密文档或空文档）",
+                chunk_count=0,
+                embedded_at=datetime.now(timezone.utc),
+            )
+        if record.primary_category == "不相关":
             return _commit_embedding_result(
                 db,
                 uid,
                 embedding_status="skipped",
                 embedding_model=INDEX_MODEL,
                 embedding_dim=INDEX_DIM,
-                embedding_error=("当前文件无法提取可索引文本" if not text else "资料被分类为不相关"),
+                embedding_error="资料被分类为不相关",
                 chunk_count=0,
                 embedded_at=datetime.now(timezone.utc),
             )
