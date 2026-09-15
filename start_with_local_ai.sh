@@ -29,4 +29,13 @@ echo "Preparing pinned breadth runtime data before the Docker build..."
 python3 "$ROOT/scripts/hydrate_breadth_runtime.py"
 
 cd "$ROOT"
-docker compose --env-file "$ENV_FILE" up -d --build api readonly-agent web
+echo "Building current API and web images..."
+docker compose --env-file "$ENV_FILE" build api readonly-agent web
+
+echo "Preparing verified Docling models before accepting document uploads..."
+docker compose --env-file "$ENV_FILE" run --rm --no-deps api \
+  python -m app.document_ingestion.models
+
+echo "Starting local services..."
+docker compose --env-file "$ENV_FILE" up -d api readonly-agent web
+

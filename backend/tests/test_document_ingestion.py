@@ -343,3 +343,55 @@ def test_ingestion_disables_native_telemetry_before_conversion(monkeypatch):
     importlib.reload(ingestion)
     assert os.environ["ORT_DISABLE_TELEMETRY"] == "1"
     assert os.environ["HF_HUB_DISABLE_TELEMETRY"] == "1"
+
+
+
+def test_model_snapshot_downloads_once_and_rejects_partial_state(tmp_path, monkeypatch):
+    from app.document_ingestion import models
+
+    calls = []
+    monkeypatch.setattr(models, "_expected", lambda root=None: {"schema": 1, "engine": "test"})
+
+    def download(root):
+        calls.append(root)
+        (root / "layout").mkdir(parents=True, exist_ok=True)
+        (root / "layout" / "model.bin").write_bytes(b"synthetic model")
+
+    monkeypatch.setattr(models, "_download", download)
+    assert models.ensure_models(tmp_path) is True
+    assert models.ensure_models(tmp_path) is False
+    assert len(calls) == 1
+    (tmp_path / "layout" / "model.bin").write_bytes(b"truncated")
+    assert models.is_ready(tmp_path) is False
+    assert models.ensure_models(tmp_path) is True
+    assert len(calls) == 2
+
+
+def test_upload_status_exposes_docling_before_classification():
+    from app.routers.uploads import _serialize
+
+    record = SimpleNamespace(
+        storage_status="stored", embedding_status="processing", document_assets=None,
+        classification_status="pending", id=uuid.uuid4(), original_filename="paper.pdf",
+        chunk_count=0, stored_filename="objects/a.pdf", title="paper", confidentiality=None,
+        source_type=None, domain_refs=None, note=None, title_source="filename_fallback",
+        mime_type="application/pdf", size_bytes=10, checksum_sha256="a" * 64,
+        taxonomy_version=None, primary_category=None, secondary_categories=[],
+        classification_confidence=None, classification_source=None, classification_reason=None,
+        classification_error=None, classification_attempts=0, classified_at=None,
+        embedding_model=None, embedding_dim=None, embedding_error=None, embedding_attempts=1,
+        embedded_at=None, submitted_by="tester", created_at=None,
+    )
+    assert _serialize(record)["ingestion_status"] == "document_processing"
+
+
+def test_local_start_prepares_docling_models_before_starting_api():
+    root = Path(__file__).resolve().parents[2]
+    script = (root / "start_with_local_ai.sh").read_text(encoding="utf-8")
+
+    build_at = script.index('docker compose --env-file "$ENV_FILE" build')
+    models_at = script.index("python -m app.document_ingestion.models")
+    start_at = script.index('docker compose --env-file "$ENV_FILE" up -d')
+
+    assert build_at < models_at < start_at
+    assert "run --rm --no-deps api" in script

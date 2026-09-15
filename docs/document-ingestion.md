@@ -58,12 +58,13 @@ docling-tools models download layout tableformer code_formula rapidocr -o /path/
 
 ```dotenv
 TECHDB_DOCLING_ARTIFACTS_PATH=/app/document-models/docling
-TECHDB_DOCUMENT_TOKENIZER=/app/document-models/bge-m3-tokenizer
+TECHDB_DOCUMENT_TOKENIZER=/app/document-models/docling/bge-m3-tokenizer
+TECHDB_DOCUMENT_TOKENIZER_SOURCE=BAAI/bge-m3
 TECHDB_DOCUMENT_CHUNK_TOKENS=512
 TECHDB_DOCLING_FORMULAS=true
 ```
 
-`TECHDB_DOCUMENT_TOKENIZER` 指向包含 tokenizer 配置和词表的本地目录；在线开发也可保持默认 `BAAI/bge-m3`。音视频模型按 Docling ASR 配置另行预备。Docling/PyTorch/OCR 模型不在普通 Git clone 中，不提交模型、上传文件或派生资产。
+`TECHDB_DOCUMENT_TOKENIZER` 指向包含 tokenizer 配置和词表的本地目录；联网准备时从 `TECHDB_DOCUMENT_TOKENIZER_SOURCE`（默认 `BAAI/bge-m3`）下载到该目录。音视频模型按 Docling ASR 配置另行预备。Docling/PyTorch/OCR 模型不在普通 Git clone 中，不提交模型、上传文件或派生资产。
 
 需要特殊格式原生配置时，`TECHDB_DOCLING_BACKEND_OPTIONS_FILE` 指向管理员控制的 JSON 文件，格式为 `{ "ebcdic": { ...原生 EbcdicBackendOptions... } }`。值用该格式的 Docling Pydantic 类型校验；不从上传内容加载配置，不允许开启外部资源抓取。配置内容不写进公开元数据，只保存校验和。修改模型或 backend 配置后重启 API。
 
@@ -104,3 +105,10 @@ RUN_DOCLING_REAL_TESTS=1 PYTHONPATH=backend DOCLING_TEST_REPORT_DIR=reports/docl
 `.github/workflows/document-ingestion.yml` 提供临时 PostgreSQL migration、回归测试和六格式真实转换验收，不需要公司数据库或 Secret，不部署服务。
 
 本次合成文档的 document_id、Markdown/provenance 示例及真实 CI 结果见 [验收记录](document-ingestion-validation.md)。
+
+
+### 首次 PDF 上传前的模型准备
+
+`bash ./start_with_local_ai.sh` 现在先构建镜像，再在已挂载的 `external-data/document-models` 中准备 Docling 布局、TableFormer、公式、中文 RapidOCR 模型及 HybridChunker 使用的 tokenizer，完成完整性检查后才启动 API。首次执行需要联网并可能耗时；终端会显示下载进度。以后若版本和文件清单一致会直接复用，不重复下载。文件缺失或大小变化时会重新准备，并在启动阶段明确失败，避免浏览器上传后长期显示“待分类”。
+
+上传进入 Docling 转换后，资料库显示“文档解析中”；转换结束才进入“分类中”和“索引中”。升级前已经卡住的记录会在 API 重启时由现有 recovery 机制重置并重试。

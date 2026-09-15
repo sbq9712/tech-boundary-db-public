@@ -49,6 +49,8 @@ def _serialize(record: UploadedFile) -> dict:
     terminal = {"classified", "unclassified", "irrelevant", "legacy_unclassified"}
     if record.storage_status != "stored":
         ingestion_status = record.storage_status
+    elif record.embedding_status == "processing" and not record.document_assets:
+        ingestion_status = "document_processing"
     elif record.classification_status not in terminal:
         ingestion_status = record.classification_status
     elif record.embedding_status == "ready":
@@ -415,4 +417,5 @@ def delete_upload(
     except RuntimeError as exc:
         raise HTTPException(502, "问答索引删除失败，资料未被删除：" + str(exc)) from exc
     return result
+
 
