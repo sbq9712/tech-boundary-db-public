@@ -102,3 +102,5 @@ RUN_DOCLING_REAL_TESTS=1 PYTHONPATH=backend DOCLING_TEST_REPORT_DIR=reports/docl
 每份报告包含 document_id、file_type、chunk 数、OCR 是否观察到、Markdown 和 metadata 示例。扫描测试必须检测到真实 OCR 文本；不能只凭启用 OCR 开关判定成功。默认使用真实 bge-m3 tokenizer；`TEST_DOCUMENT_TOKENIZER=fixture` 仅用于离线转换合同测试，报告会明确标注替身，不能据此声称真实 tokenizer/embedding 验收。
 
 `.github/workflows/document-ingestion.yml` 提供临时 PostgreSQL migration、回归测试和六格式真实转换验收，不需要公司数据库或 Secret，不部署服务。
+
+本次合成文档的 document_id、Markdown/provenance 示例及真实 CI 结果见 [验收记录](document-ingestion-validation.md)。
