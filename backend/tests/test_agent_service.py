@@ -182,3 +182,23 @@ def test_stream_path_does_not_use_legacy_portal_sources():
     assert "_search_sources" not in source
     assert "_search_parameters" not in source
     assert "ChatbotIndexAdapter" not in inspect.getsource(agent_service)
+
+
+
+def test_uploaded_chunk_citations_keep_provenance_and_distinct_chunks():
+    first = sample_citation(document_id="doc-1", chunk_id="chunk-1",
+                            chunk_metadata={"page_numbers": [2], "provenance": [{"doc_ref": "#/texts/0"}]})
+    second = {**first, "chunk_id": "chunk-2"}
+    normalized = _normalize_citations([first, second])
+    assert normalized[0]["chunk_metadata"] == first["chunk_metadata"]
+    assert len(_merge_citations(normalized, [])) == 2
+
+
+def test_uploaded_prompt_uses_semantic_chunk_not_preview_only():
+    citation = sample_citation(document_id="doc", chunk_id="chunk",
+                              body_snippet="preview only", chunk_text="full table result: 95 percent",
+                              chunk_metadata={"page_numbers": [3], "section_title": "Results"})
+    messages = _build_prompt("question", {"citations": [citation]}, [])
+    assert "full table result: 95 percent" in messages[0]["content"]
+    assert "Results" in messages[0]["content"]
+    assert "页 3" in messages[0]["content"]

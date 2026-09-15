@@ -80,6 +80,12 @@ services:
       TECHDB_KB_PATH: /knowledge-base
       BREADTH_DATA_PATH: /app/breadth_data
       TECHDB_UPLOAD_DIR: /app/uploads
+      HF_HOME: /app/document-models/huggingface
+      TECHDB_DOCLING_ARTIFACTS_PATH: ${TECHDB_DOCLING_ARTIFACTS_PATH:-}
+      TECHDB_DOCLING_BACKEND_OPTIONS_FILE: ${TECHDB_DOCLING_BACKEND_OPTIONS_FILE:-}
+      TECHDB_DOCLING_FORMULAS: ${TECHDB_DOCLING_FORMULAS:-true}
+      TECHDB_DOCUMENT_TOKENIZER: ${TECHDB_DOCUMENT_TOKENIZER:-BAAI/bge-m3}
+      TECHDB_DOCUMENT_CHUNK_TOKENS: ${TECHDB_DOCUMENT_CHUNK_TOKENS:-512}
       TECHDB_UPLOAD_RECOVERY_ENABLED: ${TECHDB_UPLOAD_RECOVERY_ENABLED:-true}
     volumes:
       - ./backend/scripts:/app/scripts:ro
@@ -88,6 +94,7 @@ services:
       - ${TECHDB_DELIVERY_VIEWS_PATH:-./external-data/delivery-views}:/app/delivery_views:ro
       - ./breadth/data:/app/breadth_data:ro
       - ${TECHDB_UPLOAD_HOST_PATH:-./uploads}:/app/uploads
+      - ${TECHDB_DOCUMENT_MODELS_PATH:-./external-data/document-models}:/app/document-models
     depends_on:
       db:
         condition: service_healthy
@@ -147,3 +154,4 @@ volumes:
     name: ${TECHDB_PG_VOLUME:-v260723_pg_data}
   qa_incremental_data:
     name: ${TECHDB_QA_INCREMENTAL_VOLUME:-techdb_qa_incremental_0801}
+

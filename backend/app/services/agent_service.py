@@ -19,10 +19,13 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.conversation import ConversationAgentRun, ConversationMessage, ConversationSession
+from app.models.conversation import (
+    ConversationAgentRun,
+    ConversationMessage,
+    ConversationSession,
+)
 from app.services.github_qa import QAServiceError, search_canonical
 from app.services.model_catalog import get_catalog
-
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +121,7 @@ def _latest_history_citations(history: list[dict]) -> list[dict]:
 def _citation_key(item: dict) -> tuple:
     return (
         str(item.get("record_id") or ""),
+        str(item.get("chunk_id") or ""),
         str(item.get("url") or ""),
         str(item.get("title") or ""),
         str(item.get("date") or ""),
@@ -170,6 +174,8 @@ def _normalize_citations(items: list[dict]) -> list[dict]:
                 "url": str(item.get("url") or ""),
                 "body_snippet": str(item.get("body_snippet") or "")[:500],
                 "similarity": item.get("similarity"),
+                **({key: item.get(key) for key in ("document_id", "chunk_id", "chunk_metadata", "chunk_text")}
+                   if item.get("document_id") else {}),
             }
         )
     return citations
@@ -194,7 +200,14 @@ def _build_prompt(query: str, retrieval_results: dict, history: list[dict]) -> l
     source_parts: list[str] = []
     for citation in citations:
         cid = citation["id"]
-        summary = citation["body_snippet"]
+        summary = str(citation.get("chunk_text") or citation["body_snippet"])
+        metadata = citation.get("chunk_metadata") or {}
+        location = " / ".join(filter(None, [
+            metadata.get("section_title"),
+            "页 " + ", ".join(map(str, metadata["page_numbers"])) if metadata.get("page_numbers") else "",
+        ]))
+        if location:
+            summary = location + "\n" + summary
         context_parts.append(
             f"[{cid}] [{citation['category'] or '未分类'}] {citation['title']} ({citation['date'] or '日期未知'})\n"
             f"来源: {citation['source'] or '未知'}\n"
@@ -625,3 +638,4 @@ async def stream_agent_response(
             "fallback_used": fallback_used,
         },
     )
+

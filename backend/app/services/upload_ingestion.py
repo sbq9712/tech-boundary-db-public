@@ -20,35 +20,19 @@ from sqlalchemy.orm import Session
 
 from app.core.classification import (
     AI_CONFIDENTIALITY_LEVELS,
-    CONFIDENTIALITY_LEVELS,
     normalize_confidentiality,
 )
 from app.db.session import SessionLocal
 from app.models.uploaded_file import UploadedFile
-
 
 logger = logging.getLogger(__name__)
 
 STREAM_CHUNK_BYTES = 1024 * 1024
 # 分类输入取整篇代表性采样（头/中/尾），而非只截前若干字，避免封面/目录主导模型判断。
 CLASSIFICATION_BUDGET_CHARS = 40_000
-INDEX_CHUNK_CHARS = 2_000
-INDEX_CHUNK_OVERLAP = 200
 INDEX_MODEL = "bge-m3"
 INDEX_DIM = 1024
 
-ALLOWED_EXTS: dict[str, bool] = {
-    ".pdf": True,
-    ".docx": True,
-    ".xlsx": True,
-    ".md": True,
-    ".markdown": True,
-    ".txt": True,
-    ".csv": True,
-    ".png": False,
-    ".jpg": False,
-    ".jpeg": False,
-}
 
 SOURCE_TYPES = {"论文", "专利", "研报", "网页快照", "同事材料", "付费数据库", "其他"}
 RESULT_LABELS = {"未分类", "不相关"}
@@ -124,12 +108,12 @@ def file_extension(filename: str) -> str:
     return Path(filename).suffix.lower()
 
 
-def validate_filename(filename: str) -> str:
-    ext = file_extension(filename)
-    if ext not in ALLOWED_EXTS:
-        allowed = ", ".join(ALLOWED_EXTS)
-        raise UploadValidationError(f"不支持的文件类型：{filename}（仅支持 {allowed}）")
-    return ext
+def validate_filename(filename: str, mime_type: str | None = None) -> str:
+    from app.document_ingestion.parser import input_suffix
+    try:
+        return input_suffix(filename, mime_type)
+    except ValueError as exc:
+        raise UploadValidationError(str(exc), status_code=415) from exc
 
 
 def safe_upload_path(stored_filename: str) -> Path:
@@ -152,7 +136,7 @@ def _fsync_directory(path: Path) -> None:
 
 async def persist_upload(upload: UploadFile) -> StoredUpload:
     filename = upload.filename or "unnamed"
-    ext = validate_filename(filename)
+    ext = validate_filename(filename, upload.content_type)
     root = upload_root()
     incoming = root / ".incoming"
     incoming.mkdir(parents=True, exist_ok=True)
@@ -205,86 +189,16 @@ def classification_status_for(category: str) -> str:
     return "classified"
 
 
-def _append_limited(
-    parts: list[str],
-    text: str,
-    max_chars: int | None = CLASSIFICATION_BUDGET_CHARS,
-) -> bool:
-    if not text:
-        return False
-    if max_chars is None:  # 不限长：整篇保留
-        parts.append(text)
-        return False
-    current = sum(len(item) for item in parts)
-    if current >= max_chars:
-        return True
-    parts.append(text[: max_chars - current])
-    return sum(len(item) for item in parts) >= max_chars
-
-
-def extract_text(
-    path: Path,
-    original_filename: str,
-    max_chars: int | None = CLASSIFICATION_BUDGET_CHARS,
-) -> str | None:
-    """提取文本；``max_chars=None`` 表示不限长，整篇提取（用于建索引）。"""
-    ext = file_extension(original_filename)
-    try:
-        if ext in (".md", ".markdown", ".txt", ".csv"):
-            with open(path, "rb") as handle:
-                raw = handle.read() if max_chars is None else handle.read(max_chars * 4)
-            text = raw.decode("utf-8", errors="replace")
-            return (text[:max_chars] if max_chars is not None else text).strip() or None
-
-        parts: list[str] = []
-        if ext == ".pdf":
-            from pypdf import PdfReader
-
-            for page in PdfReader(str(path)).pages:
-                if _append_limited(parts, page.extract_text() or "", max_chars):
-                    break
-        elif ext == ".docx":
-            from docx import Document
-
-            for paragraph in Document(str(path)).paragraphs:
-                if _append_limited(parts, paragraph.text, max_chars):
-                    break
-        elif ext == ".xlsx":
-            from openpyxl import load_workbook
-
-            workbook = load_workbook(str(path), read_only=True, data_only=True)
-            try:
-                stop = False
-                for worksheet in workbook.worksheets:
-                    for row in worksheet.iter_rows(values_only=True):
-                        text = "\t".join(str(cell) for cell in row if cell is not None)
-                        if _append_limited(parts, text, max_chars):
-                            stop = True
-                            break
-                    if stop:
-                        break
-            finally:
-                workbook.close()
-        else:
-            return None
-        return "\n".join(parts).strip() or None
-    except Exception as exc:
-        logger.warning("text extraction failed for %s: %s", original_filename, exc)
-        return None
+def extract_text(path: Path, original_filename: str, max_chars: int | None = CLASSIFICATION_BUDGET_CHARS) -> str | None:
+    """Compatibility API; all conversion is now native Docling (including OCR)."""
+    from app.document_ingestion.docling_processor import convert
+    text = convert(path).document.export_to_markdown().strip()
+    return (text[:max_chars] if max_chars is not None else text) or None
 
 
 def ensure_extractable(path: Path, original_filename: str) -> None:
-    """上传时同步校验：无法提取文本的文件直接拒绝，并告知用户原因。
-
-    只需判断"能否提取出文本"，用小预算快速采样即可；完整提取在后台建索引时进行。
-    """
-    sample = extract_text(path, original_filename)
-    if not sample:
-        raise UploadValidationError(
-            f"无法从文件中提取文本内容，上传失败：{original_filename}"
-            "（可能是扫描版/纯图片 PDF、加密文档或空文档，请改用含文字层的文件）",
-            status_code=422,
-        )
+    if not extract_text(path, original_filename):
+        raise UploadValidationError(f"Docling 未提取出内容：{original_filename}", status_code=422)
 
 
 def representative_sample(text: str | None, budget: int) -> str:
@@ -468,33 +382,8 @@ def _commit_processing_result(db, file_id: uuid.UUID, **values) -> bool:
     return updated.rowcount == 1
 
 
-def chunk_text(text: str) -> list[dict[str, str]]:
-    """Create deterministic overlapping chunks suitable for bge-m3."""
-    normalized = "\n".join(line.strip() for line in text.splitlines() if line.strip()).strip()
-    if not normalized:
-        return []
-    chunks: list[dict[str, str]] = []
-    start = 0
-    index = 0
-    while start < len(normalized):
-        end = min(len(normalized), start + INDEX_CHUNK_CHARS)
-        if end < len(normalized):
-            boundary = normalized.rfind("\n", start + INDEX_CHUNK_CHARS // 2, end)
-            if boundary > start:
-                end = boundary
-        value = normalized[start:end].strip()
-        if value:
-            chunks.append({"chunk_id": str(index), "text": value})
-            index += 1
-        if end >= len(normalized):
-            break
-        start = end - INDEX_CHUNK_OVERLAP
-    return chunks
-
-
-def request_incremental_index(record: UploadedFile, text: str) -> dict:
-    """Send extracted text to canonical-qa for embedding and persistence."""
-    chunks = chunk_text(text)
+def request_incremental_index(record: UploadedFile, chunks: list[dict]) -> dict:
+    """Send Docling semantic chunks without re-chunking or losing provenance."""
     if not chunks:
         return {"chunk_count": 0, "status": "skipped"}
     base_url = os.getenv("TECHDB_QA_SERVICE_URL", "").strip().rstrip("/")
@@ -565,6 +454,12 @@ def delete_uploaded_file(db: Session, record: UploadedFile) -> dict:
         path = None
     if path is not None and path.is_file():
         path.unlink()
+    import shutil
+
+    from app.document_ingestion.storage import document_directory
+    derivatives = document_directory(upload_root(), str(record.id))
+    if derivatives.exists():
+        shutil.rmtree(derivatives)
     db.delete(record)
     db.commit()
     return {
@@ -624,7 +519,15 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
             )
             return False
 
-        text = extract_text(path, record.original_filename, None)
+        from app.document_ingestion.service import ingest
+        assets, text, chunks = ingest(
+            root=upload_root(), original=path, document_id=str(uid),
+            filename=record.original_filename, checksum=record.checksum_sha256,
+            previous=record.document_assets,
+        )
+        if not _commit_embedding_result(db, uid, document_assets=assets):
+            return False
+        db.refresh(record)
         if record.classification_status in {"pending", "processing"}:
             taxonomy = load_taxonomy()
             classification_claimed = True
@@ -644,7 +547,7 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
                 else:
                     classification_claimed = True
             if not text:
-                # 上传时已同步校验过可提取；此处为兜底（文件在处理前被损坏/替换等）。
+                # Docling 已完成转换；此处仅处理没有可分类文本的结果。
                 # 与用户约定一致：提取失败是失败，不再标记"未分类"。
                 _commit_processing_result(
                     db,
@@ -655,7 +558,7 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
                     classification_status="failed",
                     classification_source="system",
                     classification_reason="当前文件无法提取可分类文本",
-                    classification_error="无法提取可分类文本（可能是扫描版/纯图片 PDF、加密文档或空文档）",
+                    classification_error="无法提取可分类文本（请检查加密、空文档或 OCR/模型配置）",
                     classified_at=datetime.now(timezone.utc),
                 )
             else:
@@ -692,7 +595,7 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
                 embedding_status="failed",
                 embedding_model=INDEX_MODEL,
                 embedding_dim=INDEX_DIM,
-                embedding_error="无法提取可索引文本（可能是扫描版/纯图片 PDF、加密文档或空文档）",
+                embedding_error="无法提取可索引文本（请检查加密、空文档或 OCR/模型配置）",
                 chunk_count=0,
                 embedded_at=datetime.now(timezone.utc),
             )
@@ -708,7 +611,7 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
                 embedded_at=datetime.now(timezone.utc),
             )
 
-        result = request_incremental_index(record, text)
+        result = request_incremental_index(record, chunks)
         # 纵深防御：若记录在索引写入期间被删除（正常流程已被 409 守卫阻止），
         # 不把 ready 状态写回不存在的行，并立即从问答索引移除刚写入的内容。
         if db.get(UploadedFile, uid) is None:
@@ -730,7 +633,8 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
         logger.warning("upload ingestion failed for %s: %s", file_id, message)
         try:
             values = {"embedding_status": "failed", "embedding_error": message}
-            if classification_claimed:
+            failed_record = db.get(UploadedFile, uid)
+            if classification_claimed or (failed_record and failed_record.classification_status in {"pending", "processing"}):
                 values.update({"classification_status": "failed", "classification_error": message})
             db.execute(update(UploadedFile).where(UploadedFile.id == uid).values(**values))
             db.commit()
@@ -800,3 +704,4 @@ def recover_pending_uploads() -> None:
         db.close()
     for file_id in pending_ids:
         process_uploaded_file(file_id)
+

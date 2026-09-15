@@ -111,3 +111,8 @@ readonly-agent (:8765 容器内部；:8766 为兼容宿主机端口)
 两位开发者（EDMUNDSdaONE、sbq9712）均具 write 权限。小改动（docs/fix）可直推 `main`；功能改动请走 feature 分支 + PR。详见 [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md)。
 
 © 2026 技术边界数据库项目
+
+
+### Docling 上传资料与溯源
+
+上传资料使用 Docling 文档理解、OCR/表格结构与 HybridChunker，保留原文件、Markdown、Docling JSON、chunks 和 provenance，再接入现有 bge-m3 / BM25 / Agentic RAG。安装、模型准备、canonical 代码层升级及测试方式见 [文档摄取说明](docs/document-ingestion.md)。

@@ -155,6 +155,7 @@ class IncrementalIndex:
                         "document_id": document_id,
                         "chunk_id": str(chunk.get("chunk_id") or index),
                         "chunk_index": index,
+                        "chunk_metadata": dict(chunk.get("metadata") or {}),
                         "t": title or filename,
                         "d": created_at or "",
                         "a": source_type or "上传资料",
@@ -257,3 +258,4 @@ class IncrementalIndex:
                         }
                     )
             return sorted(results, key=lambda item: item["score"], reverse=True)
+

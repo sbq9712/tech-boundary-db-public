@@ -371,10 +371,17 @@ def build_context(search_results: list) -> tuple:
         context_parts.append(
             f"[{i+1}] [{cat}] {title} ({date})\n"
             f"来源: {source}\n"
-            f"摘要: {ai_summary[:300] if ai_summary else body[:300]}\n"
+            f"摘要: {body if record.get('kind') == 'upload' else (ai_summary[:300] if ai_summary else body[:300])}\n"
             f"相似度: {score:.2f}"
         )
 
+        # Preserve uploaded document provenance; baseline citation shape is unchanged.
+        upload_provenance = {}
+        if record.get("kind") == "upload":
+            upload_provenance = {"document_id": record.get("document_id"),
+                                 "chunk_id": record.get("chunk_id"),
+                                 "chunk_text": body,
+                                 "chunk_metadata": record.get("chunk_metadata", {})}
         # Add citation
         citations.append({
             "id": i + 1,
@@ -388,6 +395,7 @@ def build_context(search_results: list) -> tuple:
             "url": url,
             "body_snippet": (body[:200] if body else (ai_summary[:200] if ai_summary else "")),
             "similarity": round(score, 3),
+            **upload_provenance,
         })
 
     context = "\n\n---\n\n".join(context_parts)
@@ -464,6 +472,7 @@ async def health():
 class IndexChunk(BaseModel):
     chunk_id: str = ""
     text: str
+    metadata: dict = Field(default_factory=dict)
 
 
 class IndexUpsertRequest(BaseModel):
@@ -739,3 +748,4 @@ async def search(q: str, top_k: int = 10):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8765)
+

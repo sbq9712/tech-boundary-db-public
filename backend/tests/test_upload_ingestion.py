@@ -134,15 +134,6 @@ def test_ai_confidentiality_never_promotes_to_admin(monkeypatch):
     assert result["confidentiality"] is None
 
 
-def test_chunk_text_is_bounded_and_overlapping():
-    text = "".join(str(index % 10) for index in range(5_000))
-
-    chunks = upload_ingestion.chunk_text(text)
-
-    assert len(chunks) == 3
-    assert all(0 < len(chunk["text"]) <= upload_ingestion.INDEX_CHUNK_CHARS for chunk in chunks)
-    assert chunks[0]["text"][-upload_ingestion.INDEX_CHUNK_OVERLAP :] == chunks[1]["text"][: upload_ingestion.INDEX_CHUNK_OVERLAP]
-
 
 def test_upload_size_and_batch_caps_are_removed():
     """上传不再限制单文件/单批大小与份数（2026-09 需求）。"""
@@ -184,37 +175,7 @@ def test_ensure_extractable_rejects_textless_file(tmp_path):
     upload_ingestion.ensure_extractable(ok, "ok.md")
 
 
-def test_chunk_text_terminates_on_adversarial_newlines():
-    """每行恰好在切分窗口尾部出现换行时也必须推进并终止（回归 codex P0-4 争议项）。"""
-    text = ("\n".join("甲" * 1999 for _ in range(200)),)
-    text = text[0]
 
-    chunks = upload_ingestion.chunk_text(text)
-
-    assert chunks, "必须产出分块"
-    total = sum(len(chunk["text"]) for chunk in chunks)
-    # 无限循环不会返回；若返回，说明每轮 start 至少前进 INDEX_CHUNK_CHARS//2 - OVERLAP
-    assert total >= len(text) - upload_ingestion.INDEX_CHUNK_OVERLAP
-
-
-def test_chunk_text_handles_single_giant_line():
-    """整篇无换行（10000 字符单行）时按硬边界切分且终止。"""
-    text = "乙" * 10_000
-
-    chunks = upload_ingestion.chunk_text(text)
-
-    assert all(0 < len(chunk["text"]) <= upload_ingestion.INDEX_CHUNK_CHARS for chunk in chunks)
-    assert len(chunks) >= 5
-
-
-def test_chunk_text_does_not_skip_text_at_line_boundary():
-    text = "A" * 1_500 + "\n" + "B" * 1_500
-
-    chunks = upload_ingestion.chunk_text(text)
-
-    overlap = upload_ingestion.INDEX_CHUNK_OVERLAP
-    reconstructed = chunks[0]["text"] + "".join(chunk["text"][overlap:] for chunk in chunks[1:])
-    assert reconstructed == text
 
 
 def test_incremental_index_request_contains_durable_metadata(monkeypatch):
@@ -258,7 +219,8 @@ def test_incremental_index_request_contains_durable_metadata(monkeypatch):
     monkeypatch.setenv("TECHDB_QA_INDEX_TOKEN", "test-token")
     monkeypatch.setattr(upload_ingestion.httpx, "Client", FakeClient)
 
-    result = upload_ingestion.request_incremental_index(record, "可索引文本")
+    chunks = [{"chunk_id": "stable-1", "text": "可索引文本", "metadata": {"page_number": 3}}]
+    result = upload_ingestion.request_incremental_index(record, chunks)
 
     assert result["chunk_count"] == 1
     assert captured["url"] == "http://canonical-qa:8765/api/index/upsert"
@@ -266,7 +228,7 @@ def test_incremental_index_request_contains_durable_metadata(monkeypatch):
     assert captured["json"]["document_id"] == str(file_id)
     assert captured["json"]["primary_category"] == "通用技术/催化剂"
     assert captured["json"]["checksum_sha256"] == "a" * 64
-    assert captured["json"]["chunks"] == [{"chunk_id": "0", "text": "可索引文本"}]
+    assert captured["json"]["chunks"] == chunks
 
 
 def test_representative_sample_returns_small_whole():
@@ -461,3 +423,4 @@ def test_delete_uploaded_file_removes_index_disk_and_record(tmp_path, monkeypatc
     assert calls[0] == str(file_id), "必须先删除问答索引"
     assert "db-delete" in calls and "db-commit" in calls
     assert not stored.exists(), "落盘文件必须被删除"
+

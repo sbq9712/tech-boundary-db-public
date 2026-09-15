@@ -5,8 +5,15 @@ psycopg2-binary==2.9.10
 alembic==1.14.0
 pytest==8.3.4
 httpx==0.28.1
-# 文件上传功能：multipart 解析 + PDF/Word/Excel 解析供 AI 元数据填充
+# Docling is the sole document parser; format dependencies are native Docling extras.
 python-multipart==0.0.20
-pypdf==6.14.2
-python-docx==1.2.0
-openpyxl==3.1.5
+docling[asr,rapidocr]==2.127.0
+docling-slim[format-iwork,format-xml-xbrl]==2.127.0
+docling-core[chunking]==2.96.0
+# Tested native inference combination (CPU wheels installed explicitly in Docker).
+torch==2.8.0
+torchvision==0.23.0
+transformers==4.57.6
+tokenizers==0.22.2
+huggingface-hub==0.36.0
+opencv-python==4.11.0.86

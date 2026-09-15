@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import uuid
 from datetime import datetime, timezone
 from urllib.parse import quote
@@ -19,7 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.classification import CONFIDENTIALITY_LEVELS, normalize_confidentiality
+from app.core.classification import normalize_confidentiality
 from app.core.security import get_current_user, require_admin
 from app.db.session import get_db
 from app.models.uploaded_file import UploadedFile
@@ -29,7 +28,6 @@ from app.services.upload_ingestion import (
     UploadValidationError,
     classification_status_for,
     delete_uploaded_file,
-    ensure_extractable,
     load_taxonomy,
     persist_upload,
     process_uploaded_file,
@@ -37,7 +35,6 @@ from app.services.upload_ingestion import (
     safe_upload_path,
     validate_filename,
 )
-
 
 router = APIRouter(tags=["uploads"])
 
@@ -62,6 +59,11 @@ def _serialize(record: UploadedFile) -> dict:
         ingestion_status = f"embedding_{record.embedding_status}"
     return {
         "id": str(record.id),
+        "document_id": str(record.id),
+        "filename": record.original_filename,
+        "chunks_count": record.chunk_count,
+        "status": ingestion_status,
+        "document_assets": record.document_assets,
         "original_filename": record.original_filename,
         "stored_filename": record.stored_filename,
         "title": record.title,
@@ -119,6 +121,31 @@ def _validate_category(primary: str, secondary: list[str] | None = None) -> tupl
     return primary, cleaned
 
 
+@router.get("/uploads/formats")
+def get_upload_formats(current_user: str = Depends(get_current_user)) -> dict:
+    from app.document_ingestion.parser import supported_formats
+    return supported_formats()
+
+
+@router.get("/uploads/{file_id}/assets/{asset}")
+def download_document_asset(file_id: str, asset: str,
+                            current_user: str = Depends(get_current_user),
+                            db: Session = Depends(get_db)):
+    from fastapi.responses import FileResponse
+    record = db.get(UploadedFile, _uuid_or_400(file_id))
+    if record is None:
+        raise HTTPException(404, "资料不存在")
+    names = {"markdown": "document.md", "docling_json": "document.json",
+             "chunks": "chunks.jsonl", "chunk_metadata": "chunk_metadata.jsonl",
+             "manifest": "manifest.json", "conversion": "conversion.json"}
+    if asset not in names or not record.document_assets:
+        raise HTTPException(404, "文档资产尚未生成")
+    path = safe_upload_path(record.document_assets["bundle"] + "/" + names[asset])
+    if not path.is_file():
+        raise HTTPException(404, "文档资产不存在，请重试解析")
+    return FileResponse(path, filename=names[asset], media_type="application/octet-stream")
+
+
 @router.get("/uploads/taxonomy")
 def get_upload_taxonomy(current_user: str = Depends(get_current_user)) -> dict:
     taxonomy = load_taxonomy()
@@ -158,7 +185,7 @@ async def upload_files(
 
     for upload in files:
         try:
-            validate_filename(upload.filename or "")
+            validate_filename(upload.filename or "", upload.content_type)
         except UploadValidationError as exc:
             raise HTTPException(exc.status_code, str(exc)) from exc
 
@@ -169,20 +196,13 @@ async def upload_files(
 
     stored_items: list[StoredUpload] = []
     records: list[UploadedFile] = []
-    extraction_failures: list[str] = []
     try:
         for upload in files:
             stored = await persist_upload(upload)
             stored_items.append(stored)
 
             original_filename = upload.filename or stored.path.name
-            # 上传即校验：提取不出文本的文件直接拒绝并告知原因（不再落库为"未分类"）。
-            # 解析放在线程池，避免大文档解析阻塞事件循环。
-            try:
-                await asyncio.to_thread(ensure_extractable, stored.path, original_filename)
-            except UploadValidationError as exc:
-                extraction_failures.append(str(exc))
-                continue
+            # Conversion/OCR runs once in the durable background ingestion path.
             manual_title = title.strip() if title and title.strip() else None
             fallback_title = stored.path.stem if not original_filename else original_filename.rsplit(".", 1)[0]
             record = UploadedFile(
@@ -212,11 +232,6 @@ async def upload_files(
             )
             db.add(record)
             records.append(record)
-        if extraction_failures:
-            raise UploadValidationError(
-                "；".join(extraction_failures),
-                status_code=422,
-            )
         db.commit()
         for record in records:
             db.refresh(record)
@@ -400,3 +415,4 @@ def delete_upload(
     except RuntimeError as exc:
         raise HTTPException(502, "问答索引删除失败，资料未被删除：" + str(exc)) from exc
     return result
+

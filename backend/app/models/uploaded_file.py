@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import uuid
 from datetime import datetime
@@ -57,6 +57,9 @@ class UploadedFile(Base):
     classification_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     classified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Immutable derivative bundle and checksums; original stays in stored_filename.
+    document_assets: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     # 增量 embedding 与 QA 索引状态；分类完成不代表已经可检索。
     embedding_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="pending", index=True
@@ -72,3 +75,4 @@ class UploadedFile(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+

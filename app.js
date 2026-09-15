@@ -1210,7 +1210,7 @@ function renderMarkdown(text){
 
 function renderCitations(citations,stats){
   const count=Number(stats.knowledge_base||citations.length||0);
-  return `<div class="qa-citations-block"><div class="qa-citations-title"><strong>来源引用</strong><span>检索 ${count} 条索引记录</span></div>${citations.map((c,index)=>{const id=Number(c.id||index+1);const meta=[c.date,c.source,c.tag].filter(Boolean).map(item=>`<span>${escapeHtml(item)}</span>`).join('');const link=c.url?`<a class="qa-citation-link" href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">原文</a>`:'';return `<article class="qa-citation-item" data-citation-card="${id}"><div class="qa-citation-header"><span class="qa-citation-number">[${id}]</span><span class="qa-citation-title">${escapeHtml(c.title||'未命名情报')}</span></div><div class="qa-citation-meta">${meta}${link}</div>${c.body_snippet?`<p class="qa-citation-snippet">${escapeHtml(c.body_snippet)}</p>`:''}</article>`;}).join('')}</div>`;
+  return `<div class="qa-citations-block"><div class="qa-citations-title"><strong>来源引用</strong><span>检索 ${count} 条索引记录</span></div>${citations.map((c,index)=>{const id=Number(c.id||index+1);const cm=c.chunk_metadata||{};const location=[cm.page_numbers?.length?`第 ${cm.page_numbers.join("、")} 页`:"",cm.section_title].filter(Boolean).join(" · ");const meta=[c.date,c.source,c.tag,location].filter(Boolean).map(item=>`<span>${escapeHtml(item)}</span>`).join('');const link=c.url?`<a class="qa-citation-link" href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">原文</a>`:'';return `<article class="qa-citation-item" data-citation-card="${id}"><div class="qa-citation-header"><span class="qa-citation-number">[${id}]</span><span class="qa-citation-title">${escapeHtml(c.title||'未命名情报')}</span></div><div class="qa-citation-meta">${meta}${link}</div>${c.body_snippet?`<p class="qa-citation-snippet">${escapeHtml(c.body_snippet)}</p>`:''}</article>`;}).join('')}</div>`;
 }
 function escapeHtml(s){return String(s).replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
 
@@ -1554,7 +1554,7 @@ function libDownload(id){
 }
 // ── 上传资料：in-app 弹窗，替代 uploads_admin.html 独立页跳转，保留左侧导航 ──
 let upPending=[],upTaxonomy=null,upCloseTimer=null;
-const UPLOAD_ALLOWED=[".pdf",".docx",".xlsx",".md",".markdown",".txt",".csv"];
+
 function openUploadModal(){
   if(!libIsAdmin)return;
   if(document.getElementById("uploadModalOverlay"))return;
@@ -1564,7 +1564,7 @@ function openUploadModal(){
   overlay.innerHTML=`<div class="lib-upload-dialog" role="dialog" aria-modal="true" aria-label="上传资料">
     <div class="lib-upload-head"><h2>上传资料</h2><button class="lib-upload-close" id="upCloseBtn" type="button" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="lib-upload-body">
-      <div class="lib-upload-drop" id="upDrop"><input id="upInput" type="file" multiple hidden accept="${UPLOAD_ALLOWED.join(",")}"><div class="lib-upload-hint">拖拽文件到此处，或 <button class="lib-upload-pick" id="upPick" type="button">点击选择文件</button></div><div class="lib-upload-types">支持 PDF / Word / Excel / Markdown / TXT / CSV，文件大小与数量不限</div></div>
+      <div class="lib-upload-drop" id="upDrop"><input id="upInput" type="file" multiple hidden><div class="lib-upload-hint">拖拽文件到此处，或 <button class="lib-upload-pick" id="upPick" type="button">点击选择文件</button></div><div class="lib-upload-types">支持当前 Docling 文档格式（含扫描件、图片与演示文稿），后台完成解析与索引</div></div>
       <div class="lib-upload-list" id="upList"></div>
       <div class="lib-upload-field"><label for="upTitle">资料标题</label><input id="upTitle" class="lib-upload-input" type="text" placeholder="留空则自动识别（多文件时不可指定）"></div>
       <div class="lib-upload-row">
@@ -1579,6 +1579,12 @@ function openUploadModal(){
   </div>`;
   document.body.appendChild(overlay);
   const drop=document.getElementById("upDrop"),input=document.getElementById("upInput");
+  apiFetch("/api/uploads/formats").then(r=>r&&r.ok?r.json():null).then(data=>{
+    if(!data)return;
+    const extensions=[...new Set(Object.values(data.formats).flatMap(f=>f.extensions))];
+    overlay.querySelector(".lib-upload-types").title=extensions.join(", ");
+    // Do not restrict the picker: MIME-only and newly registered formats stay usable.
+  }).catch(()=>{});
   drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("drag");});
   drop.addEventListener("dragleave",()=>drop.classList.remove("drag"));
   drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("drag");upAddFiles(e.dataTransfer.files);});
@@ -1600,16 +1606,13 @@ function closeUploadModal(){
 }
 function upEscClose(e){if(e.key==="Escape")closeUploadModal();}
 function upAddFiles(fileList){
-  const rejected=[],duplicated=[];
+  const duplicated=[];
   for(const f of fileList){
-    const dot=f.name.lastIndexOf(".");
-    const ext=dot>=0?f.name.slice(dot).toLowerCase():"";
-    if(!UPLOAD_ALLOWED.includes(ext)){rejected.push(f.name);continue;}
+
     if(upPending.some(x=>x.name===f.name&&x.size===f.size)){duplicated.push(f.name);continue;}
     upPending.push(f);
   }
-  if(rejected.length)upShowResult("不支持的文件类型："+rejected.join("、")+"（仅支持 PDF / Word / Excel / Markdown / TXT / CSV）","err");
-  else if(duplicated.length)upShowResult("已添加过（未重复加入）："+duplicated.join("、"),"");
+  if(duplicated.length)upShowResult("已添加过（未重复加入）："+duplicated.join("、"),"");
   upRenderList();
 }
 function upRenderList(){
@@ -1671,3 +1674,4 @@ async function upSubmit(){
     submit.disabled=false;cancel.disabled=false;
   }
 }
+
