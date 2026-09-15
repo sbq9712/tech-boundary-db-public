@@ -10,6 +10,8 @@ on:
       - "scripts/build_breadth_alert_snapshot.py"
       - "scripts/build_breadth_category_counts.py"
       - "scripts/test_breadth_runtime_hydration.py"
+      - "scripts/test_conversation_navigation.py"
+      - "app.js"
       - ".github/workflows/local-dev-contract.yml"
   workflow_dispatch:
 
@@ -24,12 +26,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Check shell and Python syntax
+      - name: Check shell, JavaScript and Python syntax
         run: |
           bash -n start_with_local_ai.sh
+          node --check app.js
           python -m py_compile \
             scripts/hydrate_breadth_runtime.py \
             scripts/build_breadth_alert_snapshot.py \
-            scripts/build_breadth_category_counts.py
-      - name: Run hydration contract tests
-        run: python -m unittest scripts/test_breadth_runtime_hydration.py -v
+            scripts/build_breadth_category_counts.py \
+            scripts/test_conversation_navigation.py
+      - name: Run local development contract tests
+        run: |
+          python -m unittest scripts/test_breadth_runtime_hydration.py -v
+          python -m unittest scripts/test_conversation_navigation.py -v

@@ -176,6 +176,7 @@ function initMapHorizontalScroll(){
 window.addEventListener('resize',syncMapHorizontalBar);
 let activeSessionId = null;
 let activeRequestController = null;
+let activeRequestState = null;
 let activeRequestEpoch = 0;
 let lastFailedQuery = '';
 let knowledgeGraphCleanup = null;
@@ -283,6 +284,15 @@ async function loadConversations(preferredId=null){
 async function loadConversationMessages(sessionId){
   const answer=document.getElementById('answer');
   if(!answer)return;
+  if(activeRequestState&&activeRequestState.sessionId===sessionId){
+    activeSessionId=sessionId;
+    activeSessionMessages=activeRequestState.messages;
+    renderSidebarConversations();
+    answer.innerHTML=renderHomeMessages();
+    answer.scrollTop=answer.scrollHeight;
+    syncConversationRequestControls();
+    return;
+  }
   const res=await apiFetch(`/api/conversations/${encodeURIComponent(sessionId)}/messages?limit=40`);
   if(!res.ok)return;
   const data=await res.json();
@@ -313,6 +323,7 @@ function startNewConversation(){
   activeRequestEpoch+=1;
   const previousController=activeRequestController;
   activeRequestController=null;
+  activeRequestState=null;
   previousController?.abort();
   activeSessionId=null;
   activeSessionMessages=[];
@@ -356,7 +367,7 @@ document.addEventListener('click',event=>{
 });
 function parseHash(){const raw=(location.hash||"#home").slice(1);const [routePart,queryPart=""]=raw.split("?");return {route:routes[routePart]?routePart:"home",params:new URLSearchParams(queryPart)};}
 function setRoute(route,params){const q=params?`?${params.toString()}`:"";location.hash=route+q;}
-function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}closeUploadModal();if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route==="home"){activeSessionId=null;activeSessionMessages=[];}if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){loadAssistantModels();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
+function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}closeUploadModal();if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){syncConversationRequestControls();loadAssistantModels();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
 async function ensureCurrentUser(){if(!currentUser){await loadCurrentUser();}return currentUser;}
 function loadCurrentUser(){return apiFetch("/api/auth/me").then(r=>r.ok?r.json():null).then(d=>{if(d){currentUser=d;}}).catch(()=>{});}
 function isAdmin(){return currentUser&&currentUser.role==="admin";}
@@ -943,6 +954,19 @@ function refreshConversationSurface(){
   answer.innerHTML=renderHomeMessages();
   answer.scrollTop=answer.scrollHeight;
 }
+function requestConversationIsVisible(requestState){
+  return Boolean(requestState&&activeRequestState===requestState&&activeSessionMessages===requestState.messages&&(!activeSessionId||!requestState.sessionId||activeSessionId===requestState.sessionId));
+}
+function refreshRequestConversationSurface(requestState){
+  if(requestConversationIsVisible(requestState))refreshConversationSurface();
+}
+function syncConversationRequestControls(){
+  const busy=Boolean(activeRequestController);
+  const askBtn=document.getElementById('askBtn');
+  const stopBtn=document.getElementById('stopBtn');
+  if(askBtn){askBtn.disabled=busy;askBtn.textContent=busy?'回答中…':'发送';}
+  if(stopBtn)stopBtn.hidden=!busy;
+}
 async function handleConversationAction(action,msgIdx){
   const msg=activeSessionMessages[msgIdx];
   if(!msg||msg.role!=='assistant')return;
@@ -998,6 +1022,8 @@ async function submitQuery(options={}){
   if(!regenerate&&!retry)activeSessionMessages.push({role:'user',text:query});
   const assistantMsg={role:'assistant',text:'',extra:null,streaming:true,status:'正在连接检索服务…'};
   activeSessionMessages.push(assistantMsg);
+  const requestState={epoch:requestEpoch,sessionId:requestedSessionId,messages:activeSessionMessages,assistantMsg};
+  activeRequestState=requestState;
   if(input){input.value="";input.style.height='auto';}
   homeDraft="";localStorage.removeItem('home_query_draft');
   refreshConversationSurface();
@@ -1023,10 +1049,11 @@ async function submitQuery(options={}){
       const errData=await res.json().catch(()=>({detail:`HTTP ${res.status}`}));
       throw new Error(errData.detail||'请求失败');
     }
-    activeSessionId=res.headers.get('X-Conversation-Id')||activeSessionId;
-    if(pendingConversation&&activeSessionId)pendingConversation={...pendingConversation,id:activeSessionId};
+    requestState.sessionId=res.headers.get('X-Conversation-Id')||requestState.sessionId;
+    if(requestConversationIsVisible(requestState))activeSessionId=requestState.sessionId;
+    if(pendingConversation&&requestState.sessionId)pendingConversation={...pendingConversation,id:requestState.sessionId};
     renderSidebarConversations();
-    if(creatingConversation)void loadConversations(activeSessionId);
+    if(creatingConversation)void loadConversations(requestConversationIsVisible(requestState)?requestState.sessionId:null);
     const reader=res.body.getReader();
     const decoder=new TextDecoder();
     let buffer="";
@@ -1049,12 +1076,12 @@ async function submitQuery(options={}){
 
           if(currentEvent==="status"){
             assistantMsg.status=data.message||'处理中…';
-            refreshConversationSurface();
+            refreshRequestConversationSurface(requestState);
 
           }else if(currentEvent==="token"){
             assistantMsg.text+=data.content||'';
             assistantMsg.status='';
-            refreshConversationSurface();
+            refreshRequestConversationSurface(requestState);
 
           }else if(currentEvent==="replace"){
             // The backend may have emitted a partial stream before switching
@@ -1062,17 +1089,18 @@ async function submitQuery(options={}){
             // so the persisted answer and the visible answer stay identical.
             assistantMsg.text=String(data.content||'');
             assistantMsg.status='';
-            refreshConversationSurface();
+            refreshRequestConversationSurface(requestState);
 
           }else if(currentEvent==="done"){
             const stats=data.retrieval_summary||{};
             assistantMsg.text=data.response||assistantMsg.text;
             assistantMsg.streaming=false;
             assistantMsg.status=data.truncated?'回答达到输出上限，内容可能未完。':'';
-            activeSessionId=data.session_id||activeSessionId;
+            requestState.sessionId=data.session_id||requestState.sessionId;
+            if(requestConversationIsVisible(requestState))activeSessionId=requestState.sessionId;
             assistantMsg.extra={citations:data.citations||[],retrieval_summary:stats,panel_recommendations:{},truncated:Boolean(data.truncated),finish_reason:data.finish_reason||null,fallback_used:Boolean(data.fallback_used)};
             streamCompleted=true;
-            refreshConversationSurface();
+            refreshRequestConversationSurface(requestState);
 
           }else if(currentEvent==="error"){
             throw new Error(data.error||'LLM 调用失败');
@@ -1083,24 +1111,24 @@ async function submitQuery(options={}){
 
     if(!streamCompleted)throw new Error('回答流提前结束');
     lastFailedQuery='';
-    await loadConversations(activeSessionId);
+    await loadConversations(requestConversationIsVisible(requestState)?requestState.sessionId:null);
 
   }catch(err){
     if(requestEpoch!==activeRequestEpoch)return;
     lastFailedQuery=query;
     const stopped=err?.name==='AbortError';
-    if(creatingConversation&&!activeSessionId)pendingConversation=null;
+    if(creatingConversation&&!requestState.sessionId)pendingConversation=null;
     assistantMsg.streaming=false;
     assistantMsg.status='';
     assistantMsg.error=stopped?'已停止生成。':(err?.message||'连接失败，请稍后重试。');
-    if(regenerate&&replacedMessage){activeSessionMessages.pop();activeSessionMessages.push(replacedMessage);showToast(assistantMsg.error);}
-    else refreshConversationSurface();
+    if(regenerate&&replacedMessage){requestState.messages.pop();requestState.messages.push(replacedMessage);showToast(assistantMsg.error);}
+    else refreshRequestConversationSurface(requestState);
     if(retryBtn)retryBtn.hidden=false;
   }finally{
     if(requestEpoch===activeRequestEpoch){
       activeRequestController=null;
-      if(askBtn){askBtn.disabled=false;askBtn.textContent='发送';}
-      if(stopBtn)stopBtn.hidden=true;
+      if(activeRequestState===requestState)activeRequestState=null;
+      syncConversationRequestControls();
     }
   }
 }
