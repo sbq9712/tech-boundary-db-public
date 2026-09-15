@@ -46,7 +46,7 @@ cd backend
 alembic upgrade head
 ```
 
-首次在线使用 PDF/OCR/公式/音视频及 tokenizer 可能下载模型。上传文档不会发送到外部 Docling 服务；原有 AI 分类/回答仍调用你配置的 `TECHDB_AGENT_*` 服务。公司离线环境须预备模型，不会自动把文档转发到公网。
+首次在线使用 PDF/OCR/公式/音视频及 tokenizer 可能下载模型。Docling 初始化前设置 `ORT_DISABLE_TELEMETRY=1` 和 `HF_HUB_DISABLE_TELEMETRY=1`，并调用 ONNX 官方遥测关闭接口。上传文档不会发送到外部 Docling 服务；原有 AI 分类/回答仍调用你配置的 `TECHDB_AGENT_*` 服务。公司离线环境须预备模型，不会自动把文档转发到公网。
 
 Compose 持久挂载 `external-data/document-models` 到 `/app/document-models`，`HF_HOME` 位于其中。可在联网的构建/准备环境使用 Docling 官方下载器：
 

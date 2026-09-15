@@ -11,6 +11,9 @@ _CONVERSION_LOCK = RLock()  # model instances are shared only within this proces
 
 @lru_cache(maxsize=1)
 def converter():
+    import onnxruntime
+
+    onnxruntime.disable_telemetry_events()
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
     from docling.document_converter import (

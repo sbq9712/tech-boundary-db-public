@@ -26,7 +26,7 @@ COPY backend/alembic.ini /app/alembic.ini
 COPY backend/tests /app/tests
 COPY data /app/data
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app ORT_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_TELEMETRY=1
 
 EXPOSE 8000
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

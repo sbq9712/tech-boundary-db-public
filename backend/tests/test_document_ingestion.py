@@ -330,3 +330,16 @@ def test_parse_failure_is_reported_instead_of_pending_classification(
     assert statements[-1]["classification_status"] == "failed"
     assert statements[-1]["embedding_status"] == "failed"
     assert "OCR model missing" in statements[-1]["embedding_error"]
+
+
+def test_ingestion_disables_native_telemetry_before_conversion(monkeypatch):
+    import importlib
+    import os
+
+    import app.document_ingestion as ingestion
+
+    monkeypatch.setenv("ORT_DISABLE_TELEMETRY", "0")
+    monkeypatch.setenv("HF_HUB_DISABLE_TELEMETRY", "0")
+    importlib.reload(ingestion)
+    assert os.environ["ORT_DISABLE_TELEMETRY"] == "1"
+    assert os.environ["HF_HUB_DISABLE_TELEMETRY"] == "1"

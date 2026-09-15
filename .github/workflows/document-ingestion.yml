@@ -28,8 +28,10 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}/backend
       DATABASE_URL: postgresql+psycopg2://test:test@localhost:5432/techdb_test
       TECHDB_UPLOAD_RECOVERY_ENABLED: 'false'
-      HF_HOME: ${{ runner.temp }}/document-models
-      DOCLING_TEST_REPORT_DIR: ${{ runner.temp }}/docling-reports
+      ORT_DISABLE_TELEMETRY: '1'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HOME: ${{ github.workspace }}/.document-models
+      DOCLING_TEST_REPORT_DIR: ${{ github.workspace }}/reports/docling
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,5 +63,5 @@ jobs:
         if: always()
         with:
           name: synthetic-document-conversion-reports
-          path: ${{ runner.temp }}/docling-reports
+          path: ${{ github.workspace }}/reports/docling
           if-no-files-found: ignore
