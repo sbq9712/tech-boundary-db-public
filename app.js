@@ -175,8 +175,10 @@ function initMapHorizontalScroll(){
 }
 window.addEventListener('resize',syncMapHorizontalBar);
 let activeSessionId = null;
-let activeRequestController = null;
-let activeRequestState = null;
+const conversationRequests = new Set();
+const conversationCache = new Map();
+let conversationLoadEpoch = 0;
+function currentConversationRequest(){return [...conversationRequests].find(request=>request.messages===activeSessionMessages)||null;}
 let activeRequestEpoch = 0;
 let lastFailedQuery = '';
 let knowledgeGraphCleanup = null;
@@ -248,9 +250,8 @@ let pendingConversation = null;
 function renderSidebarConversations(){
   const list=document.getElementById('sidebarConversationList');
   if(!list)return;
-  const items=pendingConversation
-    ?[pendingConversation,...conversationSessions.filter(item=>item.id!==pendingConversation.id)]
-    :conversationSessions;
+  const live=[...conversationRequests].map(request=>({id:request.sessionId||request.localId,title:conversationSessions.find(item=>item.id===request.sessionId)?.title||'新对话'}));
+  const items=[...live,...conversationSessions.filter(item=>!live.some(request=>request.id===item.id))];
   if(!items.length){
     list.innerHTML='<div class="sidebar-conversation-empty">暂无历史对话</div>';
     return;
@@ -265,6 +266,7 @@ function renderSidebarConversations(){
   }).join('');
 }
 async function loadConversations(preferredId=null){
+  const loadEpoch=conversationLoadEpoch;
   const list=document.getElementById('sidebarConversationList');
   if(!list)return;
   try{
@@ -276,35 +278,34 @@ async function loadConversations(preferredId=null){
       ?preferredId
       :(activeSessionId&&conversationSessions.some(item=>item.id===activeSessionId)?activeSessionId:null);
     renderSidebarConversations();
-    if(target&&target!==activeSessionId)await loadConversationMessages(target);
+    if(loadEpoch===conversationLoadEpoch&&target&&target!==activeSessionId)await loadConversationMessages(target);
   }catch(_err){
     list.innerHTML='<div class="sidebar-conversation-empty">历史对话加载失败</div>';
   }
 }
 async function loadConversationMessages(sessionId){
-  const answer=document.getElementById('answer');
-  if(!answer)return;
-  if(activeRequestState&&activeRequestState.sessionId===sessionId){
+  const loadEpoch=++conversationLoadEpoch;
+  const cached=conversationCache.get(sessionId);
+  if(cached){
     activeSessionId=sessionId;
-    activeSessionMessages=activeRequestState.messages;
+    activeSessionMessages=cached;
     renderSidebarConversations();
-    answer.innerHTML=renderHomeMessages();
-    answer.scrollTop=answer.scrollHeight;
+    refreshConversationSurface();
     syncConversationRequestControls();
     return;
   }
   const res=await apiFetch(`/api/conversations/${encodeURIComponent(sessionId)}/messages?limit=40`);
   if(!res.ok)return;
   const data=await res.json();
+  if(loadEpoch!==conversationLoadEpoch)return;
   activeSessionId=sessionId;
-  renderSidebarConversations();
   activeSessionMessages=(data.messages||[]).map(message=>({
-    role:message.role,
-    text:message.content,
+    role:message.role,text:message.content,
     extra:{citations:message.citations||[],panel_recommendations:message.panel_recommendations||{},retrieval_summary:message.retrieval_summary||{}},
   }));
-  answer.innerHTML=renderHomeMessages();
-  answer.scrollTop=answer.scrollHeight;
+  renderSidebarConversations();
+  refreshConversationSurface();
+  syncConversationRequestControls();
 }
 async function deleteConversation(sessionId){
   if(!sessionId)return;
@@ -313,6 +314,9 @@ async function deleteConversation(sessionId){
   const deletingActive=sessionId===activeSessionId;
   const res=await apiFetch(`/api/conversations/${encodeURIComponent(sessionId)}`,{method:'DELETE'});
   if(!res.ok){showToast('删除会话失败');return;}
+  const request=[...conversationRequests].find(item=>item.sessionId===sessionId);
+  if(request){request.controller.abort();conversationRequests.delete(request);}
+  conversationCache.delete(sessionId);
   if(deletingActive)startNewConversation();
   conversationSessions=conversationSessions.filter(item=>item.id!==sessionId);
   renderSidebarConversations();
@@ -320,11 +324,7 @@ async function deleteConversation(sessionId){
   showToast('会话已删除');
 }
 function startNewConversation(){
-  activeRequestEpoch+=1;
-  const previousController=activeRequestController;
-  activeRequestController=null;
-  activeRequestState=null;
-  previousController?.abort();
+  conversationLoadEpoch+=1;
   activeSessionId=null;
   activeSessionMessages=[];
   pendingConversation=null;
@@ -353,7 +353,7 @@ document.addEventListener('click',event=>{
     if(sessionId&&sessionId!==activeSessionId)loadConversationMessages(sessionId);
   }
   if(event.target?.closest?.('#sidebarNewConversationBtn'))startNewConversation();
-  if(event.target?.id==='stopBtn'&&activeRequestController)activeRequestController.abort();
+  if(event.target?.id==='stopBtn')currentConversationRequest()?.controller.abort();
   if(event.target?.id==='retryBtn'&&lastFailedQuery){
     const input=document.getElementById('queryInput');
     if(input){input.value=lastFailedQuery;submitQuery();}
@@ -955,13 +955,13 @@ function refreshConversationSurface(){
   answer.scrollTop=answer.scrollHeight;
 }
 function requestConversationIsVisible(requestState){
-  return Boolean(requestState&&activeRequestState===requestState&&activeSessionMessages===requestState.messages&&(!activeSessionId||!requestState.sessionId||activeSessionId===requestState.sessionId));
+  return Boolean(requestState&&activeSessionMessages===requestState.messages);
 }
 function refreshRequestConversationSurface(requestState){
   if(requestConversationIsVisible(requestState))refreshConversationSurface();
 }
 function syncConversationRequestControls(){
-  const busy=Boolean(activeRequestController);
+  const busy=Boolean(currentConversationRequest());
   const askBtn=document.getElementById('askBtn');
   const stopBtn=document.getElementById('stopBtn');
   if(askBtn){askBtn.disabled=busy;askBtn.textContent=busy?'回答中…':'发送';}
@@ -1006,12 +1006,13 @@ async function submitQuery(options={}){
   const answer=document.getElementById("answer");
   const query=String(options.query??input?.value??'').trim();
   if(!query){input?.focus();return;}
-  if(activeRequestController)return;
+  if(currentConversationRequest())return;
+  conversationLoadEpoch+=1;
 
   const requestEpoch=++activeRequestEpoch;
   const regenerate=Boolean(options.regenerate);
   const retry=Boolean(options.retry);
-  const requestedSessionId=activeSessionId;
+  const requestedSessionId=activeSessionId?.startsWith('pending-')?null:activeSessionId;
   const creatingConversation=!requestedSessionId&&!regenerate&&!retry;
   if(creatingConversation){
     pendingConversation={id:`pending-${requestEpoch}`,title:'新对话',pending:true};
@@ -1022,15 +1023,18 @@ async function submitQuery(options={}){
   if(!regenerate&&!retry)activeSessionMessages.push({role:'user',text:query});
   const assistantMsg={role:'assistant',text:'',extra:null,streaming:true,status:'正在连接检索服务…'};
   activeSessionMessages.push(assistantMsg);
-  const requestState={epoch:requestEpoch,sessionId:requestedSessionId,messages:activeSessionMessages,assistantMsg};
-  activeRequestState=requestState;
+  const controller=new AbortController();
+  const requestState={epoch:requestEpoch,localId:`pending-${requestEpoch}`,sessionId:requestedSessionId,messages:activeSessionMessages,assistantMsg,controller};
+  conversationRequests.add(requestState);
+  conversationCache.set(requestedSessionId||requestState.localId,requestState.messages);
+  if(!requestedSessionId)activeSessionId=requestState.localId;
+  renderSidebarConversations();
   if(input){input.value="";input.style.height='auto';}
   homeDraft="";localStorage.removeItem('home_query_draft');
   refreshConversationSurface();
 
   let streamCompleted=false;
-  const controller=new AbortController();
-  activeRequestController=controller;
+
   const askBtn=document.getElementById('askBtn');
   const stopBtn=document.getElementById('stopBtn');
   const retryBtn=document.getElementById('retryBtn');
@@ -1050,6 +1054,7 @@ async function submitQuery(options={}){
       throw new Error(errData.detail||'请求失败');
     }
     requestState.sessionId=res.headers.get('X-Conversation-Id')||requestState.sessionId;
+    if(requestState.sessionId)conversationCache.set(requestState.sessionId,requestState.messages);
     if(requestConversationIsVisible(requestState))activeSessionId=requestState.sessionId;
     if(pendingConversation&&requestState.sessionId)pendingConversation={...pendingConversation,id:requestState.sessionId};
     renderSidebarConversations();
@@ -1097,6 +1102,7 @@ async function submitQuery(options={}){
             assistantMsg.streaming=false;
             assistantMsg.status=data.truncated?'回答达到输出上限，内容可能未完。':'';
             requestState.sessionId=data.session_id||requestState.sessionId;
+            if(requestState.sessionId)conversationCache.set(requestState.sessionId,requestState.messages);
             if(requestConversationIsVisible(requestState))activeSessionId=requestState.sessionId;
             assistantMsg.extra={citations:data.citations||[],retrieval_summary:stats,panel_recommendations:{},truncated:Boolean(data.truncated),finish_reason:data.finish_reason||null,fallback_used:Boolean(data.fallback_used)};
             streamCompleted=true;
@@ -1110,12 +1116,12 @@ async function submitQuery(options={}){
     }
 
     if(!streamCompleted)throw new Error('回答流提前结束');
-    lastFailedQuery='';
+    if(requestConversationIsVisible(requestState))lastFailedQuery='';
     await loadConversations(requestConversationIsVisible(requestState)?requestState.sessionId:null);
 
   }catch(err){
-    if(requestEpoch!==activeRequestEpoch)return;
-    lastFailedQuery=query;
+
+    if(requestConversationIsVisible(requestState))lastFailedQuery=query;
     const stopped=err?.name==='AbortError';
     if(creatingConversation&&!requestState.sessionId)pendingConversation=null;
     assistantMsg.streaming=false;
@@ -1125,11 +1131,9 @@ async function submitQuery(options={}){
     else refreshRequestConversationSurface(requestState);
     if(retryBtn)retryBtn.hidden=false;
   }finally{
-    if(requestEpoch===activeRequestEpoch){
-      activeRequestController=null;
-      if(activeRequestState===requestState)activeRequestState=null;
-      syncConversationRequestControls();
-    }
+    conversationRequests.delete(requestState);
+    renderSidebarConversations();
+    syncConversationRequestControls();
   }
 }
 
@@ -1702,4 +1706,3 @@ async function upSubmit(){
     submit.disabled=false;cancel.disabled=false;
   }
 }
-

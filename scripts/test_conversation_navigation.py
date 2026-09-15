@@ -23,21 +23,21 @@ class ConversationNavigationContract(unittest.TestCase):
         )
 
     def test_stream_owns_messages_independently_of_the_current_view(self) -> None:
-        self.assertIn("let activeRequestState = null;", self.source)
+        self.assertIn("const conversationRequests = new Set();", self.source)
         self.assertIn(
-            "const requestState={epoch:requestEpoch,sessionId:requestedSessionId,messages:activeSessionMessages,assistantMsg};",
+            "messages:activeSessionMessages,assistantMsg,controller",
             self.source,
         )
         self.assertIn("refreshRequestConversationSurface(requestState);", self.source)
         self.assertIn(
-            "activeRequestState&&activeRequestState.sessionId===sessionId",
+            "conversationCache.get(sessionId)",
             self.source,
         )
 
-    def test_only_an_explicit_new_conversation_aborts_the_stream(self) -> None:
+    def test_new_conversation_does_not_abort_other_streams(self) -> None:
         start = self.source.index("function startNewConversation()")
         end = self.source.index("document.addEventListener('click'", start)
-        self.assertIn("previousController?.abort();", self.source[start:end])
+        self.assertNotIn("abort()", self.source[start:end])
         render = self.source.index("function render()")
         render_end = self.source.index("function ensureCurrentUser", render)
         self.assertNotIn("abort()", self.source[render:render_end])

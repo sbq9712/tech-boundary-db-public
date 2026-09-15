@@ -107,6 +107,18 @@ RUN_DOCLING_REAL_TESTS=1 PYTHONPATH=backend DOCLING_TEST_REPORT_DIR=reports/docl
 本次合成文档的 document_id、Markdown/provenance 示例及真实 CI 结果见 [验收记录](document-ingestion-validation.md)。
 
 
+### 解析超时与排查
+
+上传解析在独立进程中运行（包含 Docling、chunking 和资产生成），默认硬超时为 900 秒。
+可在未提交的 .env.local 中配置 TECHDB_DOCUMENT_TIMEOUT_SECONDS（1–7200 秒）。
+超时会终止并回收解析进程及其子进程，任务持久记录为失败，保留原始文件，
+可以使用资料库的重试功能；不会把未完成解析标记为可检索。
+日志带 document_id，并区分 conversion、semantic chunking 和 exporting assets。
+此保护不证明任何特定 PDF 卡顿的根因；需要对应运行日志才能判断 OCR、公式、模型或内存问题。
+
+升级前卡住的旧 API 进程须通过启动脚本重建/重启后才能应用硬超时。
+查看日志（不要提供 .env 或 Key）：docker compose --env-file .env.local logs --tail=150 api
+
 ### 首次 PDF 上传前的模型准备
 
 `bash ./start_with_local_ai.sh` 现在先构建镜像，再在已挂载的 `external-data/document-models` 中准备 Docling 布局、TableFormer、公式、中文 RapidOCR 模型及 HybridChunker 使用的 tokenizer，完成完整性检查后才启动 API。首次执行需要联网并可能耗时；终端会显示下载进度。以后若版本和文件清单一致会直接复用，不重复下载。文件缺失或大小变化时会重新准备，并在启动阶段明确失败，避免浏览器上传后长期显示“待分类”。

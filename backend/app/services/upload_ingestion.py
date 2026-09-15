@@ -519,7 +519,7 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
             )
             return False
 
-        from app.document_ingestion.service import ingest
+        from app.document_ingestion.runner import ingest
         assets, text, chunks = ingest(
             root=upload_root(), original=path, document_id=str(uid),
             filename=record.original_filename, checksum=record.checksum_sha256,

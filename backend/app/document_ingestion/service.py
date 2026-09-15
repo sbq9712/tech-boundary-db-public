@@ -51,8 +51,10 @@ def ingest(
                 return previous, cached[1], cached[2]
     logger.info("Docling conversion starting for document %s", document_id)
     result = convert(original)
+    logger.info("Docling conversion finished for document %s; starting semantic chunking", document_id)
     document = result.document
     chunks = chunks_for(document, document_id, filename, actual)
+    logger.info("Document %s: chunking finished (%d chunks); exporting assets", document_id, len(chunks))
     if not chunks:
         raise ValueError(
             "Docling 未生成可检索内容：请检查空白、加密文件或 OCR/模型配置"

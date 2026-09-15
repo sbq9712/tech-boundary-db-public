@@ -11,6 +11,9 @@ on:
       - "scripts/build_breadth_category_counts.py"
       - "scripts/test_breadth_runtime_hydration.py"
       - "scripts/test_conversation_navigation.py"
+      - "scripts/test_conversation_concurrency.cjs"
+      - "scripts/test_document_worker.py"
+      - "backend/app/document_ingestion/runner.py"
       - "app.js"
       - ".github/workflows/local-dev-contract.yml"
   workflow_dispatch:
@@ -39,3 +42,5 @@ jobs:
         run: |
           python -m unittest scripts/test_breadth_runtime_hydration.py -v
           python -m unittest scripts/test_conversation_navigation.py -v
+          node scripts/test_conversation_concurrency.cjs
+          python -m unittest scripts/test_document_worker.py -v

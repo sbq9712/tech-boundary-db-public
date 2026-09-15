@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from app.document_ingestion import metadata, service, storage
+from app.document_ingestion import metadata, runner, service, storage
 
 
 def test_identity_and_all_page_provenance():
@@ -274,7 +274,7 @@ def test_ingestion_index_failure_preserves_assets_for_retry(monkeypatch, tmp_pat
 
     monkeypatch.setattr(upload_ingestion, "SessionLocal", Session)
     monkeypatch.setattr(upload_ingestion, "upload_root", lambda: tmp_path)
-    monkeypatch.setattr(service, "ingest", ingest)
+    monkeypatch.setattr(runner, "ingest", ingest)
 
     def failed_index(*args):
         raise RuntimeError("index unavailable")
@@ -325,7 +325,7 @@ def test_parse_failure_is_reported_instead_of_pending_classification(
     def fail(**kwargs):
         raise RuntimeError("OCR model missing")
 
-    monkeypatch.setattr(service, "ingest", fail)
+    monkeypatch.setattr(runner, "ingest", fail)
     assert upload_ingestion.process_uploaded_file(record.id) is False
     assert statements[-1]["classification_status"] == "failed"
     assert statements[-1]["embedding_status"] == "failed"
