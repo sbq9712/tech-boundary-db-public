@@ -32,7 +32,7 @@ def converter():
     options.generate_parsed_pages = True
     options.heading_hierarchy_options.enabled = True
     options.do_formula_enrichment = (
-        os.getenv("TECHDB_DOCLING_FORMULAS", "true").lower() == "true"
+        os.getenv("TECHDB_DOCLING_FORMULAS", "false").lower() == "true"
     )
     options.enable_remote_services = False
     artifacts = os.getenv("TECHDB_DOCLING_ARTIFACTS_PATH", "").strip()

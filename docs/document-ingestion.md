@@ -9,7 +9,7 @@
 上传保持异步，返回原有 `count/files`，每条记录增加 `document_id`、`filename`、`chunks_count`、`status`、`document_assets`。初次返回并不表示可检索；列表轮询直到 `embedding_status=ready`。转换、分类或索引失败保留原文件和错误状态，使用现有分类/索引重试入口；进程重启继续原有 pending recovery。此改动不宣称新增了多进程任务队列。
 
 - `app/document_ingestion/parser.py`：从安装版本的 `FormatToExtensions / FormatToMimeType` 动态发现格式，支持复合扩展名及 MIME 提示；最终文件内容由 Docling 验证。`GET /api/uploads/formats` 返回注册表。
-- `docling_processor.py`：同一 DocumentConverter 处理数字文档、扫描件、图片。启用原生自动 OCR、表格结构、PDF 标题层级、图片导出和公式增强。禁止解析器读取引用的远程/本地外部资源。
+- `docling_processor.py`：同一 DocumentConverter 处理数字文档、扫描件、图片。启用原生自动 OCR、表格结构、PDF 标题层级、图片导出；公式增强可显式启用。禁止解析器读取引用的远程/本地外部资源。
 - `chunker.py`：Docling HybridChunker，默认真实 `BAAI/bge-m3` tokenizer、512 token 预算、原生章节/语义边界；送入索引前不会再次切块。
 - `metadata.py`：原有上传 UUID 即 document_id；chunk UUID 基于文档 ID、原文件校验和、原生 metadata、正文和 chunk 序号确定。保留所有相关页码、章节、Docling item `$ref` 和 bounding boxes。DOCX 等原生无页码时为 null，不伪造页码。
 - `storage.py / service.py`：校验原文件 SHA-256；完整资产先写 staging、fsync，再原子发布。数据库只引用发布后的资产包；重试检查各文件 SHA/大小及 pipeline 配置后复用，否则重新转换。
@@ -61,7 +61,7 @@ TECHDB_DOCLING_ARTIFACTS_PATH=/app/document-models/docling
 TECHDB_DOCUMENT_TOKENIZER=/app/document-models/docling/bge-m3-tokenizer
 TECHDB_DOCUMENT_TOKENIZER_SOURCE=BAAI/bge-m3
 TECHDB_DOCUMENT_CHUNK_TOKENS=512
-TECHDB_DOCLING_FORMULAS=true
+TECHDB_DOCLING_FORMULAS=false
 ```
 
 `TECHDB_DOCUMENT_TOKENIZER` 指向包含 tokenizer 配置和词表的本地目录；联网准备时从 `TECHDB_DOCUMENT_TOKENIZER_SOURCE`（默认 `BAAI/bge-m3`）下载到该目录。音视频模型按 Docling ASR 配置另行预备。Docling/PyTorch/OCR 模型不在普通 Git clone 中，不提交模型、上传文件或派生资产。
@@ -124,3 +124,14 @@ RUN_DOCLING_REAL_TESTS=1 PYTHONPATH=backend DOCLING_TEST_REPORT_DIR=reports/docl
 `bash ./start_with_local_ai.sh` 现在先构建镜像，再在已挂载的 `external-data/document-models` 中准备 Docling 布局、TableFormer、公式、中文 RapidOCR 模型及 HybridChunker 使用的 tokenizer，完成完整性检查后才启动 API。首次执行需要联网并可能耗时；终端会显示下载进度。以后若版本和文件清单一致会直接复用，不重复下载。文件缺失或大小变化时会重新准备，并在启动阶段明确失败，避免浏览器上传后长期显示“待分类”。
 
 上传进入 Docling 转换后，资料库显示“文档解析中”；转换结束才进入“分类中”和“索引中”。升级前已经卡住的记录会在 API 重启时由现有 recovery 机制重置并重试。
+
+
+### 本地 CPU 的公式增强开关
+
+默认关闭 CodeFormulaV2 生成式公式增强（TECHDB_DOCLING_FORMULAS=false）。
+该阶段可能在 CPU 上耗时远高于普通 PDF 版面/OCR 解析；CPU 日志出现
+“Running Transformers inference … max_new_tokens=2048”后长时间无进度时，应先检查此开关。
+OCR、表格、标题、图片与 provenance 仍保留；关闭公式增强不保证将公式图片转写成准确 LaTeX。
+需要增强公式识别时可在合适的硬件上显式设为 true；没有删除这项能力，也没有将超时结果当作成功。
+已有 .env.local 若写了 true，须改成 false，不能依赖 Compose 默认值覆盖显式配置。
+更新启动后，对失败资料点击“重试分类”以重新执行整个 ingestion，不必删除或重新上传。

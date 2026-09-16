@@ -107,7 +107,8 @@ def synthetic_documents(tmp_path_factory):
     return root, {p.name: p for p in make_documents(root)}
 
 
-def test_isolated_pdf_worker(synthetic_documents):
+def test_isolated_pdf_worker(synthetic_documents, monkeypatch):
+    monkeypatch.delenv("TECHDB_DOCLING_FORMULAS", raising=False)
     if os.getenv("TEST_DOCUMENT_TOKENIZER") == "fixture":
         pytest.skip("child worker requires the real tokenizer")
     from app.document_ingestion.runner import ingest
@@ -119,6 +120,7 @@ def test_isolated_pdf_worker(synthetic_documents):
         root=root, original=original, document_id=str(uuid.uuid4()),
         filename=original.name, checksum=sha256(original),
     )
+    assert assets["pipeline"]["formulas"] == "false"
     assert "Synthetic" in markdown
     assert chunks and (root / assets["bundle"] / "document.json").is_file()
 

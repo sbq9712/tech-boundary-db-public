@@ -395,3 +395,25 @@ def test_local_start_prepares_docling_models_before_starting_api():
 
     assert build_at < models_at < start_at
     assert "run --rm --no-deps api" in script
+
+
+@pytest.mark.parametrize("configured, expected", [(None, False), ("false", False), ("true", True)])
+def test_formula_enrichment_is_opt_in_without_disabling_structure(monkeypatch, configured, expected):
+    from app.document_ingestion import docling_processor
+    from docling.datamodel.base_models import InputFormat
+
+    monkeypatch.delenv("TECHDB_DOCLING_BACKEND_OPTIONS_FILE", raising=False)
+    if configured is None:
+        monkeypatch.delenv("TECHDB_DOCLING_FORMULAS", raising=False)
+    else:
+        monkeypatch.setenv("TECHDB_DOCLING_FORMULAS", configured)
+    docling_processor.converter.cache_clear()
+    try:
+        engine = docling_processor.converter()
+        for kind in (InputFormat.PDF, InputFormat.IMAGE):
+            options = engine.format_to_options[kind].pipeline_options
+            assert options.do_formula_enrichment is expected
+            assert options.do_ocr and options.do_table_structure
+            assert options.generate_picture_images and options.generate_parsed_pages
+    finally:
+        docling_processor.converter.cache_clear()

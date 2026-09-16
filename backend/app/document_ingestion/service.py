@@ -32,7 +32,7 @@ def ingest(
         "docling_core": version("docling-core"),
         "tokenizer": os.getenv("TECHDB_DOCUMENT_TOKENIZER", "BAAI/bge-m3"),
         "max_tokens": int(os.getenv("TECHDB_DOCUMENT_CHUNK_TOKENS", "512")),
-        "formulas": os.getenv("TECHDB_DOCLING_FORMULAS", "true"),
+        "formulas": os.getenv("TECHDB_DOCLING_FORMULAS", "false"),
         "backend_options_sha256": sha256(
             Path(os.environ["TECHDB_DOCLING_BACKEND_OPTIONS_FILE"])
         )
