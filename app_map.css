@@ -346,3 +346,46 @@
 .map-content-panel .industry-tree{scrollbar-width:none}
 .map-content-panel .industry-tree::-webkit-scrollbar{display:none;width:0;height:0}
 .map-content-panel .industry-tree{cursor:grab}
+
+/* ── 行业图景节点 · 上传资料框 ── */
+.map-content-panel .node-uploads{
+  margin:6px 0 0 12px;
+  padding:8px 10px;
+  border:1px solid var(--border-standard);
+  border-left:3px solid var(--brand);
+  border-radius:var(--radius-sm);
+  background:var(--brand-bg);
+  max-width:260px;
+}
+.map-content-panel .node-uploads-head{
+  display:block;
+  font-size:11px;
+  font-weight:600;
+  color:var(--brand);
+  margin-bottom:4px;
+  letter-spacing:.02em;
+}
+.map-content-panel .node-uploads ul{
+  list-style:none;
+  margin:0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+}
+.map-content-panel .node-uploads li a{
+  display:block;
+  font-size:12px;
+  line-height:1.45;
+  color:var(--text-primary);
+  text-decoration:none;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  border-radius:4px;
+  padding:2px 4px;
+}
+.map-content-panel .node-uploads li a:hover{
+  background:rgba(94,106,210,.12);
+  color:var(--brand);
+}

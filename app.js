@@ -743,8 +743,8 @@ function mapMatchesNode(node, rows, textGetter){
   });
 }
 function findIntelLeaf(node,counts){const fullPath=mapAssetText((node.path||[]).join('/'));return counts.find(item=>mapAssetText(item.path)===fullPath);}
-async function loadMapAssets(){const [intelMeta,dashboards]=await Promise.allSettled([apiFetch('/api/delivery-intel/category-counts').then(r=>r.ok?r.json():{category_counts:[]}),apiFetch('/api/dashboards').then(r=>r.ok?r.json():{items:[]})]);const intelCounts=intelMeta.status==='fulfilled'&&Array.isArray(intelMeta.value.category_counts)?intelMeta.value.category_counts:[];return {intelCounts,dashboards:dashboards.status==='fulfilled'&&Array.isArray(dashboards.value.items)?dashboards.value.items:[]};}
-function decorateIndustryAssets(node,assets){const children=node.children||[];if(!children.length){const intelLeaf=findIntelLeaf(node,assets.intelCounts);const intelCount=Number(intelLeaf?.count)||0;const dashboards=mapMatchesNode(node,assets.dashboards,dashboardMapText);const matchedDash=dashboards[0];const dashId=matchedDash?.id;node.assets={intel:{active:intelCount>0,count:intelCount,href:'#breadth'},special_issue:{active:false,count:0,href:''},dashboard:{active:!!dashId,count:dashboards.length,dashId:dashId||null}};}children.forEach(child=>decorateIndustryAssets(child,assets));return node;}
+async function loadMapAssets(){const [intelMeta,dashboards,uploadsMeta]=await Promise.allSettled([apiFetch('/api/delivery-intel/category-counts').then(r=>r.ok?r.json():{category_counts:[]}),apiFetch('/api/dashboards').then(r=>r.ok?r.json():{items:[]}),apiFetch('/api/uploads?limit=500').then(r=>r.ok?r.json():{files:[]})]);const intelCounts=intelMeta.status==='fulfilled'&&Array.isArray(intelMeta.value.category_counts)?intelMeta.value.category_counts:[];const uploads=uploadsMeta.status==='fulfilled'&&Array.isArray(uploadsMeta.value.files)?uploadsMeta.value.files:[];return {intelCounts,dashboards:dashboards.status==='fulfilled'&&Array.isArray(dashboards.value.items)?dashboards.value.items:[],uploads};}
+function decorateIndustryAssets(node,assets){const children=node.children||[];const uploadsByPath=new Map();(assets.uploads||[]).forEach(f=>{const cat=String(f.primary_category||"");if(!cat.includes("/"))return;if(!uploadsByPath.has(cat))uploadsByPath.set(cat,[]);uploadsByPath.get(cat).push(f);});const decorate=(node)=>{const nodePath=(node.path||[]).join("/");const matched=uploadsByPath.get(nodePath)||[];const children=node.children||[];if(!children.length){const intelLeaf=findIntelLeaf(node,assets.intelCounts);const intelCount=Number(intelLeaf?.count)||0;const dashboards=mapMatchesNode(node,assets.dashboards,dashboardMapText);const matchedDash=dashboards[0];const dashId=matchedDash?.id;node.assets={intel:{active:intelCount>0,count:intelCount,href:'#breadth'},special_issue:{active:false,count:0,href:''},dashboard:{active:!!dashId,count:dashboards.length,dashId:dashId||null},upload:{active:matched.length>0,count:matched.length,files:matched}};}else{node.assets={upload:{active:matched.length>0,count:matched.length,files:matched}};}children.forEach(decorate);};decorate(node);return node;}
 function countLeaves(node){const children=node.children||[];return children.length?children.reduce((sum,child)=>sum+countLeaves(child),0):1;}
 function leafDots(node){const assets=node.assets||{};const fallbackCoverage=node.coverage||{};const fallbackLinks=node.links||{};const items=[['intel','相关情报'],['special_issue','专刊'],['dashboard','行业仪表盘']];const available=items.map(([key,label])=>{const asset=assets[key]||{active:!!fallbackCoverage[key],href:fallbackLinks[key]||'#',count:0};return {key,label,asset,active:!!asset.active};}).filter(item=>item.active);if(!available.length)return '';return `<div class="leaf-tags">${available.map(({key,label,asset})=>{const status=`${label}：${asset.count||1}项`;const state=`${asset.count||1} 项`;
   // Dashboard tag: open full-screen detail directly instead of navigating
@@ -755,7 +755,8 @@ function leafDots(node){const assets=node.assets||{};const fallbackCoverage=node
   return `<a class="leaf-tag active" data-link-type="${key}" href="${href}" title="${status}"><span>${label}</span><small>${state}</small></a>`;}).join('')}</div>`;}
 function mapNodeOwnMatch(node){const q=mapAssetText(mapSearchDraft);if(!q)return false;return mapAssetText([node.title,...(node.path||[])].join(' ')).includes(q);}
 function mapNodeVisible(node){const q=mapAssetText(mapSearchDraft);if(!q)return true;if(mapNodeOwnMatch(node))return true;return (node.children||[]).some(mapNodeVisible);}
-function industryNode(node){if(!mapNodeVisible(node))return '';const children=node.children||[];const leaf=children.length===0;const open=mapSearchDraft||node.depth<mapOpenDepth;const childHtml=children.map(industryNode).join('');return `<li class="mind-node depth-${node.depth} ${leaf?'leaf':''} ${mapNodeOwnMatch(node)?'match':''}"><details ${open?'open':''}><summary class="mind-card"><span class="mind-title${node.title.length>=20?' len-xl':node.title.length>=12?' len-lg':''}">${escapeHtml(node.title)}</span></summary>${leaf?leafDots(node):childHtml?`<ul>${childHtml}</ul>`:''}</details></li>`;}
+function nodeUploadBox(node){const up=node.assets&&node.assets.upload;if(!up||!up.active)return '';const files=up.files||[];const items=files.map(f=>`<li><a href="#library" onclick="setTimeout(()=>{const s=document.getElementById('categoryFilter');if(s)s.value=${JSON.stringify(f.primary_category||"").replace(/"/g,'&quot;')};},60)" title="${escapeHtml(f.title||f.original_filename||'资料')}">${escapeHtml(f.title||f.original_filename||'未命名资料')}</a></li>`).join('');return `<div class="node-uploads" title="上传资料（行业图景节点：${escapeHtml((node.path||[]).join('/'))}）"><span class="node-uploads-head">上传资料 · ${up.count}</span><ul>${items}</ul></div>`;}
+function industryNode(node){if(!mapNodeVisible(node))return '';const children=node.children||[];const leaf=children.length===0;const open=mapSearchDraft||node.depth<mapOpenDepth;const childHtml=children.map(industryNode).join('');const upBox=nodeUploadBox(node);return `<li class="mind-node depth-${node.depth} ${leaf?'leaf':''} ${mapNodeOwnMatch(node)?'match':''}"><details ${open?'open':''}><summary class="mind-card"><span class="mind-title${node.title.length>=20?' len-xl':node.title.length>=12?' len-lg':''}">${escapeHtml(node.title)}</span></summary>${upBox}${leaf?leafDots(node):childHtml?`<ul>${childHtml}</ul>`:''}</details></li>`;}
 async function loadIndustryMap(){const root=document.getElementById('industryTree');const meta=document.getElementById('industryMapMeta');if(!root)return;const group=parseHash().params.get('group')||'zero-carbon';const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};if(meta)meta.textContent=`${titleMap[group]||'零碳产业'}：正在加载 XMind 数据…`;try{const [mapRes,assets]=await Promise.all([apiFetch(`/api/industry-map?group=${encodeURIComponent(group==='zero-carbon'?'零碳产业':group==='ai-intelligent'?'AI与智能科技':'通用技术')}`),loadMapAssets()]);const data=await mapRes.json();const sheet=data.sheet||data.root||data;const rootNode=decorateIndustryAssets(sheet.root||sheet,assets);const sheetTitle=sheet.title||titleMap[group]||'行业图景';if(meta)meta.textContent=`${sheetTitle}：共 ${sheet.node_count||countNodes(rootNode)} 个节点，${countLeaves(rootNode)} 个叶子，最大层级 ${sheet.max_depth||maxDepth(rootNode)}`;root.innerHTML=`<div class="mindmap-canvas"><ul class="mindmap-root">${industryNode(rootNode)}</ul></div>`;requestAnimationFrame(initMapHorizontalScroll);}catch(err){root.innerHTML='<div class="status-note">图景加载失败，请检查 XMind 解析数据。</div>';if(meta)meta.textContent='图景加载失败';}}
 function commercialStatusBadge(status,reason=''){
   const map={
@@ -1493,7 +1494,7 @@ window.addEventListener("DOMContentLoaded",async()=>{await loadCurrentUser();ren
 let libRefreshTimer=null,libOffset=0,libTotal=0,libIsAdmin=false;
 const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引失败",embedding_skipped:"未索引",embedding_legacy_unindexed:"历史未索引",ready:"可检索"};
 function reviewedEmptyCard(){return `<div class="dashboard-card reviewed-empty"><div class="reviewed-empty-mark">无</div><strong>暂无已审核报告</strong><span>深度调研完成审核后将展示在这里</span></div>`;}
-function libraryView(){return `<section class="flat-content library"><div class="lib-head"><div><h1 class="section-title">资料库</h1><p class="lib-subtitle">管理员上传的资料，登录用户可下载</p></div><div class="filter-row"><select id="srcFilter" aria-label="来源类型"><option value="">全部来源</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select><select id="categoryFilter" aria-label="业务分类"><option value="">全部分类</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>分类</th><th>状态</th><th>来源类型</th><th>密级</th><th>大小</th><th>上传者</th><th>时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;}
+function libraryView(){return `<section class="flat-content library"><div class="lib-head"><div><h1 class="section-title">资料库</h1><p class="lib-subtitle">管理员上传的资料，登录用户可下载</p></div><div class="filter-row"><select id="srcFilter" aria-label="来源类型"><option value="">全部来源</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select><select id="categoryFilter" aria-label="行业图景节点"><option value="">全部节点</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>行业图景节点</th><th>状态</th><th>来源类型</th><th>密级</th><th>大小</th><th>上传者</th><th>时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;}
 function libFmtSize(n){if(!n)return "-";const u=["B","KB","MB","GB"];let i=0,s=n;while(s>=1024&&i<3){s/=1024;i++;}return s.toFixed(s<10?1:0)+" "+u[i];}
 function libFmtTime(iso){if(!iso)return "-";const d=new Date(iso);return isNaN(d)?"-":d.toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});}
 async function initLibrary(){
@@ -1503,7 +1504,7 @@ async function initLibrary(){
   if(prev)prev.onclick=()=>{libOffset=Math.max(0,libOffset-30);loadLibrary();};
   if(next)next.onclick=()=>{if(libOffset+30<libTotal){libOffset+=30;loadLibrary();}};
   try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";const link=document.getElementById("uploadLink");if(libIsAdmin&&link){link.style.display="";link.onclick=openUploadModal;}}}catch(e){}
-  try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];const select=document.getElementById("categoryFilter");if(select)select.innerHTML='<option value="">全部分类</option>'+data.categories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");}}catch(e){}
+  try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];const select=document.getElementById("categoryFilter");if(select)select.innerHTML='<option value="">全部节点</option>'+data.categories.filter(c=>c!=="未分类"&&c!=="不相关").map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");}}catch(e){}
   loadLibrary();
 }
 async function loadLibrary(){
@@ -1532,26 +1533,27 @@ async function loadLibrary(){
   tb.innerHTML=data.files.map(f=>{
     const conf=f.confidentiality?`<span class="tag conf-${escapeHtml(f.confidentiality)}">${escapeHtml(f.confidentiality)}</span>`:"-";
     const aiMark=f.title_source==="manual"?"":`<span class="ai-mark ${escapeHtml(f.title_source||"")}">${f.title_source==="ai_filled"?"AI":"…"}</span>`;
-    const canRetry=libIsAdmin&&["failed","unclassified","legacy_unclassified"].includes(f.classification_status);
-    const canRetryEmbedding=libIsAdmin&&["failed","skipped"].includes(f.embedding_status);
     const canClassify=libIsAdmin&&["classified","unclassified","irrelevant","legacy_unclassified","failed"].includes(f.classification_status);
+    const canRetry=libIsAdmin&&["failed","unclassified","legacy_unclassified"].includes(f.classification_status);
     const category=f.primary_category||"-";
+    const categoryTitle=category.includes("/")?category:"";
+    const nodeName=category.includes("/")?category.split("/").pop():category;
     const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
     const statusDetail=f.embedding_error||f.classification_error||f.classification_reason||(status==="document_processing"?"正在执行 Docling 文档理解；首次使用前模型已由启动脚本准备":"");
-    const statusSub=status==="embedding_skipped"?"未入索引，点「重试索引」可收录":status==="embedding_failed"?"索引未完成，可重试":status==="document_processing"?"Docling 解析中":"";
+    const statusSub=(status==="embedding_skipped"||status==="embedding_failed")?"索引未完成，可通过「人工分类」重新触发索引":status==="document_processing"?"Docling 解析中":"";
     const baseName=f.title||f.original_filename||"资料";
     const assetBtns=f.document_assets?`<button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|markdown" data-lib-name="${escapeHtml(baseName+"-document.md")}">Markdown</button><button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|chunks" data-lib-name="${escapeHtml(baseName+"-chunks.jsonl")}">Chunk</button>`:"";
     const catActions=(canClassify||canRetry)?`<div class="cat-actions">${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}</div>`:"";
     return `<tr>
       <td class="fname">${escapeHtml(f.title||f.original_filename)}${aiMark}<small>${escapeHtml(f.original_filename)}${f.note?" · "+escapeHtml(f.note):""}</small></td>
-      <td class="category-cell" title="${escapeHtml(category)}">${escapeHtml(category)}${catActions}</td>
+      <td class="category-cell" title="${escapeHtml(categoryTitle||nodeName)}">${escapeHtml(nodeName)}${catActions}</td>
       <td><span class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub?`<div class="status-sub">${escapeHtml(statusSub)}</div>`:""}</td>
       <td><span class="src-badge">${escapeHtml(f.source_type||"-")}</span></td>
       <td>${conf}</td>
       <td class="size-cell">${libFmtSize(f.size_bytes)}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
-      <td><div class="row-actions"><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}${canRetryEmbedding?`<button class="secondary-btn" data-retry-embedding="${escapeHtml(f.id)}">重试索引</button>`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
+      <td><div class="row-actions"><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
     </tr>`;
   }).join("");
   const start=libTotal?libOffset+1:0,end=Math.min(libOffset+data.files.length,libTotal);
@@ -1562,7 +1564,6 @@ async function loadLibrary(){
   if(nextBtnEl)nextBtnEl.disabled=libOffset+30>=libTotal;
   tb.querySelectorAll("button[data-download]").forEach(b=>b.onclick=()=>libDownload(b.dataset.download));
   tb.querySelectorAll("button[data-retry]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retry,"classification/retry",b));
-  tb.querySelectorAll("button[data-retry-embedding]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retryEmbedding,"embedding/retry",b));
   tb.querySelectorAll("button[data-lib-delete]").forEach(b=>b.onclick=()=>libDelete(b.dataset.libDelete,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-classify]").forEach(b=>b.onclick=()=>libClassify(b.dataset.libClassify,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-asset]").forEach(b=>b.onclick=()=>{const [id,asset]=b.dataset.libAsset.split("|");libAsset(id,asset,b.dataset.libName,b);});
@@ -1583,8 +1584,8 @@ function libClassify(id,name,button){
   overlay.innerHTML=`<div class="lib-upload-dialog" role="dialog" aria-modal="true" aria-label="人工分类" style="width:min(460px,100%);">
     <div class="lib-upload-head"><h2>人工分类${name?"："+escapeHtml(name):""}</h2><button class="lib-upload-close" id="clsCloseBtn" type="button" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="lib-upload-body">
-      <div class="lib-upload-field"><label for="clsCategory">主分类</label><select id="clsCategory" class="lib-upload-input"><option value="">加载中…</option></select></div>
-      <div class="lib-upload-hint" style="font-size:12px;color:var(--text-tertiary);line-height:1.6;">人工分类后立即重新建立问答索引（复用已解析资产，不重新解析）。分类仅作标注，不影响资料是否可被检索。</div>
+      <div class="lib-upload-field"><label for="clsCategory">行业图景节点</label><select id="clsCategory" class="lib-upload-input"><option value="">加载中…</option></select></div>
+      <div class="lib-upload-hint" style="font-size:12px;color:var(--text-tertiary);line-height:1.6;">为资料指定行业图景节点（可为非叶子节点）；保存后立即重新建立问答索引（复用已解析资产，不重新解析）。节点仅作标注，不影响资料是否可被检索。</div>
       <div class="lib-upload-field"><label for="clsReason">分类理由（选填，留空则记为“管理员人工修正”）</label><input id="clsReason" class="lib-upload-input" type="text" maxlength="2000" placeholder="例如：管理员确认收录"></div>
       <div class="lib-upload-result" id="clsResult" style="display:none;"></div>
     </div>
@@ -1594,7 +1595,8 @@ function libClassify(id,name,button){
   const select=document.getElementById("clsCategory"),submit=document.getElementById("clsSubmit");
   apiFetch("/api/uploads/taxonomy").then(r=>r&&r.ok?r.json():null).then(data=>{
     const cats=((data&&data.categories)||[]).filter(c=>c!=="未分类");
-    select.innerHTML='<option value="">请选择分类…</option>'+cats.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.includes("/")?c.split("/").join(" › "):c)}</option>`).join("");
+    const ordered=cats.filter(c=>c.includes("/")).concat(cats.filter(c=>!c.includes("/")));
+    select.innerHTML='<option value="">请选择行业图景节点…</option>'+ordered.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.includes("/")?c.split("/").join(" › "):c)}</option>`).join("");
     submit.disabled=false;
   }).catch(()=>{select.innerHTML='<option value="">分类目录加载失败</option>';});
   select.onchange=()=>{if(select.value==="")submit.disabled=true;};
@@ -1607,7 +1609,7 @@ function libClassify(id,name,button){
   document.addEventListener("keydown",onEsc);
   submit.onclick=async()=>{
     const category=select.value;
-    if(!category){const result=document.getElementById("clsResult");result.textContent="请先选择主分类";result.className="lib-upload-result err";result.style.display="block";return;}
+    if(!category){const result=document.getElementById("clsResult");result.textContent="请先选择行业图景节点";result.className="lib-upload-result err";result.style.display="block";return;}
     const reason=document.getElementById("clsReason").value.trim();
     submit.disabled=true;
     document.getElementById("clsCancel").disabled=true;
@@ -1673,7 +1675,7 @@ function openUploadModal(){
         <div class="lib-upload-field"><label for="upConf">密级</label><select id="upConf" class="lib-upload-input"><option value="">不指定</option><option>公开</option><option>内部</option><option>管理员</option></select></div>
         <div class="lib-upload-field"><label for="upSrc">来源类型</label><select id="upSrc" class="lib-upload-input"><option value="">不指定</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select></div>
       </div>
-      <div class="lib-upload-field"><label for="upCategory">业务分类</label><select id="upCategory" class="lib-upload-input"><option value="">不指定</option></select></div>
+      <div class="lib-upload-field"><label for="upCategory">行业图景节点</label><select id="upCategory" class="lib-upload-input"><option value="">不指定</option></select></div>
       <div class="lib-upload-field"><label for="upNote">备注</label><textarea id="upNote" class="lib-upload-input" rows="2" placeholder="选填"></textarea></div>
       <div class="lib-upload-result" id="upResult" style="display:none;"></div>
     </div>
@@ -1734,7 +1736,7 @@ function upShowResult(msg,cls){
 function upFillTaxonomy(){
   const select=document.getElementById("upCategory");
   if(!select||select.options.length>1)return;
-  select.innerHTML='<option value="">不指定</option>'+upTaxonomy.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.includes("/")?c.split("/").join(" › "):c)}</option>`).join("");
+  select.innerHTML='<option value="">不指定</option>'+upTaxonomy.filter(c=>c.includes("/")).map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.split("/").join(" › "))}</option>`).join("");
 }
 async function upEnsureTaxonomy(){
   if(upTaxonomy){upFillTaxonomy();return;}
@@ -1742,7 +1744,7 @@ async function upEnsureTaxonomy(){
     const r=await apiFetch("/api/uploads/taxonomy");
     if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];upFillTaxonomy();return;}
     throw new Error("taxonomy "+(r?r.status:""));
-  }catch(e){upShowResult("业务分类目录加载失败：可稍后重开弹窗重试，或留空由系统自动分类","err");}
+  }catch(e){upShowResult("行业图景节点目录加载失败：可稍后重开弹窗重试，或留空由系统自动分类","err");}
 }
 async function upSubmit(){
   if(!upPending.length)return;
