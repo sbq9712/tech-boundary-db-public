@@ -80,6 +80,7 @@ let assistantModels = fallbackAssistantModels.slice();
 let selectedModel = localStorage.getItem('assistant_model') || assistantModels[0];
 let mapSearchDraft = '';
 let mapOpenDepth = 2;
+let mapUploadsByPath = new Map();
 document.addEventListener('input', event => {
   if(event.target && event.target.id === 'mapSearch'){
     mapSearchDraft = event.target.value.trim();
@@ -744,7 +745,7 @@ function mapMatchesNode(node, rows, textGetter){
 }
 function findIntelLeaf(node,counts){const fullPath=mapAssetText((node.path||[]).join('/'));return counts.find(item=>mapAssetText(item.path)===fullPath);}
 async function loadMapAssets(){const [intelMeta,dashboards,uploadsMeta]=await Promise.allSettled([apiFetch('/api/delivery-intel/category-counts').then(r=>r.ok?r.json():{category_counts:[]}),apiFetch('/api/dashboards').then(r=>r.ok?r.json():{items:[]}),apiFetch('/api/uploads?limit=500').then(r=>r.ok?r.json():{files:[]})]);const intelCounts=intelMeta.status==='fulfilled'&&Array.isArray(intelMeta.value.category_counts)?intelMeta.value.category_counts:[];const uploads=uploadsMeta.status==='fulfilled'&&Array.isArray(uploadsMeta.value.files)?uploadsMeta.value.files:[];return {intelCounts,dashboards:dashboards.status==='fulfilled'&&Array.isArray(dashboards.value.items)?dashboards.value.items:[],uploads};}
-function decorateIndustryAssets(node,assets){const children=node.children||[];const skipLabels=new Set(["未分类","不相关",""]);const uploadsByPath=new Map();(assets.uploads||[]).forEach(f=>{const cat=String(f.primary_category||"");if(skipLabels.has(cat))return;if(!uploadsByPath.has(cat))uploadsByPath.set(cat,[]);uploadsByPath.get(cat).push(f);});const decorate=(node)=>{const nodePath=(node.path||[]).join("/");const matched=uploadsByPath.get(nodePath)||[];const kids=node.children||[];const deep=kids.map(decorate).some(Boolean)||matched.length>0;if(!kids.length){const intelLeaf=findIntelLeaf(node,assets.intelCounts);const intelCount=Number(intelLeaf?.count)||0;const dashboards=mapMatchesNode(node,assets.dashboards,dashboardMapText);const matchedDash=dashboards[0];const dashId=matchedDash?.id;node.assets={intel:{active:intelCount>0,count:intelCount,href:'#breadth'},special_issue:{active:false,count:0,href:''},dashboard:{active:!!dashId,count:dashboards.length,dashId:dashId||null},upload:{active:matched.length>0,count:matched.length,files:matched},uploadDeep:deep};}else{node.assets={upload:{active:matched.length>0,count:matched.length,files:matched},uploadDeep:deep};}return deep;};decorate(node);return node;}
+function decorateIndustryAssets(node,assets){const children=node.children||[];const skipLabels=new Set(["未分类","不相关",""]);const uploadsByPath=new Map();(assets.uploads||[]).forEach(f=>{const cat=String(f.primary_category||"");if(skipLabels.has(cat))return;if(!uploadsByPath.has(cat))uploadsByPath.set(cat,[]);uploadsByPath.get(cat).push(f);});mapUploadsByPath=uploadsByPath;const decorate=(node)=>{const nodePath=(node.path||[]).join("/");const matched=uploadsByPath.get(nodePath)||[];const kids=node.children||[];const deep=kids.map(decorate).some(Boolean)||matched.length>0;if(!kids.length){const intelLeaf=findIntelLeaf(node,assets.intelCounts);const intelCount=Number(intelLeaf?.count)||0;const dashboards=mapMatchesNode(node,assets.dashboards,dashboardMapText);const matchedDash=dashboards[0];const dashId=matchedDash?.id;node.assets={intel:{active:intelCount>0,count:intelCount,href:'#breadth'},special_issue:{active:false,count:0,href:''},dashboard:{active:!!dashId,count:dashboards.length,dashId:dashId||null},upload:{active:matched.length>0,count:matched.length,files:matched},uploadDeep:deep};}else{node.assets={upload:{active:matched.length>0,count:matched.length,files:matched},uploadDeep:deep};}return deep;};decorate(node);return node;}
 function countLeaves(node){const children=node.children||[];return children.length?children.reduce((sum,child)=>sum+countLeaves(child),0):1;}
 function leafDots(node){const assets=node.assets||{};const fallbackCoverage=node.coverage||{};const fallbackLinks=node.links||{};const items=[['special_issue','专刊'],['dashboard','行业仪表盘']];const available=items.map(([key,label])=>{const asset=assets[key]||{active:!!fallbackCoverage[key],href:fallbackLinks[key]||'#',count:0};return {key,label,asset,active:!!asset.active};}).filter(item=>item.active);if(!available.length)return '';return `<div class="leaf-tags">${available.map(({key,label,asset})=>{const status=`${label}：${asset.count||1}项`;const state=`${asset.count||1} 项`;
   // Dashboard tag: open full-screen detail directly instead of navigating
@@ -755,9 +756,9 @@ function leafDots(node){const assets=node.assets||{};const fallbackCoverage=node
   return `<a class="leaf-tag active" data-link-type="${key}" href="${href}" title="${status}"><span>${label}</span><small>${state}</small></a>`;}).join('')}</div>`;}
 function mapNodeOwnMatch(node){const q=mapAssetText(mapSearchDraft);if(!q)return false;return mapAssetText([node.title,...(node.path||[])].join(' ')).includes(q);}
 function mapNodeVisible(node){const q=mapAssetText(mapSearchDraft);if(!q)return true;if(mapNodeOwnMatch(node))return true;return (node.children||[]).some(mapNodeVisible);}
-function nodeUploadBox(node){const up=node.assets&&node.assets.upload;if(!up||!up.active)return '';const files=up.files||[];const items=files.map(f=>`<li><a href="#library" onclick="setTimeout(()=>{const s=document.getElementById('categoryFilter');if(s)s.value=${JSON.stringify(f.primary_category||"").replace(/"/g,'&quot;')};},60)" title="${escapeHtml(f.title||f.original_filename||'资料')}">${escapeHtml(f.title||f.original_filename||'未命名资料')}</a></li>`).join('');return `<div class="node-uploads" title="上传资料（行业图景节点：${escapeHtml((node.path||[]).join('/'))}）"><span class="node-uploads-head">上传资料 · ${up.count}</span><ul>${items}</ul></div>`;}
-function industryNode(node){if(!mapNodeVisible(node))return '';const children=node.children||[];const leaf=children.length===0;const open=mapSearchDraft||node.depth<mapOpenDepth||!!(node.assets&&node.assets.uploadDeep);const childHtml=children.map(industryNode).join('');const upBox=nodeUploadBox(node);return `<li class="mind-node depth-${node.depth} ${leaf?'leaf':''} ${mapNodeOwnMatch(node)?'match':''}"><details ${open?'open':''}><summary class="mind-card"><span class="mind-title${node.title.length>=20?' len-xl':node.title.length>=12?' len-lg':''}">${escapeHtml(node.title)}</span></summary>${upBox}${leaf?leafDots(node):childHtml?`<ul>${childHtml}</ul>`:''}</details></li>`;}
-async function loadIndustryMap(){const root=document.getElementById('industryTree');const meta=document.getElementById('industryMapMeta');if(!root)return;const group=parseHash().params.get('group')||'zero-carbon';const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};if(meta)meta.textContent=`${titleMap[group]||'零碳产业'}：正在加载 XMind 数据…`;try{const [mapRes,assets]=await Promise.all([apiFetch(`/api/industry-map?group=${encodeURIComponent(group==='zero-carbon'?'零碳产业':group==='ai-intelligent'?'AI与智能科技':'通用技术')}`),loadMapAssets()]);const data=await mapRes.json();const sheet=data.sheet||data.root||data;const rootNode=decorateIndustryAssets(sheet.root||sheet,assets);const sheetTitle=sheet.title||titleMap[group]||'行业图景';if(meta)meta.textContent=`${sheetTitle}：共 ${sheet.node_count||countNodes(rootNode)} 个节点，${countLeaves(rootNode)} 个叶子，最大层级 ${sheet.max_depth||maxDepth(rootNode)}`;root.innerHTML=`<div class="mindmap-canvas"><ul class="mindmap-root">${industryNode(rootNode)}</ul></div>`;requestAnimationFrame(initMapHorizontalScroll);}catch(err){root.innerHTML='<div class="status-note">图景加载失败，请检查 XMind 解析数据。</div>';if(meta)meta.textContent='图景加载失败';}}
+function nodeReportBtn(node){const up=node.assets&&node.assets.upload;if(!up||!up.active)return '';const path=(node.path||[]).join("/");return `<button type="button" class="node-report-btn" data-report-node="${escapeHtml(path)}" title="查看此节点的专题报告（${up.count} 份）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>专题报告<span class="n">${up.count}</span></button>`;}
+function industryNode(node){if(!mapNodeVisible(node))return '';const children=node.children||[];const leaf=children.length===0;const open=mapSearchDraft||node.depth<mapOpenDepth||!!(node.assets&&node.assets.uploadDeep);const childHtml=children.map(industryNode).join('');return `<li class="mind-node depth-${node.depth} ${leaf?'leaf':''} ${mapNodeOwnMatch(node)?'match':''}"><details ${open?'open':''}><summary class="mind-card"><span class="mind-title${node.title.length>=20?' len-xl':node.title.length>=12?' len-lg':''}">${escapeHtml(node.title)}</span>${nodeReportBtn(node)}</summary>${leaf?leafDots(node):childHtml?`<ul>${childHtml}</ul>`:''}</details></li>`;}
+async function loadIndustryMap(){const root=document.getElementById('industryTree');const meta=document.getElementById('industryMapMeta');if(!root)return;const group=parseHash().params.get('group')||'zero-carbon';const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};if(meta)meta.textContent=`${titleMap[group]||'零碳产业'}：正在加载 XMind 数据…`;try{const [mapRes,assets]=await Promise.all([apiFetch(`/api/industry-map?group=${encodeURIComponent(group==='zero-carbon'?'零碳产业':group==='ai-intelligent'?'AI与智能科技':'通用技术')}`),loadMapAssets()]);const data=await mapRes.json();const sheet=data.sheet||data.root||data;const rootNode=decorateIndustryAssets(sheet.root||sheet,assets);const sheetTitle=sheet.title||titleMap[group]||'行业图景';if(meta)meta.textContent=`${sheetTitle}：共 ${sheet.node_count||countNodes(rootNode)} 个节点，${countLeaves(rootNode)} 个叶子，最大层级 ${sheet.max_depth||maxDepth(rootNode)}`;root.innerHTML=`<div class="mindmap-canvas"><ul class="mindmap-root">${industryNode(rootNode)}</ul></div>`;root.querySelectorAll("button[data-report-node]").forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openReportModal(b.dataset.reportNode);});requestAnimationFrame(initMapHorizontalScroll);}catch(err){root.innerHTML='<div class="status-note">图景加载失败，请检查 XMind 解析数据。</div>';if(meta)meta.textContent='图景加载失败';}}
 function commercialStatusBadge(status,reason=''){
   const map={
     commercial_ready:['✓ 已达商用','commercial-status-ready','当前行业水平已达到可商业应用标准'],
@@ -1577,6 +1578,48 @@ function libAsset(id,asset,name,button){
     .then(r=>{if(!r||!r.ok)throw new Error("资产下载失败 "+(r?r.status:""));return r.blob().then(b=>{const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name||asset;a.click();setTimeout(()=>URL.revokeObjectURL(u),0);});})
     .catch(e=>alert(e.message))
     .finally(()=>{if(button)button.disabled=false;});
+}
+function reportExtTile(ext){return `<div class="report-ext"><strong>${escapeHtml((ext||"文件").toUpperCase().slice(0,5))}</strong><small>该格式暂无预览</small></div>`;}
+function reportCard(f){
+  const card=document.createElement("div");card.className="report-card";
+  const ext=((f.original_filename||"").split(".").pop()||"").toLowerCase();
+  const thumb=document.createElement("div");thumb.className="report-thumb";
+  thumb.innerHTML='<div class="report-loading">正在生成首页预览…</div>';
+  apiFetch("/api/uploads/"+encodeURIComponent(f.id)+"/preview")
+    .then(r=>{if(!r||!r.ok)throw new Error("preview unavailable");return r.blob();})
+    .then(b=>{const url=URL.createObjectURL(b);const img=document.createElement("img");img.alt=f.title||f.original_filename||"首页预览";img.onload=()=>URL.revokeObjectURL(url);img.src=url;thumb.innerHTML="";thumb.appendChild(img);})
+    .catch(()=>{thumb.innerHTML=reportExtTile(ext);});
+  card.appendChild(thumb);
+  const body=document.createElement("div");body.className="report-card-body";
+  const title=document.createElement("div");title.className="report-title";const titleText=f.title||f.original_filename||"未命名资料";title.textContent=titleText;title.title=titleText;
+  const meta=document.createElement("div");meta.className="report-meta";
+  meta.innerHTML=`<span class="name" title="${escapeHtml(f.original_filename||"")}">${escapeHtml(f.original_filename||"-")}</span><span>·</span><span>${escapeHtml(libFmtSize(f.size_bytes||0))}</span><span>·</span><span>${escapeHtml(libFmtTime(f.created_at))}</span>`;
+  body.appendChild(title);body.appendChild(meta);
+  const actions=document.createElement("div");actions.className="report-card-actions";
+  const btn=document.createElement("button");btn.className="secondary-btn";btn.type="button";btn.textContent="下载原文件";
+  btn.onclick=async()=>{btn.disabled=true;try{const r=await apiFetch("/api/uploads/"+encodeURIComponent(f.id)+"/download");if(!r||!r.ok)throw new Error("下载失败 "+(r?r.status:""));const b=await r.blob();const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=f.original_filename||f.title||"资料";a.click();setTimeout(()=>URL.revokeObjectURL(u),0);}catch(e){window.alert(e.message||"下载失败");}finally{btn.disabled=false;}};
+  actions.appendChild(btn);body.appendChild(actions);
+  card.appendChild(body);
+  return card;
+}
+function openReportModal(path){
+  if(document.getElementById("reportModalOverlay"))return;
+  const files=(mapUploadsByPath instanceof Map?mapUploadsByPath.get(path):null)||[];
+  const overlay=document.createElement("div");
+  overlay.id="reportModalOverlay";
+  overlay.style.cssText="position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px 16px;overflow-y:auto;";
+  overlay.innerHTML=`<div class="lib-upload-dialog" role="dialog" aria-modal="true" aria-label="专题报告" style="width:min(920px,100%);margin:auto;">
+    <div class="lib-upload-head"><div><h2>专题报告</h2><div class="report-sub">${escapeHtml(path.split("/").join(" › "))} · ${files.length} 份资料</div></div><button class="lib-upload-close" id="rpCloseBtn" type="button" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="lib-upload-body"><div class="report-grid" id="reportGrid"></div></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const onEsc=e=>{if(e.key==="Escape")close();};
+  const close=()=>{overlay.remove();document.removeEventListener("keydown",onEsc);};
+  document.getElementById("rpCloseBtn").onclick=close;
+  overlay.addEventListener("click",e=>{if(e.target===overlay)close();});
+  document.addEventListener("keydown",onEsc);
+  const grid=document.getElementById("reportGrid");
+  files.forEach(f=>grid.appendChild(reportCard(f)));
 }
 function libClassify(id,name,button){
   if(document.getElementById("classifyModalOverlay"))return;

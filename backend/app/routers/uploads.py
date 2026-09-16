@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
+import subprocess
+import tempfile
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import (
@@ -13,7 +17,7 @@ from fastapi import (
     HTTPException,
     UploadFile,
 )
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -38,6 +42,44 @@ from app.services.upload_ingestion import (
 )
 
 router = APIRouter(tags=["uploads"])
+
+logger = logging.getLogger(__name__)
+
+OFFICE_PREVIEW_EXTS = {".ppt", ".pptx", ".doc", ".docx", ".odp", ".odt", ".ods", ".xls", ".xlsx"}
+
+
+def _render_pdf_first_page(pdf_path: Path, out_png: Path, scale: float = 1.6) -> None:
+    """用 pypdfium2 把 PDF 第一页渲染为 PNG（Docling 同源依赖，无需额外安装）。"""
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(str(pdf_path))
+    try:
+        bitmap = doc[0].render(scale=scale)
+        image = bitmap.to_pil()
+    finally:
+        doc.close()
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    image.save(out_png, format="PNG")
+
+
+def _convert_office_first_page(original: Path, out_png: Path) -> None:
+    """LibreOffice 无头模式把 Office 文档转 PDF，再渲染第一页。"""
+    with tempfile.TemporaryDirectory(prefix="techdb-preview-") as tmp:
+        subprocess.run(
+            [
+                "soffice", "--headless",
+                "-env:UserInstallation=file://" + tmp + "/lo",
+                "--convert-to", "pdf", "--outdir", tmp, str(original),
+            ],
+            check=True,
+            timeout=120,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        converted = Path(tmp) / (original.stem + ".pdf")
+        if not converted.is_file():
+            raise RuntimeError("LibreOffice 未产出 PDF")
+        _render_pdf_first_page(converted, out_png)
 
 
 class ClassificationOverride(BaseModel):
@@ -151,6 +193,58 @@ def download_document_asset(file_id: str, asset: str,
     if not path.is_file():
         raise HTTPException(404, "文档资产不存在，请重试解析")
     return FileResponse(path, filename=names[asset], media_type="application/octet-stream")
+
+
+@router.get("/uploads/{file_id}/preview")
+def upload_file_preview(
+    file_id: str,
+    current_user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """资料首页预览：PDF/Office 渲染第一页为 PNG（结果缓存在资产包），图片直接返回原件。"""
+    record = db.get(UploadedFile, _uuid_or_400(file_id))
+    if record is None or record.storage_status != "stored":
+        raise HTTPException(404, "资料不存在")
+    try:
+        original = safe_upload_path(record.stored_filename)
+    except ValueError as exc:
+        raise HTTPException(500, "文件存储键无效") from exc
+    if not original.is_file():
+        raise HTTPException(410, "文件已被移除")
+
+    preview_path = None
+    bundle = str((record.document_assets or {}).get("bundle") or "")
+    if bundle:
+        try:
+            candidate = safe_upload_path(bundle + "/preview_page1.png")
+            if candidate.is_file():
+                return FileResponse(candidate, media_type="image/png")
+            preview_path = candidate
+        except ValueError:
+            preview_path = None
+
+    mime = (record.mime_type or "").lower()
+    suffix = original.suffix.lower()
+
+    if mime.startswith("image/"):
+        return FileResponse(original, media_type=mime or "image/png")
+
+    if preview_path is None:
+        raise HTTPException(404, "该资料缺少资产包，无法生成预览")
+
+    try:
+        if mime == "application/pdf" or suffix == ".pdf":
+            _render_pdf_first_page(original, preview_path)
+        elif suffix in OFFICE_PREVIEW_EXTS:
+            _convert_office_first_page(original, preview_path)
+        else:
+            raise HTTPException(404, "该资料类型暂不支持预览")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.warning("资料首页预览生成失败: %s", file_id, exc_info=True)
+        raise HTTPException(404, "无法生成首页预览，请稍后重试")
+    return FileResponse(preview_path, media_type="image/png")
 
 
 @router.get("/uploads/taxonomy")
