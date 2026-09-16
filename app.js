@@ -417,8 +417,8 @@ function homeView(){
   <button class="home-drawer-tab" id="homeDrawerOpen" type="button" aria-expanded="false" aria-controls="homeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span>技术预警 · 技术边界</span></button>
   <section class="home-section home-knowledge-section" aria-label="技术情报知识库问答">
     <div class="panel conversation-panel" id="knowledgeConversation">
+      <div class="qa-graph-container" id="qaGraphContainer"><div class="qa-graph-placeholder">正在读取关系图谱…</div></div>
       <div class="qa-empty-state" id="knowledgeEmptyState" ${activeSessionMessages.length?'hidden':''}>
-        <div class="qa-graph-container" id="qaGraphContainer"><div class="qa-graph-placeholder">正在读取关系图谱…</div></div>
         <div class="qa-empty-copy"><strong>技术情报知识库</strong><span>关系图谱概览与广度情报索引来自同一套检索服务</span></div>
         <div class="qa-example-questions"><button type="button" data-example-query="固态电池最新研究进展有哪些？">固态电池最新研究进展有哪些？</button><button type="button" data-example-query="钙钛矿太阳能电池的效率纪录是多少？">钙钛矿太阳能电池的效率纪录是多少？</button><button type="button" data-example-query="锂电池回收技术有哪些新突破？">锂电池回收技术有哪些新突破？</button></div>
       </div>

@@ -61,10 +61,15 @@ def test_home_layout_is_boundary_alert_and_knowledge_workbench():
     assert "homeDrawerOutsideBound" in js
     assert "event.target.closest('.home-drawer,.home-drawer-tab')" in js
     assert "home-drawer-collapse" not in css
+    # 知识图谱整页背景 + 居中搜索工作台（2026-09 改版契约）
     assert ".home-knowledge-section .qa-graph-container{" in css
-    assert "flex:1 1 0" in css
-    assert "width:100%" in css
-    assert "min-height:360px" in css
+    graph_block = css.split(".home-knowledge-section .qa-graph-container{", 1)[1].split("}", 1)[0]
+    assert "position:absolute" in graph_block and "inset:0" in graph_block
+    assert ".home-knowledge-section .qa-empty-state:not([hidden]){display:contents}" in css
+    assert ":has(.qa-empty-state[hidden])" in css
+    assert ".home-knowledge-section .query-box{" in css
+    assert "order:2" in css
+    assert "min-height:360px" not in graph_block
     assert "最新研究结论" not in js
     assert "高信号变化" not in js
     assert "基于知识库的问答" not in js
