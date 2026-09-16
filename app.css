@@ -1083,7 +1083,7 @@ a:hover{color:var(--brand-lighter)}
   white-space:pre-line;
   display:-webkit-box;
   -webkit-box-orient:vertical;
-  -webkit-line-clamp:1;
+  -webkit-line-clamp:2;
   overflow:hidden;
 }
 .home-alert-reason-text.expanded{
