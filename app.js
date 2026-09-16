@@ -1535,22 +1535,24 @@ async function loadLibrary(){
     const canRetry=libIsAdmin&&["failed","unclassified","legacy_unclassified"].includes(f.classification_status);
     const canRetryEmbedding=libIsAdmin&&f.embedding_status==="failed";
     const canClassify=libIsAdmin&&["classified","unclassified","irrelevant","legacy_unclassified","failed"].includes(f.classification_status);
+    const canForce=libIsAdmin&&f.classification_status==="irrelevant"&&f.embedding_status==="skipped";
     const category=f.primary_category||"-";
     const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
     const statusDetail=f.embedding_error||f.classification_error||f.classification_reason||(status==="document_processing"?"正在执行 Docling 文档理解；首次使用前模型已由启动脚本准备":"");
-    const statusSub=status==="embedding_skipped"?"不相关不入索引，可人工分类":status==="embedding_failed"?"索引未完成，可重试":status==="document_processing"?"Docling 解析中":"";
+    const statusSub=status==="embedding_skipped"?"领域外不入索引，可强制收录":status==="embedding_failed"?"索引未完成，可重试":status==="document_processing"?"Docling 解析中":"";
     const baseName=f.title||f.original_filename||"资料";
-    const assetBtns=f.document_assets?["markdown|MD|document.md","docling_json|JSON|document.json","chunks|分块|chunks.jsonl","chunk_metadata|元数据|chunk_metadata.jsonl"].map(s=>{const [a,label,fn]=s.split("|");return `<button class="secondary-btn lib-asset-btn" data-lib-asset="${escapeHtml(f.id)}|${a}" data-lib-name="${escapeHtml(baseName+"-"+fn)}">解析${label}</button>`;}).join(""):"";
+    const assetBtns=f.document_assets?`<button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|markdown" data-lib-name="${escapeHtml(baseName+"-document.md")}">Markdown</button><button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|chunks" data-lib-name="${escapeHtml(baseName+"-chunks.jsonl")}">Chunk</button>`:"";
+    const catActions=(canClassify||canRetry)?`<div class="cat-actions">${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}</div>`:"";
     return `<tr>
       <td class="fname">${escapeHtml(f.title||f.original_filename)}${aiMark}<small>${escapeHtml(f.original_filename)}${f.note?" · "+escapeHtml(f.note):""}</small></td>
-      <td class="category-cell" title="${escapeHtml(category)}">${escapeHtml(category)}</td>
+      <td class="category-cell" title="${escapeHtml(category)}">${escapeHtml(category)}${catActions}</td>
       <td><span class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub?`<div class="status-sub">${escapeHtml(statusSub)}</div>`:""}</td>
       <td><span class="src-badge">${escapeHtml(f.source_type||"-")}</span></td>
       <td>${conf}</td>
       <td class="size-cell">${libFmtSize(f.size_bytes)}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
-      <td><div class="row-actions"><button class="secondary-btn" data-download="${escapeHtml(f.id)}">下载</button>${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}${canRetryEmbedding?`<button class="secondary-btn" data-retry-embedding="${escapeHtml(f.id)}">重试索引</button>`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div>${assetBtns?`<div class="row-actions lib-asset-row">${assetBtns}</div>`:""}</td>
+      <td><div class="row-actions"><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}${canRetryEmbedding?`<button class="secondary-btn" data-retry-embedding="${escapeHtml(f.id)}">重试索引</button>`:""}${canForce?`<button class="secondary-btn" data-lib-force="${escapeHtml(f.id)}">强制索引</button>`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
     </tr>`;
   }).join("");
   const start=libTotal?libOffset+1:0,end=Math.min(libOffset+data.files.length,libTotal);
@@ -1564,6 +1566,7 @@ async function loadLibrary(){
   tb.querySelectorAll("button[data-retry-embedding]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retryEmbedding,"embedding/retry",b));
   tb.querySelectorAll("button[data-lib-delete]").forEach(b=>b.onclick=()=>libDelete(b.dataset.libDelete,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-classify]").forEach(b=>b.onclick=()=>libClassify(b.dataset.libClassify,b.dataset.libName,b));
+  tb.querySelectorAll("button[data-lib-force]").forEach(b=>b.onclick=()=>libForce(b.dataset.libForce,b));
   tb.querySelectorAll("button[data-lib-asset]").forEach(b=>b.onclick=()=>{const [id,asset]=b.dataset.libAsset.split("|");libAsset(id,asset,b.dataset.libName,b);});
   if(data.files.some(f=>["pending","processing"].includes(f.classification_status)||["pending","processing"].includes(f.embedding_status)))libRefreshTimer=setTimeout(loadLibrary,3000);
 }
@@ -1573,6 +1576,13 @@ function libAsset(id,asset,name,button){
     .then(r=>{if(!r||!r.ok)throw new Error("资产下载失败 "+(r?r.status:""));return r.blob().then(b=>{const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name||asset;a.click();setTimeout(()=>URL.revokeObjectURL(u),0);});})
     .catch(e=>alert(e.message))
     .finally(()=>{if(button)button.disabled=false;});
+}
+function libForce(id,button){
+  if(!window.confirm("强制收录该资料进入问答索引？分类标签保持「不相关」，索引状态将变为可检索。"))return;
+  button.disabled=true;
+  apiFetch("/api/uploads/"+encodeURIComponent(id)+"/embedding/force",{method:"POST"})
+    .then(r=>{if(r&&r.ok){loadLibrary();}else{return r.json().catch(()=>({})).then(j=>{window.alert(j.detail||("操作失败 "+(r?r.status:"")));button.disabled=false;});}})
+    .catch(e=>{window.alert("网络错误："+e.message);button.disabled=false;});
 }
 function libClassify(id,name,button){
   if(document.getElementById("classifyModalOverlay"))return;
