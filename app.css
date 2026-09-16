@@ -673,8 +673,7 @@ a:hover{color:var(--brand-lighter)}
   padding:18px 20px 13px;
   border-bottom:1px solid var(--border-subtle);
 }
-.home-section-heading.compact{border-bottom:0}
-.home-section-heading.compact{padding-top:15px;padding-bottom:11px}
+.home-section-heading.compact{padding-top:16px;padding-bottom:13px}
 .home-section-heading .eyebrow{margin-bottom:3px}
 .home-section-heading h1,
 .home-section-heading h2{
@@ -684,8 +683,24 @@ a:hover{color:var(--brand-lighter)}
   letter-spacing:-.015em;
 }
 .home-section-heading h1{font-size:20px}
-.home-section-heading h2{font-size:16px}
+.home-section-heading h2{font-size:16.5px}
+/* 标题前的品牌色小徽章：技术预警=铃铛 / 技术边界=层叠 */
+.home-heading-badge{
+  display:grid;
+  place-items:center;
+  width:27px;
+  height:27px;
+  flex:none;
+  border-radius:9px;
+  background:linear-gradient(135deg,var(--brand-bg),rgba(94,106,210,.16));
+  color:var(--brand);
+}
+.home-heading-badge svg{width:14px;height:14px}
+.home-boundary-section .home-section-heading{align-items:center;padding-bottom:15px}
 .home-section-link{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
   border:0;
   padding:5px 0;
   background:transparent;
@@ -693,13 +708,19 @@ a:hover{color:var(--brand-lighter)}
   font:600 12px/1.2 inherit;
   cursor:pointer;
 }
+.home-section-link span{transition:transform .18s ease}
 .home-section-link:hover{color:var(--brand-light)}
+.home-section-link:hover span{transform:translateX(2px)}
 
+/* 边界卡片区：浅灰托盘承载白色卡片，制造层次（白卡不再浮于白底） */
 .home-boundary-grid{
   display:grid;
   grid-template-columns:repeat(3,minmax(240px,1fr));
   gap:12px;
-  padding:0 14px 14px;
+  margin:0 14px 14px;
+  padding:12px;
+  border-radius:var(--radius-lg);
+  background:var(--bg-panel);
   overflow-x:auto;
 }
 .home-loading-card{
@@ -711,24 +732,24 @@ a:hover{color:var(--brand-lighter)}
   font-size:13px;
   border:1px dashed var(--border-standard);
   border-radius:var(--radius-md);
-  background:var(--bg-panel);
+  background:var(--bg-canvas);
 }
 .home-boundary-card{
   position:relative;
   min-width:0;
-  min-height:214px;
+  min-height:218px;
   display:flex;
   flex-direction:column;
-  border:1px solid var(--border-standard);
-  border-radius:var(--radius-md);
-  padding:14px 15px 12px 18px;
+  border:1px solid var(--border-subtle);
+  border-radius:10px;
+  padding:14px 15px 13px 18px;
   background:var(--bg-canvas);
   color:var(--text-primary);
   font:inherit;
   text-align:left;
   cursor:pointer;
   overflow:hidden;
-  box-shadow:var(--shadow-card);
+  box-shadow:0 1px 2px rgba(16,24,40,.04);
   transition:border-color .2s ease,box-shadow .25s ease,transform .2s cubic-bezier(.16,1,.3,1);
 }
 .home-boundary-card::before{
@@ -737,13 +758,13 @@ a:hover{color:var(--brand-lighter)}
   left:0;top:0;bottom:0;
   width:3px;
   background:linear-gradient(180deg,var(--brand-light),var(--brand));
-  opacity:.25;
+  opacity:.35;
   transition:opacity .25s ease;
 }
 .home-boundary-card:hover{
   border-color:var(--brand-border);
   box-shadow:var(--shadow-card-hover);
-  transform:translateY(-1px);
+  transform:translateY(-2px);
 }
 .home-boundary-card:hover::before{opacity:1}
 .home-boundary-card.primary{
@@ -759,30 +780,52 @@ a:hover{color:var(--brand-lighter)}
   color:var(--text-quaternary);
   font-size:10px;
 }
+/* 状态徽章：持续更新=绿色呼吸点；已审核/已审阅=品牌色静态点 */
 .boundary-card-meta span{
-  padding:2px 6px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:2.5px 9px;
   border-radius:999px;
-  background:var(--green-bg);
-  color:var(--green);
+  font-size:10px;
   font-weight:600;
+  letter-spacing:.02em;
 }
+.boundary-card-meta span::before{
+  content:"";
+  width:5px;
+  height:5px;
+  border-radius:50%;
+  background:currentColor;
+  flex:none;
+}
+.boundary-card-meta span.is-live{background:var(--green-bg);color:var(--green)}
+.boundary-card-meta span.is-live::before{animation:boundaryLive 2.2s ease-in-out infinite}
+.boundary-card-meta span.is-ok{background:var(--brand-bg);color:var(--brand)}
+@keyframes boundaryLive{0%,100%{opacity:1}50%{opacity:.3}}
 .home-boundary-card h3{
   margin:10px 0 8px;
-  font-size:14px;
+  font-size:14.5px;
   font-weight:650;
-  line-height:1.28;
+  line-height:1.3;
+  letter-spacing:-.01em;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
   overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
 }
+/* 「是什么」内嵌浅灰面板：白卡上的凹陷层次 */
 .boundary-card-definition{
   display:grid;
   grid-template-columns:auto 1fr;
-  gap:7px;
-  margin:0 0 9px;
+  gap:8px;
+  margin:0 0 10px;
+  padding:8px 10px;
+  border-radius:9px;
+  background:var(--bg-panel);
   color:var(--text-secondary);
   font-size:11px;
-  line-height:1.32;
+  line-height:1.45;
 }
 .boundary-card-def-text{min-width:0}
 .boundary-card-definition strong{
@@ -791,12 +834,23 @@ a:hover{color:var(--brand-lighter)}
   font-weight:650;
   white-space:nowrap;
 }
+/* 「关键指标边界」小节签：渐变短线 + 宽字距 */
 .boundary-card-label{
-  margin-bottom:5px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-bottom:7px;
   color:var(--text-quaternary);
-  font-size:9px;
-  font-weight:650;
-  letter-spacing:.05em;
+  font-size:9.5px;
+  font-weight:700;
+  letter-spacing:.12em;
+}
+.boundary-card-label::before{
+  content:"";
+  width:9px;
+  height:2px;
+  border-radius:2px;
+  background:linear-gradient(90deg,var(--brand-light),var(--brand));
 }
 .home-boundary-card ol{
   display:grid;
@@ -809,28 +863,50 @@ a:hover{color:var(--brand-lighter)}
 .home-boundary-card li{
   counter-increment:boundary;
   display:flex;
+  align-items:flex-start;
   gap:7px;
   min-width:0;
   color:var(--text-secondary);
   font-size:11px;
-  line-height:1.28;
+  line-height:1.35;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
 }
+/* 序号升级为品牌色小芯片 */
 .home-boundary-card li:before{
   content:counter(boundary,decimal-leading-zero);
   flex:0 0 auto;
-  color:var(--text-quaternary);
-  font:500 9px/1.5 var(--mono);
-}
-.boundary-card-action{
-  margin-top:auto;
-  padding-top:9px;
+  margin-top:1px;
+  padding:0 4px;
+  border-radius:4px;
+  background:var(--brand-bg);
   color:var(--brand);
-  font-size:10px;
-  font-weight:600;
+  font:600 9px/1.5 var(--mono);
 }
+/* 「查看边界详情」升级为胶囊按钮，悬停填充品牌色、箭头滑动 */
+.boundary-card-action{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  align-self:flex-start;
+  margin-top:auto;
+  padding:4px 11px;
+  border:1px solid var(--brand-border);
+  border-radius:999px;
+  background:var(--brand-bg);
+  color:var(--brand);
+  font-size:10.5px;
+  font-weight:650;
+  transition:background .18s ease,color .18s ease,border-color .18s ease;
+}
+.boundary-card-action span{transition:transform .18s ease}
+.home-boundary-card:hover .boundary-card-action{
+  background:var(--brand);
+  border-color:var(--brand);
+  color:#fff;
+}
+.home-boundary-card:hover .boundary-card-action span{transform:translateX(3px)}
 
 /* ── 首页 · 技术预警：预警卡片流 ───────────────────────────── */
 .home-alert-table-wrap{
@@ -859,46 +935,57 @@ a:hover{color:var(--brand-lighter)}
   font-variant-numeric:tabular-nums;
   white-space:nowrap;
 }
+/* 分页器：整体嵌在一枚胶囊里，按钮圆形、悬停品牌色 */
 .home-alert-pagination{
   display:flex;
   align-items:center;
-  gap:3px;
+  gap:2px;
+  padding:3px 4px;
+  border:1px solid var(--border-subtle);
+  border-radius:999px;
+  background:var(--bg-panel);
   color:var(--text-tertiary);
-  font:500 10px/1 var(--mono);
+  font:600 10px/1 var(--mono);
   font-variant-numeric:tabular-nums;
 }
 .home-alert-pagination button{
   display:grid;
   place-items:center;
-  width:22px;
-  height:22px;
+  width:20px;
+  height:20px;
   padding:0;
-  border:1px solid var(--border-subtle);
-  border-radius:7px;
-  background:var(--bg-canvas);
+  border:0;
+  border-radius:50%;
+  background:transparent;
   color:var(--text-secondary);
   cursor:pointer;
-  transition:color .15s,border-color .15s,background .15s;
+  transition:color .15s,background .15s;
 }
 .home-alert-pagination button svg{width:12px;height:12px}
-.home-alert-pagination button:hover:not(:disabled){color:var(--brand);border-color:var(--brand-border);background:var(--brand-bg)}
+.home-alert-pagination button:hover:not(:disabled){color:var(--brand);background:var(--brand-bg)}
 .home-alert-pagination button:disabled{opacity:.35;cursor:default}
 .home-alert-pagination button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
 .home-alert-pagination span{min-width:34px;text-align:center}
+/* 预警列表：浅灰托盘承载白色卡片（与技术边界卡片区同一层次语言） */
 .home-alert-list{
   display:flex;
   flex-direction:column;
-  gap:7px;
-  padding:10px 12px 12px;
+  gap:8px;
+  margin:0 14px 14px;
+  padding:10px;
+  border-radius:var(--radius-lg);
+  background:var(--bg-panel);
 }
 .home-alert-item{
   position:relative;
-  padding:9px 13px 8px 17px;
+  padding:10px 13px 10px 17px;
   border:1px solid var(--border-subtle);
-  border-radius:var(--radius-md);
+  border-radius:10px;
   background:var(--bg-canvas);
+  box-shadow:0 1px 2px rgba(16,24,40,.03);
   transition:border-color .18s,box-shadow .22s,transform .18s;
 }
+/* 左缘严重度渐变条（默认品牌色 / 高危红 / 关注橙） */
 .home-alert-item::before{
   content:"";
   position:absolute;
@@ -906,13 +993,13 @@ a:hover{color:var(--brand-lighter)}
   top:-1px;
   bottom:-1px;
   width:3px;
-  border-radius:var(--radius-md) 0 0 var(--radius-md);
-  background:var(--brand);
-  opacity:.45;
+  border-radius:10px 0 0 10px;
+  background:linear-gradient(180deg,var(--brand-light),var(--brand));
+  opacity:.5;
   transition:opacity .18s;
 }
-.home-alert-item.sev-high::before{background:var(--red)}
-.home-alert-item.sev-orange::before{background:var(--amber)}
+.home-alert-item.sev-high::before{background:linear-gradient(180deg,#f87171,var(--red))}
+.home-alert-item.sev-orange::before{background:linear-gradient(180deg,#fbbf24,var(--amber))}
 .home-alert-item:hover{
   border-color:var(--brand-border);
   box-shadow:var(--shadow-card-hover);
@@ -925,10 +1012,13 @@ a:hover{color:var(--brand-lighter)}
   gap:7px;
   min-width:0;
 }
+/* 类型标签：带小图标（突破=闪电 政策=盾牌 产业=趋势 观察=罗盘） */
 .home-alert-tag{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
   flex:0 0 auto;
-  margin-left:-8px; /* 光学对齐：底色框左探 8px，使标签文字与下方标题/预警原因同一起始线 */
-  padding:2px 8px;
+  padding:2.5px 9px;
   border-radius:999px;
   background:var(--brand-bg);
   color:var(--brand);
@@ -938,6 +1028,7 @@ a:hover{color:var(--brand-lighter)}
   line-height:1.4;
   white-space:nowrap;
 }
+.home-alert-tag svg{width:10px;height:10px;flex:none}
 .home-alert-tag.t-breakthrough{background:var(--green-bg);color:var(--green)}
 .home-alert-tag.t-policy{background:var(--amber-bg);color:var(--amber)}
 .home-alert-tag.t-industry{background:var(--type-news-bg);color:var(--type-news)}
@@ -964,22 +1055,24 @@ a:hover{color:var(--brand-lighter)}
   -webkit-box-orient:vertical;
   -webkit-line-clamp:2;
   overflow:hidden;
-  margin-top:6px;
+  margin-top:7px;
   color:var(--text-primary);
-  font-size:13px;
+  font-size:13.5px;
   font-weight:600;
-  line-height:1.4;
+  line-height:1.42;
   text-decoration:none;
 }
 .home-alert-title:hover{color:var(--brand)}
 .home-alert-title:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:4px}
+/* 预警原因：白卡上的浅灰内嵌面板，替代原分隔线 */
 .home-alert-reason{
   display:flex;
   align-items:flex-start;
   gap:7px;
-  margin-top:6px;
-  padding-top:6px;
-  border-top:1px solid var(--border-subtle);
+  margin-top:8px;
+  padding:7px 10px;
+  border-radius:8px;
+  background:var(--bg-panel);
 }
 /* "预警原因"四字标红加粗，字号与正文一致 */
 .home-alert-reason-label{color:var(--red);font-weight:700}
@@ -2479,22 +2572,7 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 .home-drawer .home-boundary-card{
   gap:0;
 }
-.home-drawer .boundary-card-action{
-  display:inline-flex;
-  align-items:center;
-  gap:5px;
-  margin-top:10px;
-  padding:6px 10px 6px 11px;
-  border:1px solid var(--border-standard);
-  border-radius:8px;
-  align-self:flex-start;
-  color:var(--brand);
-  font-size:11px;
-  font-weight:600;
-  line-height:1;
-  transition:border-color .15s,background .15s;
-}
-.home-boundary-card:hover .boundary-card-action{border-color:var(--brand-border);background:var(--brand-bg)}
+/* 边界卡「查看边界详情」统一走基础胶囊样式（见上方 .boundary-card-action） */
 .home-drawer .home-boundary-grid{grid-template-columns:1fr;overflow-x:visible}
 .home-drawer-tab{
   position:absolute;
