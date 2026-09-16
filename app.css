@@ -2324,6 +2324,10 @@ a:hover{color:var(--brand-lighter)}
 .library .lib-count{color:var(--text-tertiary);font-size:12px;font-variant-numeric:tabular-nums}
 .library .secondary-btn:disabled{opacity:.45;cursor:not-allowed}
 .library .lib-delete-btn:hover:not(:disabled){border-color:var(--red-bg);background:var(--red-bg);color:var(--red)}
+.library .status-sub{margin-top:4px;font-size:11px;color:var(--text-tertiary);line-height:1.4}
+.library .lib-asset-row{margin-top:6px}
+.library .lib-asset-btn{padding:3px 8px;font-size:11px;color:var(--text-tertiary)}
+.library .lib-asset-btn:hover:not(:disabled){border-color:var(--brand-border);background:var(--brand-bg);color:var(--brand)}
 /* 上传资料 in-app 弹窗 */
 .lib-upload-dialog{width:min(640px,100%);background:var(--bg-canvas);border:1px solid var(--border-standard);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg,0 24px 64px rgba(15,23,42,.24));max-height:calc(100vh - 96px);display:flex;flex-direction:column}
 .lib-upload-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border-subtle)}

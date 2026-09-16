@@ -367,7 +367,7 @@ document.addEventListener('click',event=>{
 });
 function parseHash(){const raw=(location.hash||"#home").slice(1);const [routePart,queryPart=""]=raw.split("?");return {route:routes[routePart]?routePart:"home",params:new URLSearchParams(queryPart)};}
 function setRoute(route,params){const q=params?`?${params.toString()}`:"";location.hash=route+q;}
-function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}closeUploadModal();if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){syncConversationRequestControls();loadAssistantModels();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
+function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}closeUploadModal();if(libClassifyClose)libClassifyClose();if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){syncConversationRequestControls();loadAssistantModels();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
 async function ensureCurrentUser(){if(!currentUser){await loadCurrentUser();}return currentUser;}
 function loadCurrentUser(){return apiFetch("/api/auth/me").then(r=>r.ok?r.json():null).then(d=>{if(d){currentUser=d;}}).catch(()=>{});}
 function isAdmin(){return currentUser&&currentUser.role==="admin";}
@@ -1534,19 +1534,23 @@ async function loadLibrary(){
     const aiMark=f.title_source==="manual"?"":`<span class="ai-mark ${escapeHtml(f.title_source||"")}">${f.title_source==="ai_filled"?"AI":"…"}</span>`;
     const canRetry=libIsAdmin&&["failed","unclassified","legacy_unclassified"].includes(f.classification_status);
     const canRetryEmbedding=libIsAdmin&&f.embedding_status==="failed";
+    const canClassify=libIsAdmin&&["classified","unclassified","irrelevant","legacy_unclassified","failed"].includes(f.classification_status);
     const category=f.primary_category||"-";
     const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
     const statusDetail=f.embedding_error||f.classification_error||f.classification_reason||(status==="document_processing"?"正在执行 Docling 文档理解；首次使用前模型已由启动脚本准备":"");
+    const statusSub=status==="embedding_skipped"?"不相关不入索引，可人工分类":status==="embedding_failed"?"索引未完成，可重试":status==="document_processing"?"Docling 解析中":"";
+    const baseName=f.title||f.original_filename||"资料";
+    const assetBtns=f.document_assets?["markdown|MD|document.md","docling_json|JSON|document.json","chunks|分块|chunks.jsonl","chunk_metadata|元数据|chunk_metadata.jsonl"].map(s=>{const [a,label,fn]=s.split("|");return `<button class="secondary-btn lib-asset-btn" data-lib-asset="${escapeHtml(f.id)}|${a}" data-lib-name="${escapeHtml(baseName+"-"+fn)}">解析${label}</button>`;}).join(""):"";
     return `<tr>
       <td class="fname">${escapeHtml(f.title||f.original_filename)}${aiMark}<small>${escapeHtml(f.original_filename)}${f.note?" · "+escapeHtml(f.note):""}</small></td>
       <td class="category-cell" title="${escapeHtml(category)}">${escapeHtml(category)}</td>
-      <td><span class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span></td>
+      <td><span class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub?`<div class="status-sub">${escapeHtml(statusSub)}</div>`:""}</td>
       <td><span class="src-badge">${escapeHtml(f.source_type||"-")}</span></td>
       <td>${conf}</td>
       <td class="size-cell">${libFmtSize(f.size_bytes)}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
-      <td><div class="row-actions"><button class="secondary-btn" data-download="${escapeHtml(f.id)}">下载</button>${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}${canRetryEmbedding?`<button class="secondary-btn" data-retry-embedding="${escapeHtml(f.id)}">重试索引</button>`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
+      <td><div class="row-actions"><button class="secondary-btn" data-download="${escapeHtml(f.id)}">下载</button>${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}${canRetryEmbedding?`<button class="secondary-btn" data-retry-embedding="${escapeHtml(f.id)}">重试索引</button>`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div>${assetBtns?`<div class="row-actions lib-asset-row">${assetBtns}</div>`:""}</td>
     </tr>`;
   }).join("");
   const start=libTotal?libOffset+1:0,end=Math.min(libOffset+data.files.length,libTotal);
@@ -1559,8 +1563,73 @@ async function loadLibrary(){
   tb.querySelectorAll("button[data-retry]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retry,"classification/retry",b));
   tb.querySelectorAll("button[data-retry-embedding]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retryEmbedding,"embedding/retry",b));
   tb.querySelectorAll("button[data-lib-delete]").forEach(b=>b.onclick=()=>libDelete(b.dataset.libDelete,b.dataset.libName,b));
+  tb.querySelectorAll("button[data-lib-classify]").forEach(b=>b.onclick=()=>libClassify(b.dataset.libClassify,b.dataset.libName,b));
+  tb.querySelectorAll("button[data-lib-asset]").forEach(b=>b.onclick=()=>{const [id,asset]=b.dataset.libAsset.split("|");libAsset(id,asset,b.dataset.libName,b);});
   if(data.files.some(f=>["pending","processing"].includes(f.classification_status)||["pending","processing"].includes(f.embedding_status)))libRefreshTimer=setTimeout(loadLibrary,3000);
 }
+function libAsset(id,asset,name,button){
+  if(button)button.disabled=true;
+  apiFetch(`/api/uploads/${encodeURIComponent(id)}/assets/${encodeURIComponent(asset)}`)
+    .then(r=>{if(!r||!r.ok)throw new Error("资产下载失败 "+(r?r.status:""));return r.blob().then(b=>{const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name||asset;a.click();setTimeout(()=>URL.revokeObjectURL(u),0);});})
+    .catch(e=>alert(e.message))
+    .finally(()=>{if(button)button.disabled=false;});
+}
+function libClassify(id,name,button){
+  if(document.getElementById("classifyModalOverlay"))return;
+  const overlay=document.createElement("div");
+  overlay.id="classifyModalOverlay";
+  overlay.style.cssText="position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow-y:auto;";
+  overlay.innerHTML=`<div class="lib-upload-dialog" role="dialog" aria-modal="true" aria-label="人工分类" style="width:min(460px,100%);">
+    <div class="lib-upload-head"><h2>人工分类${name?"："+escapeHtml(name):""}</h2><button class="lib-upload-close" id="clsCloseBtn" type="button" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="lib-upload-body">
+      <div class="lib-upload-field"><label for="clsCategory">主分类</label><select id="clsCategory" class="lib-upload-input"><option value="">加载中…</option></select></div>
+      <div class="lib-upload-hint" style="font-size:12px;color:var(--text-tertiary);line-height:1.6;">人工分类后立即重新建立问答索引（复用已解析资产，不重新解析）。选「未分类」表示确认收录但目录中无合适类目。</div>
+      <div class="lib-upload-field"><label for="clsReason">分类理由（选填，留空则记为“管理员人工修正”）</label><input id="clsReason" class="lib-upload-input" type="text" maxlength="2000" placeholder="例如：管理员确认收录"></div>
+      <div class="lib-upload-result" id="clsResult" style="display:none;"></div>
+    </div>
+    <div class="lib-upload-actions"><button class="secondary-btn" id="clsCancel" type="button">取消</button><button class="primary-btn" id="clsSubmit" type="button" disabled>保存并重建索引</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const select=document.getElementById("clsCategory"),submit=document.getElementById("clsSubmit");
+  apiFetch("/api/uploads/taxonomy").then(r=>r&&r.ok?r.json():null).then(data=>{
+    const cats=(data&&data.categories)||[];
+    select.innerHTML='<option value="">请选择分类…</option>'+cats.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.includes("/")?c.split("/").join(" › "):c)}</option>`).join("");
+    submit.disabled=false;
+  }).catch(()=>{select.innerHTML='<option value="">分类目录加载失败</option>';});
+  select.onchange=()=>{if(select.value==="")submit.disabled=true;};
+  const close=()=>{overlay.remove();document.removeEventListener("keydown",onEsc);libClassifyClose=null;};
+  libClassifyClose=close;
+  const onEsc=e=>{if(e.key==="Escape")close();};
+  document.getElementById("clsCloseBtn").onclick=close;
+  document.getElementById("clsCancel").onclick=close;
+  overlay.addEventListener("click",e=>{if(e.target===overlay)close();});
+  document.addEventListener("keydown",onEsc);
+  submit.onclick=async()=>{
+    const category=select.value;
+    if(!category){const result=document.getElementById("clsResult");result.textContent="请先选择主分类";result.className="lib-upload-result err";result.style.display="block";return;}
+    const reason=document.getElementById("clsReason").value.trim();
+    submit.disabled=true;
+    document.getElementById("clsCancel").disabled=true;
+    const result=document.getElementById("clsResult");
+    result.style.display="none";
+    try{
+      const r=await apiFetch("/api/uploads/"+encodeURIComponent(id)+"/classification",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({primary_category:category,reason:reason||undefined})});
+      if(r&&r.ok){
+        close();loadLibrary();
+      }else{
+        const j=r?await r.json().catch(()=>({})):{};
+        result.textContent=j.detail||("保存失败 "+(r?r.status:""));
+        result.className="lib-upload-result err";result.style.display="block";
+        submit.disabled=false;document.getElementById("clsCancel").disabled=false;
+      }
+    }catch(e){
+      result.textContent="网络错误："+e.message;
+      result.className="lib-upload-result err";result.style.display="block";
+      submit.disabled=false;document.getElementById("clsCancel").disabled=false;
+    }
+  };
+}
+let libClassifyClose=null;
 async function libDelete(id,name,button){
   if(!window.confirm(`删除「${name||"未命名资料"}」？将同时删除文件与问答索引，不可恢复。`))return;
   button.disabled=true;

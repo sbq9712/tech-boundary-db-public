@@ -459,7 +459,12 @@ def delete_uploaded_file(db: Session, record: UploadedFile) -> dict:
     from app.document_ingestion.storage import document_directory
     derivatives = document_directory(upload_root(), str(record.id))
     if derivatives.exists():
-        shutil.rmtree(derivatives)
+        try:
+            shutil.rmtree(derivatives)
+        except OSError as exc:
+            # 索引与原文件已删除；派生资产残留不应让整次删除以 500 失败、
+            # 把记录卡在"索引已删但行还在"的不一致状态。留待后台/人工清理。
+            logger.warning("failed to remove docling assets for %s: %s", record.id, exc)
     db.delete(record)
     db.commit()
     return {
