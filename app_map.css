@@ -348,6 +348,10 @@
 .map-content-panel .industry-tree{cursor:grab}
 
 /* ── 行业图景节点 · 专题报告按钮（节点右下角，醒目但不扎眼） ── */
+/* 挂有报告按钮的卡片提升层级：保证按钮凸出部分永远绘制在兄弟内容（子树/连接线/标签）之上 */
+.map-content-panel .mind-node.has-report>details>.mind-card{
+  z-index:10;
+}
 .map-content-panel .node-report-btn{
   position:absolute;
   right:8px;
