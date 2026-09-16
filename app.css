@@ -970,22 +970,22 @@ a:hover{color:var(--brand-lighter)}
 .home-alert-list{
   display:flex;
   flex-direction:column;
-  gap:8px;
-  margin:0 14px 14px;
-  padding:10px;
+  gap:6px;
+  margin:0 12px 12px;
+  padding:8px;
   border-radius:var(--radius-lg);
   background:var(--bg-panel);
 }
 .home-alert-item{
   position:relative;
-  padding:10px 13px 10px 17px;
+  padding:7px 12px 7px 16px;
   border:1px solid var(--border-subtle);
   border-radius:10px;
   background:var(--bg-canvas);
   box-shadow:0 1px 2px rgba(16,24,40,.03);
   transition:border-color .18s,box-shadow .22s,transform .18s;
 }
-/* 左缘严重度渐变条（默认品牌色 / 高危红 / 关注橙） */
+/* 左缘统一主题色渐变条（不再按严重度分色） */
 .home-alert-item::before{
   content:"";
   position:absolute;
@@ -998,8 +998,6 @@ a:hover{color:var(--brand-lighter)}
   opacity:.5;
   transition:opacity .18s;
 }
-.home-alert-item.sev-high::before{background:linear-gradient(180deg,#f87171,var(--red))}
-.home-alert-item.sev-orange::before{background:linear-gradient(180deg,#fbbf24,var(--amber))}
 .home-alert-item:hover{
   border-color:var(--brand-border);
   box-shadow:var(--shadow-card-hover);
@@ -1018,7 +1016,7 @@ a:hover{color:var(--brand-lighter)}
   align-items:center;
   gap:4px;
   flex:0 0 auto;
-  padding:2.5px 9px;
+  padding:2px 8px;
   border-radius:999px;
   background:var(--brand-bg);
   color:var(--brand);
@@ -1053,13 +1051,13 @@ a:hover{color:var(--brand-lighter)}
 .home-alert-title{
   display:-webkit-box;
   -webkit-box-orient:vertical;
-  -webkit-line-clamp:2;
+  -webkit-line-clamp:1;
   overflow:hidden;
-  margin-top:7px;
+  margin-top:5px;
   color:var(--text-primary);
-  font-size:13.5px;
+  font-size:13px;
   font-weight:600;
-  line-height:1.42;
+  line-height:1.38;
   text-decoration:none;
 }
 .home-alert-title:hover{color:var(--brand)}
@@ -1069,9 +1067,9 @@ a:hover{color:var(--brand-lighter)}
   display:flex;
   align-items:flex-start;
   gap:7px;
-  margin-top:8px;
-  padding:7px 10px;
-  border-radius:8px;
+  margin-top:6px;
+  padding:5px 8px;
+  border-radius:7px;
   background:var(--bg-panel);
 }
 /* "预警原因"四字标红加粗，字号与正文一致 */
@@ -1080,12 +1078,12 @@ a:hover{color:var(--brand-lighter)}
   flex:1 1 auto;
   min-width:0;
   color:var(--text-tertiary);
-  font-size:11.5px;
-  line-height:1.5;
+  font-size:11px;
+  line-height:1.45;
   white-space:pre-line;
   display:-webkit-box;
   -webkit-box-orient:vertical;
-  -webkit-line-clamp:2;
+  -webkit-line-clamp:1;
   overflow:hidden;
 }
 .home-alert-reason-text.expanded{
