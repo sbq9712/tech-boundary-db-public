@@ -419,8 +419,8 @@ def test_formula_enrichment_is_opt_in_without_disabling_structure(monkeypatch, c
         docling_processor.converter.cache_clear()
 
 
-def test_force_bypasses_irrelevant_skip_and_keeps_label(monkeypatch, tmp_path):
-    """强制收录：不相关资料在 force=True 时入索引；默认仍跳过（2026-09 语义）。"""
+def test_irrelevant_uploads_are_indexed_by_default_and_keep_label(monkeypatch, tmp_path):
+    """上传资料一律入索引：即使判为不相关也照常建立索引，分类标签仅作元数据。"""
     from app.services import upload_ingestion
 
     original = tmp_path / "a.pdf"
@@ -477,15 +477,8 @@ def test_force_bypasses_irrelevant_skip_and_keeps_label(monkeypatch, tmp_path):
         lambda rec, data: {"status": "ready", "chunk_count": len(data)},
     )
 
-    # 默认：不相关跳过索引（提交成功返回 True，但状态是 skipped 而非 ready）
+    # 不相关资料默认照常入索引，且分类标签保持不相关
     assert upload_ingestion.process_uploaded_file(record.id) is True
-    assert record.embedding_status == "skipped"
-    assert record.chunk_count == 0
-    assert "不相关" in (record.embedding_error or "")
-
-    # 强制收录：入索引且分类标签保持不相关
-    record.embedding_status = "pending"
-    assert upload_ingestion.process_uploaded_file(record.id, force=True) is True
     assert record.embedding_status == "ready"
     assert record.primary_category == "不相关"
     assert record.classification_status == "irrelevant"

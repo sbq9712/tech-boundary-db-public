@@ -1533,13 +1533,12 @@ async function loadLibrary(){
     const conf=f.confidentiality?`<span class="tag conf-${escapeHtml(f.confidentiality)}">${escapeHtml(f.confidentiality)}</span>`:"-";
     const aiMark=f.title_source==="manual"?"":`<span class="ai-mark ${escapeHtml(f.title_source||"")}">${f.title_source==="ai_filled"?"AI":"…"}</span>`;
     const canRetry=libIsAdmin&&["failed","unclassified","legacy_unclassified"].includes(f.classification_status);
-    const canRetryEmbedding=libIsAdmin&&f.embedding_status==="failed";
+    const canRetryEmbedding=libIsAdmin&&["failed","skipped"].includes(f.embedding_status);
     const canClassify=libIsAdmin&&["classified","unclassified","irrelevant","legacy_unclassified","failed"].includes(f.classification_status);
-    const canForce=libIsAdmin&&f.classification_status==="irrelevant"&&f.embedding_status==="skipped";
     const category=f.primary_category||"-";
     const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
     const statusDetail=f.embedding_error||f.classification_error||f.classification_reason||(status==="document_processing"?"正在执行 Docling 文档理解；首次使用前模型已由启动脚本准备":"");
-    const statusSub=status==="embedding_skipped"?"已判为领域外，未入索引；需要检索请点「强制索引」":status==="embedding_failed"?"索引未完成，可重试":status==="document_processing"?"Docling 解析中":"";
+    const statusSub=status==="embedding_skipped"?"未入索引，点「重试索引」可收录":status==="embedding_failed"?"索引未完成，可重试":status==="document_processing"?"Docling 解析中":"";
     const baseName=f.title||f.original_filename||"资料";
     const assetBtns=f.document_assets?`<button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|markdown" data-lib-name="${escapeHtml(baseName+"-document.md")}">Markdown</button><button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|chunks" data-lib-name="${escapeHtml(baseName+"-chunks.jsonl")}">Chunk</button>`:"";
     const catActions=(canClassify||canRetry)?`<div class="cat-actions">${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}</div>`:"";
@@ -1552,7 +1551,7 @@ async function loadLibrary(){
       <td class="size-cell">${libFmtSize(f.size_bytes)}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
-      <td><div class="row-actions"><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}${canRetryEmbedding?`<button class="secondary-btn" data-retry-embedding="${escapeHtml(f.id)}">重试索引</button>`:""}${canForce?`<button class="secondary-btn" data-lib-force="${escapeHtml(f.id)}">强制索引</button>`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
+      <td><div class="row-actions"><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}${canRetryEmbedding?`<button class="secondary-btn" data-retry-embedding="${escapeHtml(f.id)}">重试索引</button>`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
     </tr>`;
   }).join("");
   const start=libTotal?libOffset+1:0,end=Math.min(libOffset+data.files.length,libTotal);
@@ -1566,7 +1565,6 @@ async function loadLibrary(){
   tb.querySelectorAll("button[data-retry-embedding]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retryEmbedding,"embedding/retry",b));
   tb.querySelectorAll("button[data-lib-delete]").forEach(b=>b.onclick=()=>libDelete(b.dataset.libDelete,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-classify]").forEach(b=>b.onclick=()=>libClassify(b.dataset.libClassify,b.dataset.libName,b));
-  tb.querySelectorAll("button[data-lib-force]").forEach(b=>b.onclick=()=>libForce(b.dataset.libForce,b));
   tb.querySelectorAll("button[data-lib-asset]").forEach(b=>b.onclick=()=>{const [id,asset]=b.dataset.libAsset.split("|");libAsset(id,asset,b.dataset.libName,b);});
   if(data.files.some(f=>["pending","processing"].includes(f.classification_status)||["pending","processing"].includes(f.embedding_status)))libRefreshTimer=setTimeout(loadLibrary,3000);
 }
@@ -1577,13 +1575,6 @@ function libAsset(id,asset,name,button){
     .catch(e=>alert(e.message))
     .finally(()=>{if(button)button.disabled=false;});
 }
-function libForce(id,button){
-  if(!window.confirm("强制收录该资料进入问答索引？分类标签保持「不相关」，索引状态将变为可检索。"))return;
-  button.disabled=true;
-  apiFetch("/api/uploads/"+encodeURIComponent(id)+"/embedding/force",{method:"POST"})
-    .then(r=>{if(r&&r.ok){loadLibrary();}else{return r.json().catch(()=>({})).then(j=>{window.alert(j.detail||("操作失败 "+(r?r.status:"")));button.disabled=false;});}})
-    .catch(e=>{window.alert("网络错误："+e.message);button.disabled=false;});
-}
 function libClassify(id,name,button){
   if(document.getElementById("classifyModalOverlay"))return;
   const overlay=document.createElement("div");
@@ -1593,7 +1584,7 @@ function libClassify(id,name,button){
     <div class="lib-upload-head"><h2>人工分类${name?"："+escapeHtml(name):""}</h2><button class="lib-upload-close" id="clsCloseBtn" type="button" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="lib-upload-body">
       <div class="lib-upload-field"><label for="clsCategory">主分类</label><select id="clsCategory" class="lib-upload-input"><option value="">加载中…</option></select></div>
-      <div class="lib-upload-hint" style="font-size:12px;color:var(--text-tertiary);line-height:1.6;">人工分类后立即重新建立问答索引（复用已解析资产，不重新解析）。选「未分类」表示确认收录但目录中无合适类目。</div>
+      <div class="lib-upload-hint" style="font-size:12px;color:var(--text-tertiary);line-height:1.6;">人工分类后立即重新建立问答索引（复用已解析资产，不重新解析）。分类仅作标注，不影响资料是否可被检索。</div>
       <div class="lib-upload-field"><label for="clsReason">分类理由（选填，留空则记为“管理员人工修正”）</label><input id="clsReason" class="lib-upload-input" type="text" maxlength="2000" placeholder="例如：管理员确认收录"></div>
       <div class="lib-upload-result" id="clsResult" style="display:none;"></div>
     </div>
