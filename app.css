@@ -2288,14 +2288,19 @@ a:hover{color:var(--brand-lighter)}
 }
 
 /* ── 资料库 in-app 视图 ── */
-.library .lib-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;min-height:38px;margin-bottom:18px}
+.library .lib-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;min-height:38px;margin-bottom:20px}
+.library .lib-subtitle{margin:5px 0 0;font-size:12.5px;color:var(--text-tertiary);line-height:1.5}
 .library .filter-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.library .filter-row select{max-width:300px;font-family:var(--sans);font-size:13px;padding:8px 10px;border:1px solid var(--border-standard);border-radius:var(--radius-md);background:var(--bg-canvas);color:var(--text-primary);cursor:pointer}
+.library .filter-row select{max-width:300px;font-family:var(--sans);font-size:13px;padding:8px 10px;border:1px solid var(--border-standard);border-radius:var(--radius-md);background:var(--bg-canvas);color:var(--text-primary);cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease}
+.library .filter-row select:hover{border-color:var(--border-strong)}
 .library .filter-row select:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
-.library .table-scroll{overflow-x:auto;border:1px solid var(--border-subtle);border-radius:var(--radius-lg);background:var(--bg-panel);box-shadow:var(--shadow-card)}
+.library .table-scroll{overflow-x:auto;border:1px solid var(--border-subtle);border-radius:var(--radius-lg);background:var(--bg-panel);box-shadow:var(--shadow-card);scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.library .table-scroll::-webkit-scrollbar{height:8px}
+.library .table-scroll::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:999px}
+.library .table-scroll::-webkit-scrollbar-track{background:transparent}
 .library table{width:100%;border-collapse:collapse;min-width:1080px}
 .library thead th{text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.03em;color:var(--text-tertiary);background:var(--bg-surface);border-bottom:1px solid var(--border-standard);white-space:nowrap}
-.library tbody td{padding:11px 14px;font-size:13px;border-bottom:1px solid var(--border-subtle);vertical-align:middle}
+.library tbody td{padding:12px 14px;font-size:13px;line-height:1.5;border-bottom:1px solid var(--border-subtle);vertical-align:middle}
 .library tbody tr:last-child td{border-bottom:none}
 .library tbody tr{transition:background .12s ease}
 .library tbody tr:hover{background:var(--bg-surface)}
@@ -2305,9 +2310,10 @@ a:hover{color:var(--brand-lighter)}
 .library .tag.conf-内部{background:var(--amber-bg);color:var(--amber)}
 .library .tag.conf-管理员{background:var(--red-bg);color:var(--red)}
 .library .src-badge{color:var(--text-tertiary);font-size:12px}
-.library .category-cell{min-width:220px;max-width:340px;overflow-wrap:anywhere;line-height:1.45}
+.library .category-cell{min-width:220px;max-width:340px;overflow-wrap:anywhere;line-height:1.45;font-weight:550;color:var(--text-primary)}
 .library .size-cell{color:var(--text-tertiary);white-space:nowrap;font-variant-numeric:tabular-nums}
-.library .status{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:500;white-space:nowrap;background:var(--bg-surface);color:var(--text-tertiary)}
+.library .status{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:500;white-space:nowrap;background:var(--bg-surface);color:var(--text-tertiary)}
+.library .status::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.65;flex:none}
 .library .status.classified,.library .status.ready{background:var(--green-bg);color:var(--green)}
 .library .status.pending,.library .status.processing,.library .status.embedding_pending,.library .status.embedding_processing{background:var(--amber-bg);color:var(--amber)}
 .library .status.failed,.library .status.embedding_failed{background:var(--red-bg);color:var(--red)}
