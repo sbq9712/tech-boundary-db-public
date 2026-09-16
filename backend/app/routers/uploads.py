@@ -110,6 +110,9 @@ def _uuid_or_400(file_id: str) -> uuid.UUID:
 
 def _validate_category(primary: str, secondary: list[str] | None = None) -> tuple[str, list[str]]:
     taxonomy = load_taxonomy()
+    if primary == "未分类":
+        # 语义约定：未分类只表示"尚未分类"，不能作为人工指定的分类结果。
+        raise HTTPException(400, "未分类仅表示尚未分类，不能人工指定；请选择具体分类或不相关")
     if primary not in taxonomy.categories:
         raise HTTPException(400, "主分类不在当前广度追踪分类目录中")
     cleaned: list[str] = []

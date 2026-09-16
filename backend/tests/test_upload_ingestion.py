@@ -92,6 +92,66 @@ def test_ai_result_outside_taxonomy_is_rejected(monkeypatch):
         upload_ingestion.request_ai_classification("测试资料", upload_ingestion.load_taxonomy())
 
 
+def test_ai_unclassified_output_is_coerced_to_irrelevant(monkeypatch):
+    """语义约定：未分类只表示尚未分类；AI 仍输出未分类时按不相关落地。"""
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"primary_category":"未分类","secondary_categories":[],'
+                                '"confidence":0.3,"reason":"证据不足"}'
+                            )
+                        }
+                    }
+                ]
+            }
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def post(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setenv("TECHDB_AGENT_API_KEY", "test-key")
+    monkeypatch.setattr(upload_ingestion.httpx, "Client", FakeClient)
+
+    result = upload_ingestion.request_ai_classification(
+        "测试资料", upload_ingestion.load_taxonomy()
+    )
+
+    assert result["primary_category"] == "不相关"
+    assert "证据不足" in (result["reason"] or "")
+    assert "按不相关处理" in (result["reason"] or "")
+
+
+def test_manual_classification_rejects_unclassified():
+    from fastapi import HTTPException
+
+    from app.routers.uploads import _validate_category
+
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_category("未分类")
+    assert exc_info.value.status_code == 400
+
+    # 具体分类与不相关仍然可用
+    primary, _ = _validate_category("不相关")
+    assert primary == "不相关"
+
+
 def test_ai_confidentiality_never_promotes_to_admin(monkeypatch):
     taxonomy = upload_ingestion.load_taxonomy()
     category = taxonomy.business_categories[0]

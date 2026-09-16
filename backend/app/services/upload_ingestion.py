@@ -282,8 +282,8 @@ def request_ai_classification(text: str, taxonomy: Taxonomy) -> dict:
     prompt = (
         "你是技术资料元数据与分类器。直接输出 JSON，不要解释。\n"
         "primary_category 必须精确取自候选目录；最多给出 3 个 secondary_categories，"
-        "且不得包含未分类或不相关。证据不足时 primary_category 选未分类；"
-        "内容不属于目录覆盖范围时选不相关。\n"
+        "且不得包含未分类或不相关。primary_category 禁止输出未分类；"
+        "无法确定归入某个具体类别（证据不足或超出目录覆盖范围）时，一律选不相关。\n"
         "JSON 格式："
         '{"title":"不超过60字的中文标题","confidentiality":"公开|内部",'
         '"source_type":"论文|专利|研报|网页快照|同事材料|付费数据库|其他",'
@@ -337,6 +337,12 @@ def request_ai_classification(text: str, taxonomy: Taxonomy) -> dict:
         raise ValueError(
             f"AI 返回了目录之外的主分类：{primary_raw!r}（原始返回：{(raw_content or '')[:300]!r}）"
         )
+    coerced_irrelevant = False
+    if primary == "未分类":
+        # 语义约定：未分类只表示"尚未分类"；分类完成后只能是具体分类或不相关。
+        # 模型违反提示词仍输出未分类时，按不相关落地，而不是放行。
+        primary = "不相关"
+        coerced_irrelevant = True
     secondary: list[str] = []
     for item in result.get("secondary_categories") or []:
         resolved = _match_category(str(item).strip(), taxonomy.business_categories)
@@ -358,6 +364,10 @@ def request_ai_classification(text: str, taxonomy: Taxonomy) -> dict:
     if ai_confidentiality not in AI_CONFIDENTIALITY_LEVELS:
         ai_confidentiality = None
 
+    reason = str(result.get("reason") or "").strip()[:2000] or None
+    if coerced_irrelevant:
+        reason = ((reason + "；") if reason else "") + "模型未给出具体分类，按不相关处理"
+
     return {
         "title": str(result.get("title") or "").strip()[:500] or None,
         "confidentiality": ai_confidentiality,
@@ -365,7 +375,7 @@ def request_ai_classification(text: str, taxonomy: Taxonomy) -> dict:
         "primary_category": primary,
         "secondary_categories": secondary,
         "confidence": confidence,
-        "reason": str(result.get("reason") or "").strip()[:2000] or None,
+        "reason": reason,
     }
 
 

@@ -1539,7 +1539,7 @@ async function loadLibrary(){
     const category=f.primary_category||"-";
     const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
     const statusDetail=f.embedding_error||f.classification_error||f.classification_reason||(status==="document_processing"?"正在执行 Docling 文档理解；首次使用前模型已由启动脚本准备":"");
-    const statusSub=status==="embedding_skipped"?"领域外不入索引，可强制收录":status==="embedding_failed"?"索引未完成，可重试":status==="document_processing"?"Docling 解析中":"";
+    const statusSub=status==="embedding_skipped"?"已判为领域外，未入索引；需要检索请点「强制索引」":status==="embedding_failed"?"索引未完成，可重试":status==="document_processing"?"Docling 解析中":"";
     const baseName=f.title||f.original_filename||"资料";
     const assetBtns=f.document_assets?`<button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|markdown" data-lib-name="${escapeHtml(baseName+"-document.md")}">Markdown</button><button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|chunks" data-lib-name="${escapeHtml(baseName+"-chunks.jsonl")}">Chunk</button>`:"";
     const catActions=(canClassify||canRetry)?`<div class="cat-actions">${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}</div>`:"";
@@ -1602,7 +1602,7 @@ function libClassify(id,name,button){
   document.body.appendChild(overlay);
   const select=document.getElementById("clsCategory"),submit=document.getElementById("clsSubmit");
   apiFetch("/api/uploads/taxonomy").then(r=>r&&r.ok?r.json():null).then(data=>{
-    const cats=(data&&data.categories)||[];
+    const cats=((data&&data.categories)||[]).filter(c=>c!=="未分类");
     select.innerHTML='<option value="">请选择分类…</option>'+cats.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.includes("/")?c.split("/").join(" › "):c)}</option>`).join("");
     submit.disabled=false;
   }).catch(()=>{select.innerHTML='<option value="">分类目录加载失败</option>';});
