@@ -417,3 +417,76 @@ def test_formula_enrichment_is_opt_in_without_disabling_structure(monkeypatch, c
             assert options.generate_picture_images and options.generate_parsed_pages
     finally:
         docling_processor.converter.cache_clear()
+
+
+def test_force_bypasses_irrelevant_skip_and_keeps_label(monkeypatch, tmp_path):
+    """强制收录：不相关资料在 force=True 时入索引；默认仍跳过（2026-09 语义）。"""
+    from app.services import upload_ingestion
+
+    original = tmp_path / "a.pdf"
+    original.write_text("synthetic")
+    record = SimpleNamespace(
+        id=uuid.uuid4(),
+        stored_filename="a.pdf",
+        original_filename="a.pdf",
+        checksum_sha256=storage.sha256(original),
+        document_assets=None,
+        classification_status="irrelevant",
+        primary_category="不相关",
+        embedding_status="pending",
+        embedding_error=None,
+        chunk_count=0,
+    )
+    updates = []
+
+    class Session:
+        def execute(self, statement):
+            values = statement.compile().params
+            updates.append(values)
+            for key, value in values.items():
+                if hasattr(record, key):
+                    setattr(record, key, value)
+            return SimpleNamespace(rowcount=1)
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            pass
+
+        def get(self, *args):
+            return record
+
+        def refresh(self, *args):
+            pass
+
+    def ingest(**kwargs):
+        return {"bundle": "documents/test/bundle"}, "synthetic", [
+            {"chunk_id": "c0", "text": "synthetic", "metadata": {"page_number": 2}}
+        ]
+
+    monkeypatch.setattr(upload_ingestion, "SessionLocal", Session)
+    monkeypatch.setattr(upload_ingestion, "upload_root", lambda: tmp_path)
+    monkeypatch.setattr(runner, "ingest", ingest)
+    monkeypatch.setattr(
+        upload_ingestion,
+        "request_incremental_index",
+        lambda rec, data: {"status": "ready", "chunk_count": len(data)},
+    )
+
+    # 默认：不相关跳过索引（提交成功返回 True，但状态是 skipped 而非 ready）
+    assert upload_ingestion.process_uploaded_file(record.id) is True
+    assert record.embedding_status == "skipped"
+    assert record.chunk_count == 0
+    assert "不相关" in (record.embedding_error or "")
+
+    # 强制收录：入索引且分类标签保持不相关
+    record.embedding_status = "pending"
+    assert upload_ingestion.process_uploaded_file(record.id, force=True) is True
+    assert record.embedding_status == "ready"
+    assert record.primary_category == "不相关"
+    assert record.classification_status == "irrelevant"
+    assert record.chunk_count == 1

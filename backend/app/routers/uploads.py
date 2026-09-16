@@ -328,6 +328,34 @@ def retry_upload_embedding(
     return {"id": str(record.id), "embedding_status": "pending"}
 
 
+@router.post("/uploads/{file_id}/embedding/force", status_code=202)
+def force_upload_embedding(
+    file_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """管理员强制收录：不相关资料也写入问答索引（分类标签保持不相关）。"""
+    record = db.get(UploadedFile, _uuid_or_400(file_id))
+    if record is None:
+        raise HTTPException(404, "文件不存在")
+    if record.storage_status != "stored":
+        raise HTTPException(409, "文件未正常落盘，不能强制收录")
+    if record.classification_status != "irrelevant":
+        raise HTTPException(409, "仅被分类为不相关的资料需要强制收录")
+    if record.embedding_status == "ready":
+        raise HTTPException(409, "该资料已可检索")
+    if record.embedding_status in {"pending", "processing"}:
+        return {"id": str(record.id), "embedding_status": record.embedding_status}
+    record.embedding_status = "pending"
+    record.embedding_error = None
+    record.embedded_at = None
+    record.chunk_count = 0
+    db.commit()
+    background_tasks.add_task(process_uploaded_file, str(record.id), True)
+    return {"id": str(record.id), "embedding_status": "pending"}
+
+
 @router.put("/uploads/{file_id}/classification")
 def override_upload_classification(
     file_id: str,

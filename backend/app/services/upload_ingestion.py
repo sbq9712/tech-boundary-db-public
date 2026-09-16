@@ -484,8 +484,12 @@ def _commit_embedding_result(db, file_id: uuid.UUID, **values) -> bool:
     return updated.rowcount == 1
 
 
-def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
-    """Classify (when needed), embed and publish one uploaded file."""
+def process_uploaded_file(file_id: str | uuid.UUID, force: bool = False) -> bool:
+    """Classify (when needed), embed and publish one uploaded file.
+
+    ``force=True`` 供管理员"强制收录"使用：即使 AI 判为不相关也写入问答索引
+    （分类标签保持不相关，如实反映领域判断；索引状态独立于分类语义）。
+    """
     try:
         uid = file_id if isinstance(file_id, uuid.UUID) else uuid.UUID(str(file_id))
     except ValueError:
@@ -604,14 +608,14 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
                 chunk_count=0,
                 embedded_at=datetime.now(timezone.utc),
             )
-        if record.primary_category == "不相关":
+        if record.primary_category == "不相关" and not force:
             return _commit_embedding_result(
                 db,
                 uid,
                 embedding_status="skipped",
                 embedding_model=INDEX_MODEL,
                 embedding_dim=INDEX_DIM,
-                embedding_error="资料被分类为不相关",
+                embedding_error="资料被分类为不相关（不自动入索引；管理员可强制收录）",
                 chunk_count=0,
                 embedded_at=datetime.now(timezone.utc),
             )
