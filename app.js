@@ -1492,7 +1492,7 @@ window.addEventListener("DOMContentLoaded",async()=>{await loadCurrentUser();ren
 
 /* ── 资料库（in-app 视图，替代独立页跳转，保留左侧导航） ── */
 let libRefreshTimer=null,libOffset=0,libTotal=0,libIsAdmin=false;
-const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引失败",embedding_skipped:"未索引",embedding_legacy_unindexed:"历史未索引",ready:"可检索"};
+const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引未完成",embedding_skipped:"索引未完成",embedding_legacy_unindexed:"历史未索引",ready:"可检索"};
 function reviewedEmptyCard(){return `<div class="dashboard-card reviewed-empty"><div class="reviewed-empty-mark">无</div><strong>暂无已审核报告</strong><span>深度调研完成审核后将展示在这里</span></div>`;}
 function libraryView(){return `<section class="flat-content library"><div class="lib-head"><div><h1 class="section-title">资料库</h1><p class="lib-subtitle">管理员上传的资料，登录用户可下载</p></div><div class="filter-row"><select id="srcFilter" aria-label="来源类型"><option value="">全部来源</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select><select id="categoryFilter" aria-label="行业图景节点"><option value="">全部节点</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>行业图景节点</th><th>状态</th><th>来源类型</th><th>密级</th><th>大小</th><th>上传者</th><th>时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;}
 function libFmtSize(n){if(!n)return "-";const u=["B","KB","MB","GB"];let i=0,s=n;while(s>=1024&&i<3){s/=1024;i++;}return s.toFixed(s<10?1:0)+" "+u[i];}
@@ -1504,7 +1504,7 @@ async function initLibrary(){
   if(prev)prev.onclick=()=>{libOffset=Math.max(0,libOffset-30);loadLibrary();};
   if(next)next.onclick=()=>{if(libOffset+30<libTotal){libOffset+=30;loadLibrary();}};
   try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";const link=document.getElementById("uploadLink");if(libIsAdmin&&link){link.style.display="";link.onclick=openUploadModal;}}}catch(e){}
-  try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];const select=document.getElementById("categoryFilter");if(select)select.innerHTML='<option value="">全部节点</option>'+data.categories.filter(c=>c!=="未分类"&&c!=="不相关").map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");}}catch(e){}
+  try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];const select=document.getElementById("categoryFilter");if(select){const treePaths=data.all_paths||(data.categories||[]).filter(c=>c.includes("/"));select.innerHTML='<option value="">全部节点</option>'+treePaths.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")+'<option value="不相关">不相关</option><option value="未分类">未分类</option>';}}}catch(e){}
   loadLibrary();
 }
 async function loadLibrary(){
@@ -1535,19 +1535,20 @@ async function loadLibrary(){
     const aiMark=f.title_source==="manual"?"":`<span class="ai-mark ${escapeHtml(f.title_source||"")}">${f.title_source==="ai_filled"?"AI":"…"}</span>`;
     const canClassify=libIsAdmin&&["classified","unclassified","irrelevant","legacy_unclassified","failed"].includes(f.classification_status);
     const canRetry=libIsAdmin&&["failed","unclassified","legacy_unclassified"].includes(f.classification_status);
+    const canRetryIndex=libIsAdmin&&["failed","skipped"].includes(f.embedding_status);
     const category=f.primary_category||"-";
     const categoryTitle=category.includes("/")?category:"";
     const nodeName=category.includes("/")?category.split("/").pop():category;
     const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
     const statusDetail=f.embedding_error||f.classification_error||f.classification_reason||(status==="document_processing"?"正在执行 Docling 文档理解；首次使用前模型已由启动脚本准备":"");
-    const statusSub=(status==="embedding_skipped"||status==="embedding_failed")?"索引未完成，可通过「人工分类」重新触发索引":status==="document_processing"?"Docling 解析中":"";
+    const statusSub=(status==="embedding_skipped"||status==="embedding_failed")?"索引未完成，点击「重试构建索引」重新建立":status==="document_processing"?"Docling 解析中":"";
     const baseName=f.title||f.original_filename||"资料";
     const assetBtns=f.document_assets?`<button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|markdown" data-lib-name="${escapeHtml(baseName+"-document.md")}">Markdown</button><button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|chunks" data-lib-name="${escapeHtml(baseName+"-chunks.jsonl")}">Chunk</button>`:"";
     const catActions=(canClassify||canRetry)?`<div class="cat-actions">${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}</div>`:"";
     return `<tr>
       <td class="fname">${escapeHtml(f.title||f.original_filename)}${aiMark}<small>${escapeHtml(f.original_filename)}${f.note?" · "+escapeHtml(f.note):""}</small></td>
       <td class="category-cell" title="${escapeHtml(categoryTitle||nodeName)}">${escapeHtml(nodeName)}${catActions}</td>
-      <td><span class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub?`<div class="status-sub">${escapeHtml(statusSub)}</div>`:""}</td>
+      <td><span class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub?`<div class="status-sub">${escapeHtml(statusSub)}</div>`:""}${canRetryIndex?`<div class="cat-actions"><button class="secondary-btn" data-retry-index="${escapeHtml(f.id)}">重试构建索引</button></div>`:""}</td>
       <td><span class="src-badge">${escapeHtml(f.source_type||"-")}</span></td>
       <td>${conf}</td>
       <td class="size-cell">${libFmtSize(f.size_bytes)}</td>
@@ -1564,6 +1565,7 @@ async function loadLibrary(){
   if(nextBtnEl)nextBtnEl.disabled=libOffset+30>=libTotal;
   tb.querySelectorAll("button[data-download]").forEach(b=>b.onclick=()=>libDownload(b.dataset.download));
   tb.querySelectorAll("button[data-retry]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retry,"classification/retry",b));
+  tb.querySelectorAll("button[data-retry-index]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retryIndex,"embedding/retry",b));
   tb.querySelectorAll("button[data-lib-delete]").forEach(b=>b.onclick=()=>libDelete(b.dataset.libDelete,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-classify]").forEach(b=>b.onclick=()=>libClassify(b.dataset.libClassify,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-asset]").forEach(b=>b.onclick=()=>{const [id,asset]=b.dataset.libAsset.split("|");libAsset(id,asset,b.dataset.libName,b);});
@@ -1594,8 +1596,8 @@ function libClassify(id,name,button){
   document.body.appendChild(overlay);
   const select=document.getElementById("clsCategory"),submit=document.getElementById("clsSubmit");
   apiFetch("/api/uploads/taxonomy").then(r=>r&&r.ok?r.json():null).then(data=>{
-    const cats=((data&&data.categories)||[]).filter(c=>c!=="未分类");
-    const ordered=cats.filter(c=>c.includes("/")).concat(cats.filter(c=>!c.includes("/")));
+    const treePaths=(data&&data.all_paths)||((data&&data.categories)||[]).filter(c=>c.includes("/"));
+    const ordered=treePaths.concat(["不相关"]);
     select.innerHTML='<option value="">请选择行业图景节点…</option>'+ordered.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.includes("/")?c.split("/").join(" › "):c)}</option>`).join("");
     submit.disabled=false;
   }).catch(()=>{select.innerHTML='<option value="">分类目录加载失败</option>';});
@@ -1742,7 +1744,7 @@ async function upEnsureTaxonomy(){
   if(upTaxonomy){upFillTaxonomy();return;}
   try{
     const r=await apiFetch("/api/uploads/taxonomy");
-    if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];upFillTaxonomy();return;}
+    if(r&&r.ok){const data=await r.json();upTaxonomy=data.all_paths||data.categories||[];upFillTaxonomy();return;}
     throw new Error("taxonomy "+(r?r.status:""));
   }catch(e){upShowResult("行业图景节点目录加载失败：可稍后重开弹窗重试，或留空由系统自动分类","err");}
 }

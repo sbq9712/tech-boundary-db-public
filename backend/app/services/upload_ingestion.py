@@ -189,6 +189,18 @@ def classification_status_for(category: str) -> str:
     return "classified"
 
 
+def taxonomy_tree_paths(taxonomy: Taxonomy) -> list[str]:
+    """行业图景全节点路径：叶子路径 + 所有中间节点路径（广度优先排序）。"""
+    paths: set[str] = set()
+    for category in taxonomy.categories:
+        if "/" not in category:
+            continue
+        parts = category.split("/")
+        for i in range(1, len(parts) + 1):
+            paths.add("/".join(parts[:i]))
+    return sorted(paths)
+
+
 def extract_text(path: Path, original_filename: str, max_chars: int | None = CLASSIFICATION_BUDGET_CHARS) -> str | None:
     """Compatibility API; all conversion is now native Docling (including OCR)."""
     from app.document_ingestion.docling_processor import convert

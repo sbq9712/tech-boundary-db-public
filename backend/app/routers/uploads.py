@@ -33,6 +33,7 @@ from app.services.upload_ingestion import (
     process_uploaded_file,
     remove_stored_upload,
     safe_upload_path,
+    taxonomy_tree_paths,
     validate_filename,
 )
 
@@ -113,8 +114,9 @@ def _validate_category(primary: str, secondary: list[str] | None = None) -> tupl
     if primary == "未分类":
         # 语义约定：未分类只表示"尚未分类"，不能作为人工指定的分类结果。
         raise HTTPException(400, "未分类仅表示尚未分类，不能人工指定；请选择具体分类或不相关")
-    if primary not in taxonomy.categories:
-        raise HTTPException(400, "主分类不在当前广度追踪分类目录中")
+    if primary != "不相关" and primary not in taxonomy_tree_paths(taxonomy):
+        # 人工指定节点可以是树上任意节点（含非叶子）；不相关是合法的树外结果。
+        raise HTTPException(400, "所选行业图景节点不存在")
     cleaned: list[str] = []
     for value in secondary or []:
         if value not in taxonomy.business_categories:
@@ -162,6 +164,7 @@ def get_upload_taxonomy(current_user: str = Depends(get_current_user)) -> dict:
         "business_categories": taxonomy.business_categories,
         "result_labels": taxonomy.result_labels,
         "categories": taxonomy.categories,
+        "all_paths": taxonomy_tree_paths(taxonomy),
     }
 
 

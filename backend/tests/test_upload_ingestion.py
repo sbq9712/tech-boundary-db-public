@@ -152,6 +152,30 @@ def test_manual_classification_rejects_unclassified():
     assert primary == "不相关"
 
 
+def test_manual_classification_accepts_non_leaf_node():
+    from fastapi import HTTPException
+
+    from app.routers.uploads import _validate_category
+    from app.services.upload_ingestion import taxonomy_tree_paths
+
+    taxonomy = upload_ingestion.load_taxonomy()
+    paths = taxonomy_tree_paths(taxonomy)
+    # 全树路径：含叶子、含中间节点、含根，且按层级有序
+    assert "零碳产业" in paths
+    assert "零碳产业/物质循环" in paths
+    assert "零碳产业/物质循环/资源处理/勘探技术" in paths
+    assert "不相关" not in paths and "未分类" not in paths
+
+    # 非叶子节点可以人工指定
+    primary, _ = _validate_category("零碳产业/物质循环")
+    assert primary == "零碳产业/物质循环"
+
+    # 树上不存在的节点拒绝
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_category("零碳产业/不存在的分支")
+    assert exc_info.value.status_code == 400
+
+
 def test_ai_confidentiality_never_promotes_to_admin(monkeypatch):
     taxonomy = upload_ingestion.load_taxonomy()
     category = taxonomy.business_categories[0]
