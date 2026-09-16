@@ -374,9 +374,9 @@
   transition:all .15s ease;
 }
 .map-content-panel .node-report-btn:hover{
-  background:var(--brand-bg);
+  background:#ffffff;
   border-color:var(--brand);
-  box-shadow:0 3px 10px rgba(94,106,210,.22);
+  box-shadow:0 3px 10px rgba(94,106,210,.28);
   transform:translateY(-1px);
 }
 .map-content-panel .node-report-btn svg{
