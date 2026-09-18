@@ -2297,11 +2297,11 @@ a:hover{color:var(--brand-lighter)}
   border:0;
   border-radius:0;
   background:
-    radial-gradient(1300px 850px at 76% 16%,rgba(124,131,253,.17),transparent 62%),
-    radial-gradient(1050px 720px at 10% 84%,rgba(56,189,248,.11),transparent 58%),
-    radial-gradient(880px 620px at 90% 90%,rgba(192,132,252,.08),transparent 55%),
-    linear-gradient(115deg,transparent 42%,rgba(148,163,255,.045) 50%,transparent 58%),
-    linear-gradient(180deg,#030616 0%,#0a102e 52%,#111845 100%);
+    radial-gradient(1300px 850px at 76% 16%,rgba(129,140,248,.16),transparent 62%),
+    radial-gradient(1050px 720px at 10% 84%,rgba(56,189,248,.13),transparent 58%),
+    radial-gradient(880px 620px at 90% 90%,rgba(232,121,249,.09),transparent 55%),
+    linear-gradient(115deg,transparent 42%,rgba(129,140,248,.06) 50%,transparent 58%),
+    linear-gradient(180deg,#f8faff 0%,#eef2fe 55%,#e9eefc 100%);
 }
 /* 空态容器仅作占位标记：子元素并入面板的居中纵向栈（标题→搜索框→示例问题） */
 .home-knowledge-section .qa-empty-state:not([hidden]){display:contents}
@@ -2695,72 +2695,47 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 .report-card-actions .secondary-btn{height:26px;padding:0 10px;font-size:11.5px;border-radius:var(--radius-sm)}
 
 /* ════════════════════════════════════════════
-   首页 · 浩瀚星空主题（知识图谱 = 星空）
-   深空底色在 .home-knowledge-section .qa-graph-container；
-   此处把居中工作台的玻璃件换成暗色星玻璃，保证可读与高级感
+   首页 · 浅色星穹主题（知识图谱 = 浅色星座天空）
+   晨曦浅空底色在 .home-knowledge-section .qa-graph-container；
+   工作台用白色毛玻璃 + 品牌辉光，与全站浅色格调一致
    ════════════════════════════════════════════ */
-.home-knowledge-section .qa-graph-placeholder{
-  color:rgba(199,210,241,.62);
-}
-.home-knowledge-section .qa-graph-tooltip{
-  border:1px solid rgba(148,163,255,.35);
-  background:rgba(8,13,36,.92);
-  color:#e2e8f8;
-  box-shadow:0 8px 28px rgba(1,4,18,.6);
-  backdrop-filter:blur(6px);
-  -webkit-backdrop-filter:blur(6px);
-}
 .home-knowledge-section .qa-empty-copy strong{
-  color:#f2f5ff;
-  text-shadow:0 0 24px rgba(129,140,248,.45);
-}
-.home-knowledge-section .qa-empty-copy span{
-  color:rgba(197,207,241,.72);
+  background:linear-gradient(120deg,#4f46e5 8%,#7c3aed 52%,#2563eb 92%);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
 }
 .home-knowledge-section .qa-example-questions button{
-  border:1px solid rgba(148,163,255,.24);
-  background:rgba(148,163,255,.07);
-  color:rgba(214,222,248,.85);
-  backdrop-filter:blur(6px);
-  -webkit-backdrop-filter:blur(6px);
-  transition:border-color .18s,background .18s,color .18s;
+  border:1px solid rgba(99,102,241,.22);
+  background:rgba(255,255,255,.62);
+  color:#475569;
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  box-shadow:0 2px 10px rgba(79,70,229,.06);
+  transition:border-color .18s,background .18s,color .18s,box-shadow .18s;
 }
 .home-knowledge-section .qa-example-questions button:hover{
-  border-color:rgba(148,163,255,.5);
-  background:rgba(148,163,255,.15);
-  color:#ffffff;
+  border-color:rgba(99,102,241,.5);
+  background:#ffffff;
+  color:var(--brand);
+  box-shadow:0 6px 18px rgba(79,70,229,.12);
 }
 .home-knowledge-section .query-box,
 .home-knowledge-section .qa-input-area{
-  border:1px solid rgba(148,163,255,.3);
-  background:rgba(8,13,34,.62);
-  box-shadow:0 18px 50px rgba(2,6,23,.55),inset 0 1px 0 rgba(255,255,255,.06);
-  backdrop-filter:blur(14px) saturate(1.2);
-  -webkit-backdrop-filter:blur(14px) saturate(1.2);
+  border:1px solid rgba(99,102,241,.26);
+  background:rgba(255,255,255,.72);
+  box-shadow:0 18px 46px rgba(79,70,229,.13);
+  backdrop-filter:blur(14px) saturate(1.25);
+  -webkit-backdrop-filter:blur(14px) saturate(1.25);
 }
 .home-knowledge-section .query-box:focus-within,
 .home-knowledge-section .qa-input-area:focus-within{
-  border-color:rgba(148,163,255,.55);
-  box-shadow:0 0 0 3px rgba(129,140,248,.2),0 18px 50px rgba(2,6,23,.6),inset 0 1px 0 rgba(255,255,255,.08);
+  border-color:rgba(99,102,241,.55);
+  box-shadow:0 0 0 3px rgba(99,102,241,.13),0 18px 46px rgba(79,70,229,.16);
 }
-.home-knowledge-section .query-input{
-  color:#eef2ff;
-  caret-color:#a5b4fc;
-}
-.home-knowledge-section .query-input::placeholder{
-  color:rgba(197,207,240,.42);
-}
-.home-knowledge-section .model-picker{
-  border:1px solid rgba(148,163,255,.25);
-  background:rgba(148,163,255,.08);
-}
-.home-knowledge-section .model-picker span{
-  color:rgba(197,207,240,.55);
-}
-.home-knowledge-section .model-select{
-  color:rgba(226,232,252,.88);
-}
-.home-knowledge-section .model-select option{
-  background:#0d1330;
-  color:#e2e8f8;
-}
+.home-knowledge-section .query-input{color:var(--text-primary);caret-color:var(--brand)}
+.home-knowledge-section .query-input::placeholder{color:var(--text-quaternary)}
+.home-knowledge-section .model-picker{border:1px solid rgba(99,102,241,.2);background:rgba(255,255,255,.6)}
+.home-knowledge-section .model-picker span{color:var(--text-quaternary)}
+.home-knowledge-section .model-select{color:var(--text-secondary)}
+.home-knowledge-section .model-select option{background:#fff;color:var(--text-primary)}
