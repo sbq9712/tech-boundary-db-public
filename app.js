@@ -310,8 +310,6 @@ async function loadConversationMessages(sessionId){
 }
 async function deleteConversation(sessionId){
   if(!sessionId)return;
-  const title=conversationSessions.find(item=>item.id===sessionId)?.title||'当前会话';
-  if(!window.confirm(`删除“${title}”及其消息？`))return;
   const deletingActive=sessionId===activeSessionId;
   const res=await apiFetch(`/api/conversations/${encodeURIComponent(sessionId)}`,{method:'DELETE'});
   if(!res.ok){showToast('删除会话失败');return;}
@@ -368,7 +366,7 @@ document.addEventListener('click',event=>{
 });
 function parseHash(){const raw=(location.hash||"#home").slice(1);const [routePart,queryPart=""]=raw.split("?");return {route:routes[routePart]?routePart:"home",params:new URLSearchParams(queryPart)};}
 function setRoute(route,params){const q=params?`?${params.toString()}`:"";location.hash=route+q;}
-function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}closeUploadModal();if(libClassifyClose)libClassifyClose();if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){syncConversationRequestControls();loadAssistantModels();loadHomeBoundaries();loadAlertIntel();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
+function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}closeUploadModal();if(libClassifyClose)libClassifyClose();if(window.Auth&&typeof Auth.requireAuth==="function")Auth.requireAuth();const state=parseHash();document.title=`${routes[state.route].title} · 技术边界数据库`;if(state.route!=="home"&&knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}document.getElementById("app").innerHTML=shell(state);bindEvents();if(state.route==="home"){syncConversationRequestControls();loadAssistantModels();loadHomeBoundaries();loadAlertIntel();loadMeetings();loadConversations();loadKnowledgeGraph();}if(state.route==="dashboard")loadDashboards();if(state.route==="map")loadIndustryMap();if(state.route==="users")loadUsers();if(state.route==="library")initLibrary();}
 async function ensureCurrentUser(){if(!currentUser){await loadCurrentUser();}return currentUser;}
 function loadCurrentUser(){return apiFetch("/api/auth/me").then(r=>r.ok?r.json():null).then(d=>{if(d){currentUser=d;}}).catch(()=>{});}
 function isAdmin(){return currentUser&&currentUser.role==="admin";}
@@ -393,19 +391,27 @@ function shell(state){
 function view(route){const m={home:homeView,breadth:breadthView,dashboard:dashboardView,map:mapView,users:usersView,library:libraryView};return (m[route]||homeView)();}
 function homeView(){
   return `<div class="home-body">
-  <aside class="home-drawer" id="homeDrawer" aria-label="技术预警与技术边界">
+  <aside class="home-drawer" id="homeDrawer" aria-label="技术预警、近期会议与技术边界">
     <div class="home-drawer-body">
   <section class="home-section home-alert-section" aria-labelledby="homeAlertTitle">
     <div class="home-section-heading compact">
-      <div class="home-alert-heading"><div class="home-alert-title-group"><span class="home-heading-badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span><h2 id="homeAlertTitle">技术预警</h2><span class="home-alert-count" id="homeAlertCount" hidden></span></div><div class="home-alert-pagination" aria-label="技术预警翻页"><button id="homeAlertPrev" type="button" aria-label="上一页" title="上一页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button><span id="homeAlertPageLabel">—</span><button id="homeAlertNext" type="button" aria-label="下一页" title="下一页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></div></div>
+      <div class="home-alert-heading"><div class="home-alert-title-group"><h2 id="homeAlertTitle">技术预警</h2><span class="home-alert-count" id="homeAlertCount" hidden></span></div><div class="home-alert-pagination" aria-label="技术预警翻页"><button id="homeAlertPrev" type="button" aria-label="上一页" title="上一页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button><span id="homeAlertPageLabel">—</span><button id="homeAlertNext" type="button" aria-label="下一页" title="下一页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></div></div>
     </div>
     <div class="home-alert-table-wrap" id="alertPanelBody">
       <div class="alert-empty">正在加载技术预警…</div>
     </div>
   </section>
+  <section class="home-section home-meeting-section" aria-labelledby="homeMeetingTitle">
+    <div class="home-section-heading compact">
+      <div class="home-alert-heading"><div class="home-alert-title-group"><h2 id="homeMeetingTitle">近期会议</h2><span class="home-alert-count" id="homeMeetingCount" hidden></span></div><div class="home-alert-pagination" id="homeMeetingPagination" hidden aria-label="近期会议翻页"><button id="homeMeetingPrev" type="button" aria-label="上一页" title="上一页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button><span id="homeMeetingPageLabel">—</span><button id="homeMeetingNext" type="button" aria-label="下一页" title="下一页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></div></div>
+    </div>
+    <div class="home-meeting-list" id="homeMeetingList">
+      <div class="alert-empty">正在加载会议…</div>
+    </div>
+  </section>
   <section class="home-section home-boundary-section" aria-labelledby="homeBoundaryTitle">
     <div class="home-section-heading">
-      <div class="home-alert-title-group"><span class="home-heading-badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span><h2 id="homeBoundaryTitle">技术边界</h2></div>
+      <div class="home-alert-title-group"><h2 id="homeBoundaryTitle">技术边界</h2></div>
       <button class="home-section-link" type="button" data-route="dashboard">查看全部<span aria-hidden="true">→</span></button>
     </div>
     <div class="home-boundary-grid" id="homeBoundaryCards">
@@ -414,7 +420,7 @@ function homeView(){
   </section>
     </div>
   </aside>
-  <button class="home-drawer-tab" id="homeDrawerOpen" type="button" aria-expanded="false" aria-controls="homeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span>技术预警 · 技术边界</span></button>
+  <button class="home-drawer-tab" id="homeDrawerOpen" type="button" aria-expanded="false" aria-controls="homeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span>技术预警 · 近期会议 · 技术边界</span></button>
   <section class="home-section home-knowledge-section" aria-label="技术情报知识库问答">
     <div class="panel conversation-panel" id="knowledgeConversation">
       <div class="qa-graph-container" id="qaGraphContainer"><div class="qa-graph-placeholder">正在读取关系图谱…</div></div>
@@ -435,7 +441,7 @@ function homeView(){
 </div>`;
 }
 function renderInsightPanels(){return '';}
-function breadthView(){const source=parseHash().params;const forwarded=new URLSearchParams();['alert','focus_title','focus_date','focus_url'].forEach(key=>{const value=source.get(key);if(value)forwarded.set(key,value);});const query=forwarded.size?`?${forwarded.toString()}`:'';return `<section style="padding:0;overflow:hidden;height:100%;display:flex;flex-direction:column"><div style="flex:1;overflow:hidden;display:block" id="breadthFrameWrap"><iframe src="/breadth/index.html${query}" style="width:100%;height:100%;border:none;display:block" title="广度追踪" allowfullscreen></iframe></div></section>`;}
+function breadthView(){const source=parseHash().params;const forwarded=new URLSearchParams();['alert','focus_title','focus_date','focus_url','view','cal_year','cal_month'].forEach(key=>{const value=source.get(key);if(value)forwarded.set(key,value);});const query=forwarded.size?`?${forwarded.toString()}`:'';return `<section style="padding:0;overflow:hidden;height:100%;display:flex;flex-direction:column"><div style="flex:1;overflow:hidden;display:block" id="breadthFrameWrap"><iframe src="/breadth/index.html${query}" style="width:100%;height:100%;border:none;display:block" title="广度追踪" allowfullscreen></iframe></div></section>`;}
 function dashboardView(){return `<section class="flat-content"><h1 class="section-title">基于知识库文档凝聚的技术边界判断，含核心指标、卡点分析和突破预警</h1><form class="dashboard-search" id="dashboardFilter"><input id="dashboardQ" placeholder="搜索技术、行业或指标，例如 压缩空气、超导、钠电池"/><button class="secondary-btn" type="submit">检索</button></form><div class="dashboard-grid" id="dashboardRows"><div class="status-note">正在加载仪表盘…</div></div></section>`;}
 function sourcesView(){
   const state=parseHash();
@@ -516,12 +522,6 @@ async function loadHomeBoundaries(){const root=document.getElementById('homeBoun
 
 const HOME_ALERT_PAGE_SIZE=5;
 const HOME_ALERT_TAG_CLASS={'技术突破':'t-breakthrough','政策监管':'t-policy','产业进展':'t-industry','行业观察':'t-watch'};
-const HOME_ALERT_TAG_ICON={
- 't-breakthrough':'<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
- 't-policy':'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
- 't-industry':'<path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/>',
- 't-watch':'<circle cx="12" cy="12" r="10"/><path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"/>'
-};
 let homeAlertItems=[];
 let homeAlertPage=1;
 function homeAlertTarget(item){
@@ -575,7 +575,7 @@ function renderHomeAlertPage(){
     const reasonId=`home-alert-reason-${start+index}`;
     const tagClass=HOME_ALERT_TAG_CLASS[tag]||'';
     const sev=String(item.alert_color||'').toLowerCase().replace(/[^a-z]/g,'')||'normal';
-    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${HOME_ALERT_TAG_ICON[tagClass]?`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${HOME_ALERT_TAG_ICON[tagClass]}</svg>`:''}${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-text" id="${reasonId}"><span class="home-alert-reason-label">预警原因</span>：${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开全部</button></div></article>`;
+    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-text" id="${reasonId}"><span class="home-alert-reason-label">预警原因</span>：${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开全部</button></div></article>`;
   }).join('')}</div>`;
   requestAnimationFrame(()=>body.querySelectorAll('.home-alert-reason-text').forEach(reason=>{
     const toggle=reason.parentElement?.querySelector('[data-alert-reason-toggle]');
@@ -621,6 +621,71 @@ async function loadAlertIntel(){
     const failCount=document.getElementById('homeAlertCount');
     if(failCount)failCount.hidden=true;
   }
+}
+
+/* ── 近期会议：只显示今天及以后，按日期升序，每页 5 条，单行显示 ── */
+const HOME_MEETING_PAGE_SIZE=5;
+let homeMeetingItems=[];
+let homeMeetingPage=1;
+async function loadMeetings(){
+  const list=document.getElementById('homeMeetingList');
+  if(!list)return;
+  document.getElementById('homeMeetingPrev')?.addEventListener('click',()=>{homeMeetingPage-=1;renderHomeMeetingPage();});
+  document.getElementById('homeMeetingNext')?.addEventListener('click',()=>{homeMeetingPage+=1;renderHomeMeetingPage();});
+  try{
+    const res=await fetch('/breadth/data/processed/conferences.json',{cache:'no-store'});
+    if(!res.ok)throw new Error(`conferences ${res.status}`);
+    const data=await res.json();
+    const today=new Date();
+    const todayIso=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    homeMeetingItems=(Array.isArray(data)?data:[])
+      .filter(c=>c&&c.name&&c.start_date&&c.start_date>=todayIso)
+      .sort((a,b)=>String(a.start_date).localeCompare(String(b.start_date)));
+    homeMeetingPage=1;
+    renderHomeMeetingPage();
+  }catch(err){
+    list.innerHTML='<div class="alert-empty">会议加载失败</div>';
+    const count=document.getElementById('homeMeetingCount');
+    if(count)count.hidden=true;
+  }
+}
+function renderHomeMeetingPage(){
+  const list=document.getElementById('homeMeetingList');
+  if(!list)return;
+  const total=homeMeetingItems.length;
+  const count=document.getElementById('homeMeetingCount');
+  if(count){count.textContent=`${total} 场`;count.hidden=total===0;}
+  const pagination=document.getElementById('homeMeetingPagination');
+  if(pagination)pagination.hidden=total<=HOME_MEETING_PAGE_SIZE;
+  if(!total){
+    list.innerHTML='<div class="alert-empty">近期暂无会议</div>';
+    const pageLabel=document.getElementById('homeMeetingPageLabel');
+    if(pageLabel)pageLabel.textContent='0 / 0';
+    return;
+  }
+  const pages=Math.max(1,Math.ceil(total/HOME_MEETING_PAGE_SIZE));
+  homeMeetingPage=Math.min(Math.max(1,homeMeetingPage),pages);
+  const pageLabel=document.getElementById('homeMeetingPageLabel');
+  if(pageLabel)pageLabel.textContent=`${homeMeetingPage} / ${pages}`;
+  const start=(homeMeetingPage-1)*HOME_MEETING_PAGE_SIZE;
+  list.innerHTML=homeMeetingItems.slice(start,start+HOME_MEETING_PAGE_SIZE).map(item=>{
+    const name=String(item.name||'');
+    const date=String(item.start_date||'').slice(0,10);
+    const end=String(item.end_date||'').slice(0,10);
+    const label=end&&end!==date?`${date} ~ ${end}`:date;
+    const year=new Date(`${date}T00:00:00`);
+    const month=Number.isNaN(year.getTime())?null:year.getMonth()+1;
+    const query=new URLSearchParams({view:'calendar'});
+    query.set('cal_year',date.slice(0,4));
+    if(month)query.set('cal_month',String(month));
+    return `<button class="home-meeting-item" type="button" data-meeting-query="${escapeHtml(query.toString())}" title="${escapeHtml(name)}（${escapeHtml(label)}）"><span class="home-meeting-name">${escapeHtml(name)}</span><time class="home-meeting-date">${escapeHtml(label)}</time></button>`;
+  }).join('');
+  list.querySelectorAll('.home-meeting-item').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      // 跳转广度追踪 · 会议日历，并定位到会议所在月份
+      setRoute('breadth',new URLSearchParams(btn.dataset.meetingQuery||''));
+    });
+  });
 }
 async function loadIntelMeta(){
   const domainSel=document.getElementById('intelDomain');

@@ -60,6 +60,14 @@ const state = {
         url: params.get('focus_url') || '',
       };
     }
+    // Portal deep link: open the meeting calendar on a given month (?view=calendar&cal_year=2026&cal_month=9)
+    if (params.get('view') === 'calendar') {
+      state.__portalCalendar = true;
+      const y = parseInt(params.get('cal_year') || '', 10);
+      const m = parseInt(params.get('cal_month') || '', 10);
+      if (Number.isInteger(y) && y >= 1970 && y <= 2100) state.calendarYear = y;
+      if (Number.isInteger(m) && m >= 1 && m <= 12) state.calendarMonth = m - 1;
+    }
   } catch (e) {}
 })();
 
@@ -740,6 +748,12 @@ async function load() {
   // Set initial sort active state
   const w1 = $('sortWord1'); if (w1) w1.classList.add('active');
   applyFilters();
+
+  // Portal deep link: jump straight to the meeting calendar view
+  if (state.__portalCalendar) {
+    state.__portalCalendar = false;
+    switchView('calendar');
+  }
 
   // Tier 2: When summary shards load in background, update AI summaries + score dims
   document.addEventListener('summary-ready', () => {
@@ -1652,8 +1666,9 @@ load().catch((error) => {
 // ═══════════════════════════════════════════════════════════════
 
 state.calendarData = null;
-state.calendarYear = new Date().getFullYear();
-state.calendarMonth = new Date().getMonth();
+// Defaults; applyPortalAlert may have already set these from portal deep-link params.
+if (typeof state.calendarYear !== 'number') state.calendarYear = new Date().getFullYear();
+if (typeof state.calendarMonth !== 'number') state.calendarMonth = new Date().getMonth();
 state.calendarCategories = new Set(['零碳产业', 'AI与智能科技', '通用技术']);
 
 async function loadCalendarData() {
@@ -1699,6 +1714,14 @@ function renderCalendarView() {
         calRender();
       }
     });
+
+    // Sync sidebar controls to the actual state (portal deep link or today's month)
+    if (yearSel) yearSel.value = String(state.calendarYear);
+    if (monthPicker) {
+      monthPicker.querySelectorAll('.cal-month-btn').forEach((b) => {
+        b.classList.toggle('active', parseInt(b.dataset.month, 10) === state.calendarMonth);
+      });
+    }
   }
 
   container.innerHTML = `<div class="calendar-main" id="calMain"><p class="empty-hint">正在载入会议数据…</p></div>`;
