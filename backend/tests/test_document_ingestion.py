@@ -230,6 +230,7 @@ def test_ingestion_index_failure_preserves_assets_for_retry(monkeypatch, tmp_pat
         original_filename="a.txt",
         checksum_sha256=storage.sha256(original),
         document_assets=None,
+        document_date=None,
         classification_status="classified",
         primary_category="未分类",
         embedding_status="pending",
@@ -431,6 +432,7 @@ def test_irrelevant_uploads_are_indexed_by_default_and_keep_label(monkeypatch, t
         original_filename="a.pdf",
         checksum_sha256=storage.sha256(original),
         document_assets=None,
+        document_date=None,
         classification_status="irrelevant",
         primary_category="不相关",
         embedding_status="pending",
@@ -483,3 +485,69 @@ def test_irrelevant_uploads_are_indexed_by_default_and_keep_label(monkeypatch, t
     assert record.primary_category == "不相关"
     assert record.classification_status == "irrelevant"
     assert record.chunk_count == 1
+
+
+def test_document_date_is_stamped_into_indexed_chunks(monkeypatch, tmp_path):
+    """上传时填写的资料日期必须进入分块：文本前缀 + chunk 元数据。"""
+    from app.services import upload_ingestion
+
+    original = tmp_path / "a.txt"
+    original.write_text("synthetic")
+    record = SimpleNamespace(
+        id=uuid.uuid4(),
+        stored_filename="a.txt",
+        original_filename="a.txt",
+        checksum_sha256=storage.sha256(original),
+        document_assets=None,
+        document_date="2026-09-18 14:30",
+        classification_status="classified",
+        primary_category="通用技术/催化剂",
+        embedding_status="pending",
+        embedding_error=None,
+        chunk_count=0,
+    )
+    indexed: list[list] = []
+
+    class Session:
+        def execute(self, statement):
+            return SimpleNamespace(rowcount=1)
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            pass
+
+        def get(self, *args):
+            return record
+
+        def refresh(self, *args):
+            pass
+
+    chunks = [
+        {"chunk_id": "stable", "text": "正文一", "metadata": {"page_number": 1}},
+        {"chunk_id": "stable2", "text": "正文二", "metadata": {"page_number": 2}},
+    ]
+    monkeypatch.setattr(upload_ingestion, "SessionLocal", Session)
+    monkeypatch.setattr(upload_ingestion, "upload_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        runner,
+        "ingest",
+        lambda **kwargs: ({"bundle": "x"}, "synthetic", chunks),
+    )
+    monkeypatch.setattr(
+        upload_ingestion,
+        "request_incremental_index",
+        lambda rec, data: indexed.append(data) or {"status": "ready", "chunk_count": len(data)},
+    )
+
+    assert upload_ingestion.process_uploaded_file(record.id) is True
+
+    assert len(indexed) == 1
+    sent = indexed[0]
+    assert all(chunk["text"].startswith("【资料日期：2026-09-18 14:30】") for chunk in sent)
+    assert all(chunk["metadata"]["document_date"] == "2026-09-18 14:30" for chunk in sent)
+    assert "正文一" in sent[0]["text"] and "正文二" in sent[1]["text"]

@@ -189,6 +189,65 @@ def classification_status_for(category: str) -> str:
     return "classified"
 
 
+_DOCUMENT_DATE_FORMATS: tuple[tuple[str, bool], ...] = (
+    # (格式, 是否含时间)
+    ("%Y-%m-%d %H:%M:%S", True),
+    ("%Y-%m-%d %H:%M", True),
+    ("%Y-%m-%d", False),
+    ("%Y-%m-%dT%H:%M:%S", True),
+    ("%Y-%m-%dT%H:%M", True),
+    ("%Y/%m/%d %H:%M:%S", True),
+    ("%Y/%m/%d %H:%M", True),
+    ("%Y/%m/%d", False),
+    ("%Y.%m.%d %H:%M:%S", True),
+    ("%Y.%m.%d %H:%M", True),
+    ("%Y.%m.%d", False),
+    ("%Y年%m月%d日 %H:%M", True),
+    ("%Y年%m月%d日", False),
+)
+
+
+def normalize_document_date(value: str | None) -> str | None:
+    """归一化资料日期：统一为 `YYYY-MM-DD` 或 `YYYY-MM-DD HH:MM`（24 小时制）。
+
+    接受手输的常见写法（-、/、.、年月日分隔，时间可省略、可带秒、可带 T）。
+    空值返回 None；无法解析或年份超出 1970-2100 抛 ValueError。
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt, has_time in _DOCUMENT_DATE_FORMATS:
+        try:
+            parsed = datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        if not 1970 <= parsed.year <= 2100:
+            raise ValueError("资料日期需在 1970-2100 年之间")
+        if has_time:
+            return parsed.strftime("%Y-%m-%d %H:%M")
+        return parsed.strftime("%Y-%m-%d")
+    raise ValueError("日期格式应为 2026-09-18 或 2026-09-18 14:30（也支持 2026/09/18、2026年9月18日）")
+
+
+def apply_document_date(chunks: list[dict], document_date: str | None) -> list[dict]:
+    """把资料日期写进每个分块。
+
+    文本前缀会进入 embedding、BM25 与回答上下文——检索命中任意分块时，
+    模型都能看到并引用「这是几几年几月几日的资料」；元数据键供后续展示。
+    """
+    if not document_date:
+        return chunks
+    stamp = f"【资料日期：{document_date}】"
+    for chunk in chunks or []:
+        chunk["text"] = stamp + str(chunk.get("text", "") or "")
+        metadata = chunk.get("metadata")
+        if isinstance(metadata, dict):
+            metadata["document_date"] = document_date
+    return chunks
+
+
 def taxonomy_tree_paths(taxonomy: Taxonomy) -> list[str]:
     """行业图景全节点路径：叶子路径 + 所有中间节点路径（广度优先排序）。"""
     paths: set[str] = set()
@@ -556,6 +615,7 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
             filename=record.original_filename, checksum=record.checksum_sha256,
             previous=record.document_assets,
         )
+        apply_document_date(chunks, record.document_date)
         if not _commit_embedding_result(db, uid, document_assets=assets):
             return False
         db.refresh(record)

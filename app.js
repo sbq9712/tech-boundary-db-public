@@ -1724,6 +1724,13 @@ function openUploadModal(){
         <div class="lib-upload-field"><label for="upConf">密级</label><select id="upConf" class="lib-upload-input"><option value="">不指定</option><option>公开</option><option>内部</option><option>管理员</option></select></div>
         <div class="lib-upload-field"><label for="upSrc">来源类型</label><select id="upSrc" class="lib-upload-input"><option value="">不指定</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select></div>
       </div>
+      <div class="lib-upload-field"><label for="upDocumentDate">资料日期</label>
+        <div class="up-date-row" id="upDateRow">
+          <input id="upDocumentDate" class="lib-upload-input" type="text" placeholder="如 2026-09-18 或 2026-09-18 14:30（选填）" autocomplete="off">
+          <button type="button" id="upDateBtn" class="up-date-btn" title="打开日历选择" aria-label="打开日历选择"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
+          <div class="up-date-pop" id="upDatePop" hidden></div>
+        </div>
+      </div>
       <div class="lib-upload-field"><label for="upCategory">行业图景节点</label><select id="upCategory" class="lib-upload-input"><option value="">不指定</option></select></div>
       <div class="lib-upload-field"><label for="upNote">备注</label><textarea id="upNote" class="lib-upload-input" rows="2" placeholder="选填"></textarea></div>
       <div class="lib-upload-result" id="upResult" style="display:none;"></div>
@@ -1746,6 +1753,7 @@ function openUploadModal(){
   document.getElementById("upCloseBtn").onclick=closeUploadModal;
   document.getElementById("upCancel").onclick=closeUploadModal;
   document.getElementById("upSubmit").onclick=upSubmit;
+  document.getElementById("upDateBtn").onclick=upOpenDatePicker;
   overlay.addEventListener("click",e=>{if(e.target===overlay)closeUploadModal();});
   document.addEventListener("keydown",upEscClose);
   upEnsureTaxonomy();
@@ -1757,7 +1765,82 @@ function closeUploadModal(){
   upPending=[];
   document.removeEventListener("keydown",upEscClose);
 }
-function upEscClose(e){if(e.key==="Escape")closeUploadModal();}
+function upEscClose(e){if(e.key==="Escape"){const pop=document.getElementById("upDatePop");if(pop&&!pop.hidden){upCloseDatePicker();return;}closeUploadModal();}}
+
+/* ── 资料日期：手输 + 小日历弹层 ── */
+let upDateState={year:0,month:0,hours:9,minutes:0,sel:null};
+function upNormalizeDate(value){
+  const text=String(value||"").trim();
+  if(!text)return "";
+  const m=text.match(/^(\d{4})([年\/\-\.])(\d{1,2})\2(\d{1,2})日?(?:[ T](\d{1,2}):(\d{2})(?::\d{2})?)?$/);
+  if(!m)return null;
+  const y=+m[1],mo=+m[3],d=+m[4],hasTime=m[5]!==undefined;
+  const h=hasTime?+m[5]:null,mi=hasTime?+m[6]:null;
+  if(mo<1||mo>12||d<1||d>31||y<1970||y>2100)return null;
+  if(hasTime&&(h>23||mi>59))return null;
+  const dt=new Date(y,mo-1,d);
+  if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d)return null;
+  const pad=n=>String(n).padStart(2,"0");
+  return hasTime?`${y}-${pad(mo)}-${pad(d)} ${pad(h)}:${pad(mi)}`:`${y}-${pad(mo)}-${pad(d)}`;
+}
+function upWriteDateInput(){
+  const st=upDateState,inp=document.getElementById("upDocumentDate");
+  if(!inp||!st.sel)return;
+  const pad=n=>String(n).padStart(2,"0");
+  inp.value=`${st.sel.getFullYear()}-${pad(st.sel.getMonth()+1)}-${pad(st.sel.getDate())} ${pad(st.hours)}:${pad(st.minutes)}`;
+}
+function upRenderDatePicker(){
+  const pop=document.getElementById("upDatePop");if(!pop)return;
+  const st=upDateState;
+  const startDow=new Date(st.year,st.month,1).getDay();
+  const daysInMonth=new Date(st.year,st.month+1,0).getDate();
+  const now=new Date();
+  let cells="";
+  for(let i=0;i<startDow;i++)cells+="<span></span>";
+  for(let d=1;d<=daysInMonth;d++){
+    const sel=st.sel&&st.sel.getFullYear()===st.year&&st.sel.getMonth()===st.month&&st.sel.getDate()===d;
+    const isToday=st.year===now.getFullYear()&&st.month===now.getMonth()&&d===now.getDate();
+    cells+=`<button type="button" class="up-date-day${sel?" sel":""}${isToday?" today":""}" data-up-day="${d}">${d}</button>`;
+  }
+  const pad=n=>String(n).padStart(2,"0");
+  pop.innerHTML=`
+    <div class="up-date-head"><button type="button" class="up-date-nav" data-up-nav="-1" aria-label="上一月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><strong>${st.year}年${st.month+1}月</strong><button type="button" class="up-date-nav" data-up-nav="1" aria-label="下一月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button></div>
+    <div class="up-date-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+    <div class="up-date-grid">${cells}</div>
+    <div class="up-date-time"><span>时间</span><input id="upDateHour" type="number" min="0" max="23" value="${pad(st.hours)}">:<input id="upDateMinute" type="number" min="0" max="59" value="${pad(st.minutes)}"></div>
+    <div class="up-date-foot"><button type="button" data-up-now>此刻</button><span class="up-date-foot-right"><button type="button" data-up-clear>清除</button><button type="button" class="up-date-ok" data-up-ok>确定</button></span></div>`;
+  pop.querySelectorAll("[data-up-nav]").forEach(b=>b.onclick=()=>{st.month+=Number(b.dataset.upNav);if(st.month<0){st.month=11;st.year-=1;}if(st.month>11){st.month=0;st.year+=1;}upRenderDatePicker();});
+  pop.querySelectorAll("[data-up-day]").forEach(b=>b.onclick=()=>{st.sel=new Date(st.year,st.month,Number(b.dataset.upDay));upWriteDateInput();upRenderDatePicker();});
+  pop.querySelector("[data-up-now]").onclick=()=>{const t=new Date();st.sel=t;st.year=t.getFullYear();st.month=t.getMonth();st.hours=t.getHours();st.minutes=t.getMinutes();upWriteDateInput();upRenderDatePicker();};
+  pop.querySelector("[data-up-clear]").onclick=()=>{const inp=document.getElementById("upDocumentDate");if(inp)inp.value="";st.sel=null;upCloseDatePicker();};
+  pop.querySelector("[data-up-ok]").onclick=upCloseDatePicker;
+  const hour=pop.querySelector("#upDateHour"),minute=pop.querySelector("#upDateMinute");
+  if(hour)hour.onchange=()=>{st.hours=Math.min(23,Math.max(0,Math.round(Number(hour.value)||0)));hour.value=st.hours;if(st.sel)upWriteDateInput();};
+  if(minute)minute.onchange=()=>{st.minutes=Math.min(59,Math.max(0,Math.round(Number(minute.value)||0)));minute.value=st.minutes;if(st.sel)upWriteDateInput();};
+}
+function upOpenDatePicker(){
+  const pop=document.getElementById("upDatePop");if(!pop)return;
+  if(!pop.hidden){upCloseDatePicker();return;}
+  const st=upDateState,now=new Date();
+  const parsed=upNormalizeDate(document.getElementById("upDocumentDate").value);
+  if(parsed){
+    const m=parsed.match(/^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/);
+    if(m)st.sel=new Date(+m[1],+m[2]-1,+m[3],m[4]?+m[4]:now.getHours(),m[5]?+m[5]:now.getMinutes());
+  }else st.sel=null;
+  st.year=st.sel?st.sel.getFullYear():now.getFullYear();
+  st.month=st.sel?st.sel.getMonth():now.getMonth();
+  st.hours=st.sel?st.sel.getHours():now.getHours();
+  st.minutes=st.sel?st.sel.getMinutes():now.getMinutes();
+  upRenderDatePicker();
+  pop.hidden=false;
+  setTimeout(()=>document.addEventListener("click",upDateOutside),0);
+}
+function upCloseDatePicker(){
+  const pop=document.getElementById("upDatePop");
+  if(pop)pop.hidden=true;
+  document.removeEventListener("click",upDateOutside);
+}
+function upDateOutside(e){if(!e.target.closest("#upDateRow"))upCloseDatePicker();}
 function upAddFiles(fileList){
   const duplicated=[];
   for(const f of fileList){
@@ -1808,6 +1891,12 @@ async function upSubmit(){
   if(src)fd.append("source_type",src);
   if(cat)fd.append("primary_category",cat);
   if(note)fd.append("note",note);
+  const docDateNormalized=upNormalizeDate(document.getElementById("upDocumentDate").value);
+  if(docDateNormalized===null){
+    upShowResult("资料日期格式不正确，应为 2026-09-18 或 2026-09-18 14:30","err");
+    return;
+  }
+  if(docDateNormalized)fd.append("document_date",docDateNormalized);
   submit.disabled=true;cancel.disabled=true;
   upShowResult("正在上传…","");
   try{

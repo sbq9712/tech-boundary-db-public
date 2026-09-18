@@ -56,6 +56,45 @@ def test_classification_status_mapping(category, expected):
     assert upload_ingestion.classification_status_for(category) == expected
 
 
+def test_normalize_document_date_accepts_common_formats():
+    normalize = upload_ingestion.normalize_document_date
+
+    assert normalize(None) is None
+    assert normalize("   ") is None
+    assert normalize("2026-09-18") == "2026-09-18"
+    assert normalize("2026/9/18") == "2026-09-18"
+    assert normalize("2026.09.18") == "2026-09-18"
+    assert normalize("2026年9月18日") == "2026-09-18"
+    assert normalize("2026-09-18T14:30") == "2026-09-18 14:30"
+    assert normalize("2026-09-18 14:30:52") == "2026-09-18 14:30"
+    assert normalize("2026/09/18 9:05") == "2026-09-18 09:05"
+    assert normalize("2026.9.18 08:00") == "2026-09-18 08:00"
+    assert normalize("2026年9月18日 14:30") == "2026-09-18 14:30"
+
+    for bad in ("不是日期", "2026-13-01", "2026-09-18 25:00", "1899-12-31", "2026-09/18"):
+        with pytest.raises(ValueError):
+            normalize(bad)
+
+
+def test_apply_document_date_stamps_every_chunk():
+    chunks = [
+        {"chunk_id": "c1", "text": "第一段正文", "metadata": {"page_number": 1}},
+        {"chunk_id": "c2", "text": "第二段正文"},
+    ]
+
+    upload_ingestion.apply_document_date(chunks, "2026-09-18 14:30")
+
+    assert chunks[0]["text"].startswith("【资料日期：2026-09-18 14:30】")
+    assert "第一段正文" in chunks[0]["text"]
+    assert chunks[0]["metadata"]["document_date"] == "2026-09-18 14:30"
+    assert chunks[1]["text"].startswith("【资料日期：2026-09-18 14:30】")
+
+    # 空日期：原样返回，不改动
+    untouched = [{"chunk_id": "c3", "text": "正文", "metadata": {}}]
+    upload_ingestion.apply_document_date(untouched, None)
+    assert untouched[0]["text"] == "正文"
+
+
 def test_ai_result_outside_taxonomy_is_rejected(monkeypatch):
     class FakeResponse:
         def raise_for_status(self):

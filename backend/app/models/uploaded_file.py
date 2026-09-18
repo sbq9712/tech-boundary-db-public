@@ -40,6 +40,9 @@ class UploadedFile(Base):
     # 旧版自由文本领域标签，仅为历史兼容保留；新上传使用版本化分类字段。
     domain_refs: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 资料日期（上传时管理员填写，可手输或日历选择）；
+    # 会以【资料日期：…】前缀写进每个分块文本，并随 chunk 元数据入索引。
+    document_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     # AI 填充状态，便于排查：manual | ai_filled | ai_failed | filename_fallback
     title_source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")

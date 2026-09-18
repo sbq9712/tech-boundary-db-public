@@ -33,6 +33,7 @@ from app.services.upload_ingestion import (
     classification_status_for,
     delete_uploaded_file,
     load_taxonomy,
+    normalize_document_date,
     persist_upload,
     process_uploaded_file,
     remove_stored_upload,
@@ -271,6 +272,7 @@ async def upload_files(
     source_type: str | None = Form(None),
     note: str | None = Form(None),
     primary_category: str | None = Form(None),
+    document_date: str | None = Form(None),
     current_user: str = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -295,6 +297,10 @@ async def upload_files(
     manual_category = None
     if primary_category:
         manual_category, _ = _validate_category(primary_category)
+    try:
+        document_date = normalize_document_date(document_date)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
     stored_items: list[StoredUpload] = []
     records: list[UploadedFile] = []
@@ -319,6 +325,7 @@ async def upload_files(
                 source_type=source_type,
                 domain_refs=None,
                 note=note,
+                document_date=document_date,
                 title_source="manual" if manual_title else "filename_fallback",
                 taxonomy_version=taxonomy.version if manual_category else None,
                 primary_category=manual_category,
