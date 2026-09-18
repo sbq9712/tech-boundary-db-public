@@ -491,19 +491,34 @@ function renderKnowledgeGraphCanvas(container,data){
   const tooltip=document.createElement('div');tooltip.className='qa-graph-tooltip';
   container.innerHTML='';container.append(canvas,tooltip);
   const ctx=canvas.getContext('2d');
-  const colors={'公司':'#6366f1','机构':'#8b5cf6','技术':'#2563eb','材料':'#059669','产品':'#d97706','人物':'#dc2626','政策':'#db2777','指标':'#0d9488','organization':'#6366f1','artifact':'#d97706','concept':'#2563eb','person':'#dc2626','method':'#9333ea','event':'#ea580c','data':'#0d9488','other':'#64748b','UNKNOWN':'#64748b'};
+  const colors={'公司':'#818cf8','机构':'#a78bfa','技术':'#60a5fa','材料':'#34d399','产品':'#fbbf24','人物':'#f87171','政策':'#f472b6','指标':'#2dd4bf','organization':'#818cf8','artifact':'#fbbf24','concept':'#60a5fa','person':'#f87171','method':'#c084fc','event':'#fb923c','data':'#2dd4bf','other':'#94a3b8','UNKNOWN':'#94a3b8'};
+  // 星空：节点带上各自的闪烁相位
+  
   let width=0,height=0,raf=0,temperature=1,hover=null,drag=null,panning=false,panStart=null;
   const transform={x:0,y:0,scale:1};
-  const nodes=(data.nodes||[]).slice(0,200).map((node,index)=>{const angle=index*2.399963;const radius=18*Math.sqrt(index);return {...node,x:Math.cos(angle)*radius,y:Math.sin(angle)*radius,vx:0,vy:0,radius:Math.max(4,Math.min(14,4+Number(node.degree||0)*.45)),color:colors[node.type]||'#64748b'};});
+  const nodes=(data.nodes||[]).slice(0,200).map((node,index)=>{const angle=index*2.399963;const radius=18*Math.sqrt(index);return {...node,x:Math.cos(angle)*radius,y:Math.sin(angle)*radius,vx:0,vy:0,radius:Math.max(4,Math.min(14,4+Number(node.degree||0)*.45)),color:colors[node.type]||'#94a3b8',tw:.6+((index*137)%100)/100*.9,phase:(index*97)%628/100};});
   const nodeMap=new Map(nodes.map(node=>[node.label,node]));
   const edges=(data.edges||[]).filter(edge=>nodeMap.has(edge.source)&&nodeMap.has(edge.target)).slice(0,500);
-  function resize(){const rect=container.getBoundingClientRect();width=Math.max(1,Math.round(rect.width));height=Math.max(1,Math.round(rect.height));const ratio=Math.min(window.devicePixelRatio||1,2);canvas.width=width*ratio;canvas.height=height*ratio;canvas.style.width=`${width}px`;canvas.style.height=`${height}px`;ctx.setTransform(ratio,0,0,ratio,0,0);}
+  function resize(){const rect=container.getBoundingClientRect();width=Math.max(1,Math.round(rect.width));height=Math.max(1,Math.round(rect.height));const ratio=Math.min(window.devicePixelRatio||1,2);canvas.width=width*ratio;canvas.height=height*ratio;canvas.style.width=`${width}px`;canvas.style.height=`${height}px`;ctx.setTransform(ratio,0,0,ratio,0,0);buildSky();}
+  /* ── 星空背景：固定种子生成远景星星（不随图平移缩放），加偶发流星 ── */
+  let skyStars=[],meteors=[];
+  function buildSky(){
+    let seed=20260918;const rand=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
+    const count=Math.max(90,Math.min(240,Math.round(width*height/9000)));
+    skyStars=Array.from({length:count},(_,i)=>({x:rand()*width,y:rand()*height,r:.4+rand()*1.15,base:.22+rand()*.55,phase:rand()*6.283,speed:.4+rand()*1.2,warm:rand()<.18}));
+  }
+  function drawSky(t){
+    for(const st of skyStars){const a=st.base*(.62+.38*Math.sin(t*.001*st.speed+st.phase));ctx.beginPath();ctx.arc(st.x,st.y,st.r,0,Math.PI*2);ctx.fillStyle=st.warm?`rgba(254,249,235,${a})`:`rgba(224,231,255,${a})`;ctx.fill();}
+    if(meteors.length<2&&Math.random()<.005)meteors.push({x:width*(.25+Math.random()*.7),y:height*Math.random()*.32,vx:-(4.2+Math.random()*3),vy:2.1+Math.random()*1.4,life:1});
+    for(let i=meteors.length-1;i>=0;i--){const m=meteors[i];m.x+=m.vx;m.y+=m.vy;m.life-=.016;if(m.life<=0){meteors.splice(i,1);continue;}
+      const tail=9;const grad=ctx.createLinearGradient(m.x,m.y,m.x-m.vx*tail,m.y-m.vy*tail);grad.addColorStop(0,`rgba(237,242,255,${.85*m.life})`);grad.addColorStop(1,'rgba(237,242,255,0)');ctx.strokeStyle=grad;ctx.lineWidth=1.4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(m.x,m.y);ctx.lineTo(m.x-m.vx*tail,m.y-m.vy*tail);ctx.stroke();}
+  }
   function point(event){const rect=canvas.getBoundingClientRect();return {screenX:event.clientX-rect.left,screenY:event.clientY-rect.top,x:(event.clientX-rect.left-transform.x-width/2)/transform.scale,y:(event.clientY-rect.top-transform.y-height/2)/transform.scale};}
   function hit(position){return [...nodes].reverse().find(node=>Math.hypot(position.x-node.x,position.y-node.y)<=node.radius+4)||null;}
   function simulate(){
     if(temperature>.025){for(let i=0;i<nodes.length;i++){for(let j=i+1;j<nodes.length;j++){const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d2=Math.max(36,dx*dx+dy*dy),force=120/d2*temperature;a.vx-=dx*force;a.vy-=dy*force;b.vx+=dx*force;b.vy+=dy*force;}}edges.forEach(edge=>{const a=nodeMap.get(edge.source),b=nodeMap.get(edge.target),dx=b.x-a.x,dy=b.y-a.y,dist=Math.max(1,Math.hypot(dx,dy)),force=(dist-72)*.0025*temperature;a.vx+=dx/dist*force;a.vy+=dy/dist*force;b.vx-=dx/dist*force;b.vy-=dy/dist*force;});nodes.forEach(node=>{if(node===drag)return;node.vx+=-node.x*.0005*temperature;node.vy+=-node.y*.0005*temperature;node.vx*=.86;node.vy*=.86;node.x+=node.vx;node.y+=node.vy;});temperature*=.994;}
   }
-  function draw(){ctx.clearRect(0,0,width,height);ctx.save();ctx.translate(width/2+transform.x,height/2+transform.y);ctx.scale(transform.scale,transform.scale);ctx.strokeStyle='rgba(100,116,139,.18)';ctx.lineWidth=1/transform.scale;edges.forEach(edge=>{const a=nodeMap.get(edge.source),b=nodeMap.get(edge.target);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();});nodes.forEach(node=>{if(node===hover){ctx.beginPath();ctx.arc(node.x,node.y,node.radius+5,0,Math.PI*2);ctx.fillStyle=`${node.color}30`;ctx.fill();}ctx.beginPath();ctx.arc(node.x,node.y,node.radius,0,Math.PI*2);ctx.fillStyle=node.color;ctx.fill();if(node===hover||node.radius>9){ctx.fillStyle='#334155';ctx.font=`${10/Math.max(.8,transform.scale)}px sans-serif`;ctx.textAlign='center';ctx.fillText(String(node.label||'').slice(0,14),node.x,node.y-node.radius-5);}});ctx.restore();}
+  function draw(){const t=performance.now();ctx.clearRect(0,0,width,height);drawSky(t);ctx.save();ctx.translate(width/2+transform.x,height/2+transform.y);ctx.scale(transform.scale,transform.scale);ctx.strokeStyle='rgba(151,166,255,.16)';ctx.lineWidth=1/transform.scale;edges.forEach(edge=>{const a=nodeMap.get(edge.source),b=nodeMap.get(edge.target);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();});nodes.forEach(node=>{const tw=.8+.2*Math.sin(t*.0012*node.tw+node.phase);if(node===hover){ctx.beginPath();ctx.arc(node.x,node.y,node.radius+7,0,Math.PI*2);ctx.fillStyle='rgba(226,232,255,.16)';ctx.fill();}if(node.radius>=6){ctx.shadowColor=node.color;ctx.shadowBlur=node.radius*2.4;}else{ctx.shadowBlur=0;}ctx.globalAlpha=tw;ctx.beginPath();ctx.arc(node.x,node.y,node.radius,0,Math.PI*2);ctx.fillStyle=node.color;ctx.fill();ctx.shadowBlur=0;ctx.beginPath();ctx.arc(node.x-node.radius*.18,node.y-node.radius*.18,node.radius*.42,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.85)';ctx.fill();ctx.globalAlpha=1;if(node===hover||node.radius>9){ctx.fillStyle='rgba(214,222,248,.8)';ctx.font=`${10/Math.max(.8,transform.scale)}px sans-serif`;ctx.textAlign='center';ctx.fillText(String(node.label||'').slice(0,14),node.x,node.y-node.radius-6);}});ctx.restore();}
   function animate(){simulate();draw();raf=requestAnimationFrame(animate);}
   function pointerDown(event){const p=point(event);drag=hit(p);if(drag){temperature=Math.max(temperature,.25);}else{panning=true;panStart={x:event.clientX-transform.x,y:event.clientY-transform.y};}canvas.setPointerCapture?.(event.pointerId);}
   function pointerMove(event){const p=point(event);if(drag){drag.x=p.x;drag.y=p.y;drag.vx=0;drag.vy=0;}else if(panning){transform.x=event.clientX-panStart.x;transform.y=event.clientY-panStart.y;}else{hover=hit(p);canvas.style.cursor=hover?'pointer':'grab';if(hover){tooltip.textContent=`${hover.label}（${hover.type||'未知'}） · 连接度 ${hover.degree||0}`;tooltip.style.left=`${p.screenX+12}px`;tooltip.style.top=`${p.screenY+12}px`;tooltip.classList.add('visible');}else tooltip.classList.remove('visible');}}
@@ -639,8 +654,14 @@ async function loadMeetings(){
     const today=new Date();
     const todayIso=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
     homeMeetingItems=(Array.isArray(data)?data:[])
-      .filter(c=>c&&c.name&&c.start_date&&c.start_date>=todayIso)
-      .sort((a,b)=>String(a.start_date).localeCompare(String(b.start_date)));
+      .filter(c=>{
+        if(!c||!c.name)return false;
+        const start=String(c.start_date||'');
+        const end=String(c.end_date||'');
+        // 今天及以后：未开始的，或已开始但尚未结束（进行中）的都算
+        return start>=todayIso||(end&&end>=todayIso);
+      })
+      .sort((a,b)=>String(a.start_date||'').localeCompare(String(b.start_date||'')));
     homeMeetingPage=1;
     renderHomeMeetingPage();
   }catch(err){
