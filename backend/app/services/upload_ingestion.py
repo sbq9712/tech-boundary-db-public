@@ -189,28 +189,28 @@ def classification_status_for(category: str) -> str:
     return "classified"
 
 
-_DOCUMENT_DATE_FORMATS: tuple[tuple[str, bool], ...] = (
-    # (格式, 是否含时间)
-    ("%Y-%m-%d %H:%M:%S", True),
-    ("%Y-%m-%d %H:%M", True),
-    ("%Y-%m-%d", False),
-    ("%Y-%m-%dT%H:%M:%S", True),
-    ("%Y-%m-%dT%H:%M", True),
-    ("%Y/%m/%d %H:%M:%S", True),
-    ("%Y/%m/%d %H:%M", True),
-    ("%Y/%m/%d", False),
-    ("%Y.%m.%d %H:%M:%S", True),
-    ("%Y.%m.%d %H:%M", True),
-    ("%Y.%m.%d", False),
-    ("%Y年%m月%d日 %H:%M", True),
-    ("%Y年%m月%d日", False),
+_DOCUMENT_DATE_FORMATS: tuple[str, ...] = (
+    # 仅日期语义；手输带了时间也只取日期部分
+    ("%Y-%m-%d %H:%M:%S"),
+    ("%Y-%m-%d %H:%M"),
+    ("%Y-%m-%d"),
+    ("%Y-%m-%dT%H:%M:%S"),
+    ("%Y-%m-%dT%H:%M"),
+    ("%Y/%m/%d %H:%M:%S"),
+    ("%Y/%m/%d %H:%M"),
+    ("%Y/%m/%d"),
+    ("%Y.%m.%d %H:%M:%S"),
+    ("%Y.%m.%d %H:%M"),
+    ("%Y.%m.%d"),
+    ("%Y年%m月%d日 %H:%M"),
+    ("%Y年%m月%d日"),
 )
 
 
 def normalize_document_date(value: str | None) -> str | None:
-    """归一化资料日期：统一为 `YYYY-MM-DD` 或 `YYYY-MM-DD HH:MM`（24 小时制）。
+    """归一化资料日期：统一为 `YYYY-MM-DD`（仅日期，不含时间）。
 
-    接受手输的常见写法（-、/、.、年月日分隔，时间可省略、可带秒、可带 T）。
+    接受手输的常见写法（-、/、.、年月日分隔，可带时间——只取日期部分）。
     空值返回 None；无法解析或年份超出 1970-2100 抛 ValueError。
     """
     if value is None:
@@ -218,17 +218,15 @@ def normalize_document_date(value: str | None) -> str | None:
     text = str(value).strip()
     if not text:
         return None
-    for fmt, has_time in _DOCUMENT_DATE_FORMATS:
+    for fmt in _DOCUMENT_DATE_FORMATS:
         try:
             parsed = datetime.strptime(text, fmt)
         except ValueError:
             continue
         if not 1970 <= parsed.year <= 2100:
             raise ValueError("资料日期需在 1970-2100 年之间")
-        if has_time:
-            return parsed.strftime("%Y-%m-%d %H:%M")
         return parsed.strftime("%Y-%m-%d")
-    raise ValueError("日期格式应为 2026-09-18 或 2026-09-18 14:30（也支持 2026/09/18、2026年9月18日）")
+    raise ValueError("日期格式应为 2026-09-18（也支持 2026/09/18、2026年9月18日）")
 
 
 def apply_document_date(chunks: list[dict], document_date: str | None) -> list[dict]:

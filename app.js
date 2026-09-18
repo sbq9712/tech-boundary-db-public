@@ -1726,7 +1726,7 @@ function openUploadModal(){
       </div>
       <div class="lib-upload-field"><label for="upDocumentDate">资料日期</label>
         <div class="up-date-row" id="upDateRow">
-          <input id="upDocumentDate" class="lib-upload-input" type="text" placeholder="如 2026-09-18 或 2026-09-18 14:30（选填）" autocomplete="off">
+          <input id="upDocumentDate" class="lib-upload-input" type="text" placeholder="如 2026-09-18（选填）" autocomplete="off">
           <button type="button" id="upDateBtn" class="up-date-btn" title="打开日历选择" aria-label="打开日历选择"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
           <div class="up-date-pop" id="upDatePop" hidden></div>
         </div>
@@ -1767,27 +1767,25 @@ function closeUploadModal(){
 }
 function upEscClose(e){if(e.key==="Escape"){const pop=document.getElementById("upDatePop");if(pop&&!pop.hidden){upCloseDatePicker();return;}closeUploadModal();}}
 
-/* ── 资料日期：手输 + 小日历弹层 ── */
-let upDateState={year:0,month:0,hours:9,minutes:0,sel:null};
+/* ── 资料日期：手输 + 小日历弹层（仅日期，不含时间） ── */
+let upDateState={year:0,month:0,sel:null};
 function upNormalizeDate(value){
   const text=String(value||"").trim();
   if(!text)return "";
-  const m=text.match(/^(\d{4})([年\/\-\.])(\d{1,2})\2(\d{1,2})日?(?:[ T](\d{1,2}):(\d{2})(?::\d{2})?)?$/);
+  const m=text.match(/^(\d{4})([年\/\-\.])(\d{1,2})\2(\d{1,2})日?(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?$/);
   if(!m)return null;
-  const y=+m[1],mo=+m[3],d=+m[4],hasTime=m[5]!==undefined;
-  const h=hasTime?+m[5]:null,mi=hasTime?+m[6]:null;
+  const y=+m[1],mo=+m[3],d=+m[4];
   if(mo<1||mo>12||d<1||d>31||y<1970||y>2100)return null;
-  if(hasTime&&(h>23||mi>59))return null;
   const dt=new Date(y,mo-1,d);
   if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d)return null;
   const pad=n=>String(n).padStart(2,"0");
-  return hasTime?`${y}-${pad(mo)}-${pad(d)} ${pad(h)}:${pad(mi)}`:`${y}-${pad(mo)}-${pad(d)}`;
+  return `${y}-${pad(mo)}-${pad(d)}`;
 }
 function upWriteDateInput(){
   const st=upDateState,inp=document.getElementById("upDocumentDate");
   if(!inp||!st.sel)return;
   const pad=n=>String(n).padStart(2,"0");
-  inp.value=`${st.sel.getFullYear()}-${pad(st.sel.getMonth()+1)}-${pad(st.sel.getDate())} ${pad(st.hours)}:${pad(st.minutes)}`;
+  inp.value=`${st.sel.getFullYear()}-${pad(st.sel.getMonth()+1)}-${pad(st.sel.getDate())}`;
 }
 function upRenderDatePicker(){
   const pop=document.getElementById("upDatePop");if(!pop)return;
@@ -1807,16 +1805,12 @@ function upRenderDatePicker(){
     <div class="up-date-head"><button type="button" class="up-date-nav" data-up-nav="-1" aria-label="上一月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><strong>${st.year}年${st.month+1}月</strong><button type="button" class="up-date-nav" data-up-nav="1" aria-label="下一月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button></div>
     <div class="up-date-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
     <div class="up-date-grid">${cells}</div>
-    <div class="up-date-time"><span>时间</span><input id="upDateHour" type="number" min="0" max="23" value="${pad(st.hours)}">:<input id="upDateMinute" type="number" min="0" max="59" value="${pad(st.minutes)}"></div>
     <div class="up-date-foot"><button type="button" data-up-now>此刻</button><span class="up-date-foot-right"><button type="button" data-up-clear>清除</button><button type="button" class="up-date-ok" data-up-ok>确定</button></span></div>`;
   pop.querySelectorAll("[data-up-nav]").forEach(b=>b.onclick=()=>{st.month+=Number(b.dataset.upNav);if(st.month<0){st.month=11;st.year-=1;}if(st.month>11){st.month=0;st.year+=1;}upRenderDatePicker();});
   pop.querySelectorAll("[data-up-day]").forEach(b=>b.onclick=()=>{st.sel=new Date(st.year,st.month,Number(b.dataset.upDay));upWriteDateInput();upRenderDatePicker();});
-  pop.querySelector("[data-up-now]").onclick=()=>{const t=new Date();st.sel=t;st.year=t.getFullYear();st.month=t.getMonth();st.hours=t.getHours();st.minutes=t.getMinutes();upWriteDateInput();upRenderDatePicker();};
+  pop.querySelector("[data-up-now]").onclick=()=>{const t=new Date();st.sel=new Date(t.getFullYear(),t.getMonth(),t.getDate());st.year=t.getFullYear();st.month=t.getMonth();upWriteDateInput();upRenderDatePicker();};
   pop.querySelector("[data-up-clear]").onclick=()=>{const inp=document.getElementById("upDocumentDate");if(inp)inp.value="";st.sel=null;upCloseDatePicker();};
   pop.querySelector("[data-up-ok]").onclick=upCloseDatePicker;
-  const hour=pop.querySelector("#upDateHour"),minute=pop.querySelector("#upDateMinute");
-  if(hour)hour.onchange=()=>{st.hours=Math.min(23,Math.max(0,Math.round(Number(hour.value)||0)));hour.value=st.hours;if(st.sel)upWriteDateInput();};
-  if(minute)minute.onchange=()=>{st.minutes=Math.min(59,Math.max(0,Math.round(Number(minute.value)||0)));minute.value=st.minutes;if(st.sel)upWriteDateInput();};
 }
 function upOpenDatePicker(){
   const pop=document.getElementById("upDatePop");if(!pop)return;
@@ -1829,8 +1823,6 @@ function upOpenDatePicker(){
   }else st.sel=null;
   st.year=st.sel?st.sel.getFullYear():now.getFullYear();
   st.month=st.sel?st.sel.getMonth():now.getMonth();
-  st.hours=st.sel?st.sel.getHours():now.getHours();
-  st.minutes=st.sel?st.sel.getMinutes():now.getMinutes();
   upRenderDatePicker();
   pop.hidden=false;
   setTimeout(()=>document.addEventListener("click",upDateOutside),0);
@@ -1893,7 +1885,7 @@ async function upSubmit(){
   if(note)fd.append("note",note);
   const docDateNormalized=upNormalizeDate(document.getElementById("upDocumentDate").value);
   if(docDateNormalized===null){
-    upShowResult("资料日期格式不正确，应为 2026-09-18 或 2026-09-18 14:30","err");
+    upShowResult("资料日期格式不正确，应为 2026-09-18","err");
     return;
   }
   if(docDateNormalized)fd.append("document_date",docDateNormalized);

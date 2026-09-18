@@ -499,7 +499,7 @@ def test_document_date_is_stamped_into_indexed_chunks(monkeypatch, tmp_path):
         original_filename="a.txt",
         checksum_sha256=storage.sha256(original),
         document_assets=None,
-        document_date="2026-09-18 14:30",
+        document_date="2026-09-18",
         classification_status="classified",
         primary_category="通用技术/催化剂",
         embedding_status="pending",
@@ -548,6 +548,6 @@ def test_document_date_is_stamped_into_indexed_chunks(monkeypatch, tmp_path):
 
     assert len(indexed) == 1
     sent = indexed[0]
-    assert all(chunk["text"].startswith("【资料日期：2026-09-18 14:30】") for chunk in sent)
-    assert all(chunk["metadata"]["document_date"] == "2026-09-18 14:30" for chunk in sent)
+    assert all(chunk["text"].startswith("【资料日期：2026-09-18】") for chunk in sent)
+    assert all(chunk["metadata"]["document_date"] == "2026-09-18" for chunk in sent)
     assert "正文一" in sent[0]["text"] and "正文二" in sent[1]["text"]

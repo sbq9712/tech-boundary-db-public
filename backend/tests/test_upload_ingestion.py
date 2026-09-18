@@ -65,11 +65,12 @@ def test_normalize_document_date_accepts_common_formats():
     assert normalize("2026/9/18") == "2026-09-18"
     assert normalize("2026.09.18") == "2026-09-18"
     assert normalize("2026年9月18日") == "2026-09-18"
-    assert normalize("2026-09-18T14:30") == "2026-09-18 14:30"
-    assert normalize("2026-09-18 14:30:52") == "2026-09-18 14:30"
-    assert normalize("2026/09/18 9:05") == "2026-09-18 09:05"
-    assert normalize("2026.9.18 08:00") == "2026-09-18 08:00"
-    assert normalize("2026年9月18日 14:30") == "2026-09-18 14:30"
+    # 手输带时间时仅取日期部分
+    assert normalize("2026-09-18T14:30") == "2026-09-18"
+    assert normalize("2026-09-18 14:30:52") == "2026-09-18"
+    assert normalize("2026/09/18 9:05") == "2026-09-18"
+    assert normalize("2026.9.18 08:00") == "2026-09-18"
+    assert normalize("2026年9月18日 14:30") == "2026-09-18"
 
     for bad in ("不是日期", "2026-13-01", "2026-09-18 25:00", "1899-12-31", "2026-09/18"):
         with pytest.raises(ValueError):
@@ -82,12 +83,12 @@ def test_apply_document_date_stamps_every_chunk():
         {"chunk_id": "c2", "text": "第二段正文"},
     ]
 
-    upload_ingestion.apply_document_date(chunks, "2026-09-18 14:30")
+    upload_ingestion.apply_document_date(chunks, "2026-09-18")
 
-    assert chunks[0]["text"].startswith("【资料日期：2026-09-18 14:30】")
+    assert chunks[0]["text"].startswith("【资料日期：2026-09-18】")
     assert "第一段正文" in chunks[0]["text"]
-    assert chunks[0]["metadata"]["document_date"] == "2026-09-18 14:30"
-    assert chunks[1]["text"].startswith("【资料日期：2026-09-18 14:30】")
+    assert chunks[0]["metadata"]["document_date"] == "2026-09-18"
+    assert chunks[1]["text"].startswith("【资料日期：2026-09-18】")
 
     # 空日期：原样返回，不改动
     untouched = [{"chunk_id": "c3", "text": "正文", "metadata": {}}]
