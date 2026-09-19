@@ -2772,3 +2772,11 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
   border-color:rgba(99,102,241,.16);
   box-shadow:0 26px 60px -22px rgba(79,70,229,.22);
 }
+.home-knowledge-section .qa-empty-copy::after{
+  content:"";
+  width:64px;
+  height:2px;
+  border-radius:2px;
+  margin-top:10px;
+  background:linear-gradient(90deg,rgba(99,102,241,0),rgba(99,102,241,.5) 50%,rgba(139,92,246,0));
+}
