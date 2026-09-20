@@ -384,11 +384,14 @@ function render(){if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTi
 async function ensureCurrentUser(){if(!currentUser){await loadCurrentUser();}return currentUser;}
 function loadCurrentUser(){return apiFetch("/api/auth/me").then(r=>r.ok?r.json():null).then(d=>{if(d){currentUser=d;}}).catch(()=>{});}
 function isAdmin(){return currentUser&&currentUser.role==="admin";}
+// 资料库权限三级：管理员(上传/下载/删除) > ATSC用户(上传/下载) > 普通用户(仅查看)
+const ROLE_LABELS={admin:"管理员",atsc:"ATSC用户",user:"普通用户"};
+function canManageFiles(){const r=currentUser&&currentUser.role;return r==="admin"||r==="atsc";}
 function shell(state){
   const data=routes[state.route];
   const visibleNav=navItems.filter(([key])=>key!=='users'||isAdmin());
   const accName=(currentUser&&(currentUser.display_name||currentUser.username))||'加载中…';
-  const accRole=currentUser?(currentUser.role==='admin'?'管理员':'普通用户'):'';
+  const accRole=currentUser?(ROLE_LABELS[currentUser.role]||currentUser.role):'';
   const avatarLetter=(accName||'?')[0].toUpperCase();
   const navHtml=visibleNav.map(([key,code])=>{
     const r=routes[key];
@@ -1396,7 +1399,8 @@ async function loadUsers(){
     if(!users.length){tbody.innerHTML='<tr><td colspan="6">暂无用户</td></tr>';return;}
     tbody.innerHTML=users.map(u=>{
       const isMe=currentUser&&u.username===currentUser.username;
-      const roleLabel=u.role==='admin'?'<span style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:999px;padding:2px 8px;font-size:11px">管理员</span>':'<span style="background:#f1f5f9;color:#475467;border:1px solid #e2e8f0;border-radius:999px;padding:2px 8px;font-size:11px">普通用户</span>';
+      const roleBadge={admin:'<span style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:999px;padding:2px 8px;font-size:11px">管理员</span>',atsc:'<span style="background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;border-radius:999px;padding:2px 8px;font-size:11px">ATSC用户</span>',user:'<span style="background:#f1f5f9;color:#475467;border:1px solid #e2e8f0;border-radius:999px;padding:2px 8px;font-size:11px">普通用户</span>'};
+      const roleLabel=roleBadge[u.role]||esc(u.role);
       const statusLabel=u.is_active?'<span style="color:#16a34a">● 启用</span>':'<span style="color:#dc2626">● 禁用</span>';
       const login=u.last_login_at?new Date(u.last_login_at).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
       const meTag=isMe?' <span style="color:#0e7490;font-weight:600">(我)</span>':'';
@@ -1435,7 +1439,7 @@ function showCreateUserModal(){
       <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">用户名 *</label><input id="_cuUsername" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box" /></div>
       <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">密码 *</label><input id="_cuPassword" type="password" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box" /></div>
       <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">显示名</label><input id="_cuDisplayName" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box" /></div>
-      <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">角色</label><select id="_cuRole" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box"><option value="user">普通用户</option><option value="admin">管理员</option></select></div>
+      <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">角色</label><select id="_cuRole" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box"><option value="user">普通用户</option><option value="atsc">ATSC用户</option><option value="admin">管理员</option></select></div>
     </div>
     <div id="_cuMsg" style="font-size:13px;min-height:18px;margin-top:12px"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
@@ -1474,7 +1478,7 @@ function showEditUserModal(username){
       <div style="font-size:17px;font-weight:700;margin-bottom:20px">编辑用户：${escapeHtml(username)}</div>
       <div style="display:grid;gap:12px">
         <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">显示名</label><input id="_euDisplayName" value="${escapeHtml(u.display_name||'')}" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box" /></div>
-        <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">角色</label><select id="_euRole" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box"><option value="user" ${u.role==='user'?'selected':''}>普通用户</option><option value="admin" ${u.role==='admin'?'selected':''}>管理员</option></select></div>
+        <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">角色</label><select id="_euRole" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box"><option value="user" ${u.role==='user'?'selected':''}>普通用户</option><option value="atsc" ${u.role==='atsc'?'selected':''}>ATSC用户</option><option value="admin" ${u.role==='admin'?'selected':''}>管理员</option></select></div>
         <div><label style="font-size:13px;color:#667085;display:block;margin-bottom:4px">账号状态</label><select id="_euActive" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box"><option value="true" ${u.is_active?'selected':''}>启用</option><option value="false" ${!u.is_active?'selected':''}>禁用</option></select></div>
       </div>
       <div id="_euMsg" style="font-size:13px;min-height:18px;margin-top:12px"></div>
@@ -1614,19 +1618,19 @@ window.addEventListener("hashchange",render);
 window.addEventListener("DOMContentLoaded",async()=>{await loadCurrentUser();render();});
 
 /* ── 资料库（in-app 视图，替代独立页跳转，保留左侧导航） ── */
-let libRefreshTimer=null,libOffset=0,libTotal=0,libIsAdmin=false;
+let libRefreshTimer=null,libOffset=0,libTotal=0,libIsAdmin=false,libCanManage=false;
 const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引未完成",embedding_skipped:"索引未完成",embedding_legacy_unindexed:"历史未索引",ready:"可检索"};
 function reviewedEmptyCard(){return `<div class="dashboard-card reviewed-empty"><div class="reviewed-empty-mark">无</div><strong>暂无已审核报告</strong><span>深度调研完成审核后将展示在这里</span></div>`;}
-function libraryView(){return `<section class="flat-content library"><div class="lib-head"><div><h1 class="section-title">资料库</h1><p class="lib-subtitle">管理员上传的资料，登录用户可下载</p></div><div class="filter-row"><select id="srcFilter" aria-label="来源类型"><option value="">全部来源</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select><select id="categoryFilter" aria-label="行业图景节点"><option value="">全部节点</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>行业图景节点</th><th>状态</th><th>来源类型</th><th>密级</th><th>大小</th><th>上传者</th><th>时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;}
+function libraryView(){return `<section class="flat-content library"><div class="lib-head"><div><h1 class="section-title">资料库</h1><p class="lib-subtitle">普通用户可在线查看；ATSC用户与管理员可上传/下载；删除仅限管理员</p></div><div class="filter-row"><select id="srcFilter" aria-label="来源类型"><option value="">全部来源</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select><select id="categoryFilter" aria-label="行业图景节点"><option value="">全部节点</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>行业图景节点</th><th>状态</th><th>来源类型</th><th>密级</th><th>大小</th><th>上传者</th><th>时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">ATSC用户与管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;}
 function libFmtSize(n){if(!n)return "-";const u=["B","KB","MB","GB"];let i=0,s=n;while(s>=1024&&i<3){s/=1024;i++;}return s.toFixed(s<10?1:0)+" "+u[i];}
 function libFmtTime(iso){if(!iso)return "-";const d=new Date(iso);return isNaN(d)?"-":d.toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});}
 async function initLibrary(){
-  libOffset=0;libIsAdmin=false;
+  libOffset=0;libIsAdmin=false;libCanManage=false;
   ["srcFilter","categoryFilter","statusFilter"].forEach(id=>{const el=document.getElementById(id);if(el)el.onchange=()=>{libOffset=0;loadLibrary();};});
   const prev=document.getElementById("prevBtn"),next=document.getElementById("nextBtn");
   if(prev)prev.onclick=()=>{libOffset=Math.max(0,libOffset-30);loadLibrary();};
   if(next)next.onclick=()=>{if(libOffset+30<libTotal){libOffset+=30;loadLibrary();}};
-  try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";const link=document.getElementById("uploadLink");if(libIsAdmin&&link){link.style.display="";link.onclick=openUploadModal;}}}catch(e){}
+  try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";libCanManage=j.role==="admin"||j.role==="atsc";const link=document.getElementById("uploadLink");if(libCanManage&&link){link.style.display="";link.onclick=openUploadModal;}}}catch(e){}
   try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];const select=document.getElementById("categoryFilter");if(select){const treePaths=data.all_paths||(data.categories||[]).filter(c=>c.includes("/"));select.innerHTML='<option value="">全部节点</option>'+treePaths.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")+'<option value="不相关">不相关</option><option value="未分类">未分类</option>';}}}catch(e){}
   loadLibrary();
 }
@@ -1666,7 +1670,7 @@ async function loadLibrary(){
     const statusDetail=f.embedding_error||f.classification_error||f.classification_reason||(status==="document_processing"?"正在执行 Docling 文档理解；首次使用前模型已由启动脚本准备":"");
     const statusSub=(status==="embedding_skipped"||status==="embedding_failed")?"索引未完成，点击「重试构建索引」重新建立":status==="document_processing"?"Docling 解析中":"";
     const baseName=f.title||f.original_filename||"资料";
-    const assetBtns=f.document_assets?`<button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|markdown" data-lib-name="${escapeHtml(baseName+"-document.md")}">Markdown</button><button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|chunks" data-lib-name="${escapeHtml(baseName+"-chunks.jsonl")}">Chunk</button>`:"";
+    const assetBtns=libCanManage&&f.document_assets?`<button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|markdown" data-lib-name="${escapeHtml(baseName+"-document.md")}">Markdown</button><button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|chunks" data-lib-name="${escapeHtml(baseName+"-chunks.jsonl")}">Chunk</button>`:"";
     const catActions=(canClassify||canRetry)?`<div class="cat-actions">${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}</div>`:"";
     return `<tr>
       <td class="fname">${escapeHtml(f.title||f.original_filename)}${aiMark}<small>${escapeHtml(f.original_filename)}${f.note?" · "+escapeHtml(f.note):""}</small></td>
@@ -1677,7 +1681,7 @@ async function loadLibrary(){
       <td class="size-cell">${libFmtSize(f.size_bytes)}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
-      <td><div class="row-actions"><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
+      <td><div class="row-actions">${libCanManage?`<button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
     </tr>`;
   }).join("");
   const start=libTotal?libOffset+1:0,end=Math.min(libOffset+data.files.length,libTotal);
@@ -1718,9 +1722,12 @@ function reportCard(f){
   meta.innerHTML=`<span>${escapeHtml(libFmtSize(f.size_bytes||0))}</span><span>·</span><span>${escapeHtml(libFmtTime(f.created_at))}</span>`;
   body.appendChild(title);body.appendChild(meta);
   const actions=document.createElement("div");actions.className="report-card-actions";
-  const btn=document.createElement("button");btn.className="secondary-btn";btn.type="button";btn.textContent="下载原文件";
-  btn.onclick=async()=>{btn.disabled=true;try{const r=await apiFetch("/api/uploads/"+encodeURIComponent(f.id)+"/download");if(!r||!r.ok)throw new Error("下载失败 "+(r?r.status:""));const b=await r.blob();const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=f.original_filename||f.title||"资料";a.click();setTimeout(()=>URL.revokeObjectURL(u),0);}catch(e){window.alert(e.message||"下载失败");}finally{btn.disabled=false;}};
-  actions.appendChild(btn);body.appendChild(actions);
+  if(canManageFiles()){
+    const btn=document.createElement("button");btn.className="secondary-btn";btn.type="button";btn.textContent="下载原文件";
+    btn.onclick=async()=>{btn.disabled=true;try{const r=await apiFetch("/api/uploads/"+encodeURIComponent(f.id)+"/download");if(!r||!r.ok)throw new Error("下载失败 "+(r?r.status:""));const b=await r.blob();const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=f.original_filename||f.title||"资料";a.click();setTimeout(()=>URL.revokeObjectURL(u),0);}catch(e){window.alert(e.message||"下载失败");}finally{btn.disabled=false;}};
+    actions.appendChild(btn);
+  }
+  body.appendChild(actions);
   card.appendChild(body);
   return card;
 }
@@ -1825,7 +1832,7 @@ function libDownload(id){
 let upPending=[],upTaxonomy=null,upCloseTimer=null;
 
 function openUploadModal(){
-  if(!libIsAdmin)return;
+  if(!libCanManage&&!canManageFiles())return;
   if(document.getElementById("uploadModalOverlay"))return;
   const overlay=document.createElement("div");
   overlay.id="uploadModalOverlay";

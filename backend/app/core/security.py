@@ -131,3 +131,27 @@ def require_admin(
             detail="需要管理员权限",
         )
     return current_user
+
+
+# 资料库上传/下载角色：管理员与 ATSC 用户；普通用户仅可查看。
+UPLOAD_ROLES = ("admin", "atsc")
+
+
+def can_manage_files(role: str | None) -> bool:
+    """Whether the given role may upload/download library files."""
+    return role in UPLOAD_ROLES
+
+
+def require_upload(
+    current_user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> str:
+    """Dependency that ensures the current user may upload/download (admin or ATSC)."""
+    from app.models.user import User
+    user = db.get(User, current_user)
+    if not user or user.role not in UPLOAD_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="仅 ATSC 用户与管理员可执行该操作",
+        )
+    return current_user

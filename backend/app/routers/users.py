@@ -83,8 +83,8 @@ def create_user(
         raise HTTPException(400, "用户名不能为空")
     if len(payload.password) < 6:
         raise HTTPException(400, "密码不能少于6位")
-    if payload.role not in ("admin", "user"):
-        raise HTTPException(400, "角色只能是 admin 或 user")
+    if payload.role not in ("admin", "atsc", "user"):
+        raise HTTPException(400, "角色只能是 admin、atsc 或 user")
     if db.get(User, username):
         raise HTTPException(409, "用户名已存在")
 
@@ -118,12 +118,12 @@ def update_user(
 
     is_self = username == current_user
 
-    if payload.role is not None and payload.role not in ("admin", "user"):
-        raise HTTPException(400, "角色只能是 admin 或 user")
+    if payload.role is not None and payload.role not in ("admin", "atsc", "user"):
+        raise HTTPException(400, "角色只能是 admin、atsc 或 user")
 
-    # Demoting from admin -> user: cannot remove the last admin.
+    # Demoting from admin -> non-admin: cannot remove the last admin.
     if (
-        payload.role == "user"
+        payload.role in ("atsc", "user")
         and user.role == "admin"
         and _count_admins(db) <= 1
     ):

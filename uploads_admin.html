@@ -108,14 +108,14 @@
       return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
     }
 
-    // 校验是否管理员
+    // 校验是否可上传（ATSC 用户或管理员）
     (async()=>{
       try{
         const [meRes,taxonomyRes]=await Promise.all([Auth.authFetch(API+"/auth/me"),Auth.authFetch(API+"/uploads/taxonomy")]);
         if(!meRes||!taxonomyRes) return;
         const me=await meRes.json();
-        if(me.role!=="admin"){
-          document.querySelector(".up-wrap").innerHTML='<div class="card" style="color:var(--red)">仅管理员可上传。</div>';
+        if(me.role!=="admin"&&me.role!=="atsc"){
+          document.querySelector(".up-wrap").innerHTML='<div class="card" style="color:var(--red)">仅 ATSC 用户与管理员可上传，普通用户请前往资料库在线查看。</div>';
           return;
         }
         const taxonomy=await taxonomyRes.json();

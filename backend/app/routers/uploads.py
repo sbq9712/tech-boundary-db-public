@@ -23,7 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.classification import normalize_confidentiality
-from app.core.security import get_current_user, require_admin
+from app.core.security import get_current_user, require_admin, require_upload
 from app.db.session import get_db
 from app.models.uploaded_file import UploadedFile
 from app.services.upload_ingestion import (
@@ -179,7 +179,7 @@ def get_upload_formats(current_user: str = Depends(get_current_user)) -> dict:
 
 @router.get("/uploads/{file_id}/assets/{asset}")
 def download_document_asset(file_id: str, asset: str,
-                            current_user: str = Depends(get_current_user),
+                            current_user: str = Depends(require_upload),
                             db: Session = Depends(get_db)):
     from fastapi.responses import FileResponse
     record = db.get(UploadedFile, _uuid_or_400(file_id))
@@ -273,7 +273,7 @@ async def upload_files(
     note: str | None = Form(None),
     primary_category: str | None = Form(None),
     document_date: str | None = Form(None),
-    current_user: str = Depends(require_admin),
+    current_user: str = Depends(require_upload),
     db: Session = Depends(get_db),
 ) -> dict:
     if not files:
@@ -335,7 +335,7 @@ async def upload_files(
                 ),
                 classification_confidence=1.0 if manual_category else None,
                 classification_source="manual" if manual_category else None,
-                classification_reason="上传时由管理员指定" if manual_category else None,
+                classification_reason="上传时人工指定" if manual_category else None,
                 classified_at=datetime.now(timezone.utc) if manual_category else None,
                 submitted_by=current_user,
             )
@@ -472,7 +472,7 @@ def override_upload_classification(
 @router.get("/uploads/{file_id}/download")
 def download_upload(
     file_id: str,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(require_upload),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     record = db.get(UploadedFile, _uuid_or_400(file_id))
