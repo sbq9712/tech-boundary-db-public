@@ -232,6 +232,18 @@ function modelLabel(model){
   return String(model||'').trim().toUpperCase();
 }
 function renderModelOptions(){return assistantModels.map(model=>`<option value="${escapeHtml(model)}" ${model===selectedModel?'selected':''}>${escapeHtml(modelLabel(model))}</option>`).join('');}
+function fitModelSelect(){
+  const select=document.getElementById('modelSelect');
+  if(!select||!select.options.length)return;
+  const option=select.options[select.selectedIndex]||select.options[0];
+  const text=option?String(option.textContent||''):'';
+  const style=window.getComputedStyle(select);
+  fitModelSelect._ctx=fitModelSelect._ctx||document.createElement('canvas').getContext('2d');
+  fitModelSelect._ctx.font=`${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  const padLeft=parseFloat(style.paddingLeft)||0;
+  const padRight=parseFloat(style.paddingRight)||0;
+  select.style.width=`${Math.ceil(fitModelSelect._ctx.measureText(text).width)+padLeft+padRight+2}px`;
+}
 async function loadAssistantModels(){
   try{
     const res=await apiFetch('/api/assistant/models');
@@ -241,7 +253,7 @@ async function loadAssistantModels(){
       assistantModels=data.models;
       if(!assistantModels.includes(selectedModel))selectedModel=data.default_model||assistantModels[0];
       const select=document.getElementById('modelSelect');
-      if(select)select.innerHTML=renderModelOptions();
+      if(select){select.innerHTML=renderModelOptions();select.value=selectedModel;fitModelSelect();}
     }
   }catch(_err){}
 }
@@ -421,16 +433,16 @@ function homeView(){
     </div>
   </aside>
   <button class="home-drawer-tab" id="homeDrawerOpen" type="button" aria-expanded="false" aria-controls="homeDrawer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span>技术预警 · 近期会议 · 技术边界</span></button>
-  <section class="home-section home-knowledge-section" aria-label="技术情报知识库问答">
+  <section class="home-section home-knowledge-section" aria-label="技术边界数据库问答">
     <div class="panel conversation-panel" id="knowledgeConversation">
       <div class="qa-graph-container" id="qaGraphContainer"><div class="qa-graph-placeholder">正在读取关系图谱…</div></div>
+        <label class="model-picker model-picker-top" title="选择本次回答使用的模型"><span class="model-picker-label">模型</span><select id="modelSelect" class="model-select" aria-label="选择本次回答使用的模型">${renderModelOptions()}</select></label>
       <div class="qa-empty-state" id="knowledgeEmptyState" ${activeSessionMessages.length?'hidden':''}>
-        <div class="qa-empty-copy"><strong>技术情报知识库</strong><span>关系图谱概览与广度情报索引来自同一套检索服务</span></div>
+        <div class="qa-empty-copy"><strong>技术边界数据库</strong></div>
         <div class="qa-example-questions"><button type="button" data-example-query="固态电池最新研究进展有哪些？">固态电池最新研究进展有哪些？</button><button type="button" data-example-query="钙钛矿太阳能电池的效率纪录是多少？">钙钛矿太阳能电池的效率纪录是多少？</button><button type="button" data-example-query="锂电池回收技术有哪些新突破？">锂电池回收技术有哪些新突破？</button></div>
       </div>
       <div class="conversation-history" id="answer" ${activeSessionMessages.length?'':'hidden'}>${renderHomeMessages()}</div>
       <div class="query-box qa-input-area">
-        <label class="model-picker" title="选择本次回答使用的模型"><select id="modelSelect" class="model-select" aria-label="选择本次回答使用的模型">${renderModelOptions()}</select></label>
         <textarea id="queryInput" class="query-input" autocomplete="off" name="tech-boundary-query" rows="1" placeholder="输入你的问题…"></textarea>
         <button id="askBtn" class="primary-btn">发送</button>
         <button id="stopBtn" class="secondary-btn" type="button" hidden>停止</button>
@@ -473,7 +485,7 @@ function sourcesView(){
   return `<section class="panel content-panel"><h1 class="section-title">按信息类型浏览 ${SOURCE_LIST.length} 个信息源，持续追踪产业动态、学术前沿和行业研究</h1><div class="bookmark-tabs" style="margin-bottom:20px">${tabsHtml}</div><div id="sourceGroupsContent">${groupsHtml}</div></section>`;
 }
 function mapView(){const state=parseHash();const group=state.params.get('group')||'zero-carbon';const tabs=[["zero-carbon","零碳产业"],["ai-intelligent","AI与智能科技"],["general-tech","通用技术"]];const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};return `<section class="flat-content map-content-panel"><div class="map-head"><div><h1 class="section-title">追求完备而互斥</h1></div><div class="map-tools"><input id="mapSearch" value="${escapeHtml(mapSearchDraft)}" placeholder="搜索节点" aria-label="搜索行业图景节点"/><button class="secondary-btn" id="mapExpandAll" type="button">展开全部</button><button class="secondary-btn" id="mapCollapse" type="button">折叠到二级</button></div></div><div class="bookmark-tabs">${tabs.map(([key,label])=>`<button class="bookmark-tab ${group===key?'active':''}" data-map-group="${key}">${label}</button>`).join('')}</div><div class="map-shell"><header class="map-summary"><strong>${titleMap[group]||'零碳产业'}</strong><span id="industryMapMeta">正在加载图景…</span><span class="map-hint">按住空白处拖动平移 · 点击叶子节点查看关联内容</span></header><div class="industry-tree" id="industryTree"><div class="status-note">正在加载图景…</div></div></div></section>`;}
-function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");const modelSelect=document.getElementById("modelSelect");if(modelSelect){modelSelect.value=selectedModel;modelSelect.addEventListener('change',()=>{selectedModel=modelSelect.value;localStorage.setItem('assistant_model',selectedModel);});}if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,120)}px`;});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const homeBodyEl=document.querySelector('.home-body');const homeDrawerOpenBtn=document.getElementById('homeDrawerOpen');const setDrawerCollapsed=(body,collapsed)=>{body.classList.toggle('drawer-collapsed',collapsed);if(homeDrawerOpenBtn)homeDrawerOpenBtn.setAttribute('aria-expanded',collapsed?'true':'false');};if(homeDrawerOpenBtn&&homeBodyEl)homeDrawerOpenBtn.addEventListener('click',()=>setDrawerCollapsed(homeBodyEl,false));if(homeBodyEl&&!window.__homeDrawerOutsideBound){window.__homeDrawerOutsideBound=true;document.addEventListener('click',event=>{const body=document.querySelector('.home-body');if(!body||body.classList.contains('drawer-collapsed'))return;if(!event.target.closest('.home-drawer,.home-drawer-tab'))setDrawerCollapsed(body,true);});}const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});const createUserBtn=document.getElementById("createUserBtn");if(createUserBtn)createUserBtn.addEventListener("click",showCreateUserModal);}
+function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>setRoute(btn.dataset.route)));document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('group',btn.dataset.mapGroup);setRoute('map',p);}));const logout=document.getElementById("logoutBtn");const changePwd=document.getElementById("changePwdBtn");if(changePwd)changePwd.addEventListener("click",()=>{if(window.Auth&&Auth.showChangePassword)Auth.showChangePassword();});if(logout)logout.addEventListener("click",()=>{if(window.Auth&&Auth.logout)Auth.logout();else location.href="login.html";});const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");const modelSelect=document.getElementById("modelSelect");if(modelSelect){modelSelect.value=selectedModel;fitModelSelect();modelSelect.addEventListener('change',()=>{selectedModel=modelSelect.value;localStorage.setItem('assistant_model',selectedModel);fitModelSelect();});}if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,120)}px`;});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const homeBodyEl=document.querySelector('.home-body');const homeDrawerOpenBtn=document.getElementById('homeDrawerOpen');const setDrawerCollapsed=(body,collapsed)=>{body.classList.toggle('drawer-collapsed',collapsed);if(homeDrawerOpenBtn)homeDrawerOpenBtn.setAttribute('aria-expanded',collapsed?'true':'false');};if(homeDrawerOpenBtn&&homeBodyEl)homeDrawerOpenBtn.addEventListener('click',()=>setDrawerCollapsed(homeBodyEl,false));if(homeBodyEl&&!window.__homeDrawerOutsideBound){window.__homeDrawerOutsideBound=true;document.addEventListener('click',event=>{const body=document.querySelector('.home-body');if(!body||body.classList.contains('drawer-collapsed'))return;if(!event.target.closest('.home-drawer,.home-drawer-tab'))setDrawerCollapsed(body,true);});}const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});const createUserBtn=document.getElementById("createUserBtn");if(createUserBtn)createUserBtn.addEventListener("click",showCreateUserModal);}
 async function loadKnowledgeGraph(){
   const container=document.getElementById('qaGraphContainer');
   if(!container)return;
@@ -537,7 +549,7 @@ function renderKnowledgeGraphCanvas(container,data){
   function pointerMove(event){const p=point(event);if(drag){drag.x=p.x;drag.y=p.y;drag.vx=0;drag.vy=0;}else if(panning){transform.x=event.clientX-panStart.x;transform.y=event.clientY-panStart.y;}else{hover=hit(p);canvas.style.cursor=hover?'pointer':'grab';if(hover){tooltip.textContent=`${hover.label}（${hover.type||'未知'}） · 连接度 ${hover.degree||0}`;tooltip.style.left=`${p.screenX+12}px`;tooltip.style.top=`${p.screenY+12}px`;tooltip.classList.add('visible');}else tooltip.classList.remove('visible');}}
   function pointerUp(){drag=null;panning=false;}
   function wheel(event){event.preventDefault();const before=point(event),next=Math.max(.35,Math.min(4,transform.scale*(event.deltaY>0?.9:1.1)));transform.x+=before.x*(transform.scale-next);transform.y+=before.y*(transform.scale-next);transform.scale=next;}
-  resize();canvas.addEventListener('pointerdown',pointerDown);canvas.addEventListener('pointermove',pointerMove);canvas.addEventListener('pointerup',pointerUp);canvas.addEventListener('pointercancel',pointerUp);canvas.addEventListener('pointerleave',()=>{pointerUp();hover=null;tooltip.classList.remove('visible');});canvas.addEventListener('wheel',wheel,{passive:false});window.addEventListener('resize',resize);animate();
+  resize();canvas.addEventListener('pointerdown',pointerDown);canvas.addEventListener('pointermove',pointerMove);canvas.addEventListener('pointerup',pointerUp);canvas.addEventListener('pointercancel',pointerUp);canvas.addEventListener('pointerleave',()=>{pointerUp();hover=null;tooltip.classList.remove('visible');});canvas.addEventListener('wheel',wheel,{passive:false});window.addEventListener('resize',resize);transform.scale=.85;transform.x=(Math.random()*2-1)*width*.12;transform.y=(Math.random()*2-1)*height*.16;animate();
   return ()=>{cancelAnimationFrame(raf);window.removeEventListener('resize',resize);};
 }
 function applyIntelParams(params){const qEl=document.getElementById('intelQ');if(qEl&&params.has('q'))qEl.value=params.get('q');const domEl=document.getElementById('intelDomain');if(domEl&&params.has('leaf'))domEl.value=params.get('leaf');const srcEl=document.getElementById('intelSource');if(srcEl&&params.has('source_type'))srcEl.value=params.get('source_type');}
