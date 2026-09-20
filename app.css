@@ -2796,13 +2796,7 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
   box-shadow:none;
 }
 .home-knowledge-section .model-picker:focus-within{background:transparent;box-shadow:none;border:0}
-.home-knowledge-section .model-picker-label{
-  font:600 11px/1 var(--sans);
-  letter-spacing:.06em;
-  color:var(--text-tertiary);
-}
-.home-knowledge-section .model-picker:hover .model-select,
-.home-knowledge-section .model-picker:hover .model-picker-label{color:var(--brand)}
+.home-knowledge-section .model-picker:hover .model-select{color:var(--brand)}
 .home-knowledge-section .model-select{
   width:auto;
   max-width:none;
