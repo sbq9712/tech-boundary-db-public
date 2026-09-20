@@ -991,7 +991,7 @@ a:hover{color:var(--brand-lighter)}
 .home-alert-primary time{
   flex:0 0 auto;
   color:var(--text-quaternary);
-  font:500 9.5px/1.2 var(--mono);
+  font:500 10.5px/1.2 var(--sans);
   font-variant-numeric:tabular-nums;
   white-space:nowrap;
 }
@@ -1101,7 +1101,7 @@ a:hover{color:var(--brand-lighter)}
 .home-meeting-date{
   flex:0 0 auto;
   color:var(--text-tertiary);
-  font:500 9.5px/1.2 var(--mono);
+  font:500 10.5px/1.2 var(--sans);
   font-variant-numeric:tabular-nums;
   white-space:nowrap;
 }
@@ -2308,12 +2308,13 @@ a:hover{color:var(--brand-lighter)}
 
 /* ── status line / typing ── */
 .stage-chip{
-  font-family:var(--mono);
+  font-family:var(--sans);
   font-size:10px;
   letter-spacing:.02em;
 }
 .qa-status-line{
-  font-family:var(--mono);
+  /* 中文状态文案：等宽栈在 Windows 上会把中文回退成宋体，改用正文无衬线 */
+  font-family:var(--sans);
 }
 
 /* ── dashboard cards adopt card shadow ── */
