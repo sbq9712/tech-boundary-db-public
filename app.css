@@ -511,12 +511,12 @@ a:hover{color:var(--brand-lighter)}
   padding:10px 14px;
   background:var(--brand-bg);
   border-radius:var(--radius-md);
-  font-size:15px;
+  font-size:13px;
   color:var(--text-primary);
   display:inline-block;
 }
 .conversation-history .assistant-msg .response-text{
-  font-size:15px;
+  font-size:13px;
   line-height:1.7;
   color:var(--text-secondary);
 }
@@ -532,7 +532,7 @@ a:hover{color:var(--brand-lighter)}
 }
 .conversation-history .assistant-msg p{
   margin:0;
-  font-size:15px;
+  font-size:13px;
   color:var(--text-secondary);
   line-height:1.6;
 }
@@ -1155,9 +1155,9 @@ a:hover{color:var(--brand-lighter)}
   position:absolute;
   left:50%;
   transform:translateX(-50%);
-  top:20px;
-  bottom:118px;
-  width:min(860px,calc(100% - 48px));
+  top:12px;
+  bottom:78px;
+  width:min(1080px,calc(100% - 24px));
   z-index:1;
   margin:0;
   padding:10px 16px 16px;
@@ -2083,7 +2083,7 @@ a:hover{color:var(--brand-lighter)}
 .qa-message.assistant .qa-message-bubble{padding:1px 0}
 .qa-message .response-text p{margin:0 0 9px}
 .qa-message .response-text p:last-child{margin-bottom:0}
-.qa-message .response-text h3,.qa-message .response-text h4{margin:12px 0 6px;font-size:14px}
+.qa-message .response-text h3,.qa-message .response-text h4{margin:12px 0 6px;font-size:13px}
 .qa-message .response-text ul,.qa-message .response-text ol{margin:4px 0 10px;padding-left:21px}
 .qa-message .response-text blockquote{margin:8px 0;padding-left:10px;border-left:3px solid var(--brand-border);color:var(--text-secondary)}
 .qa-message .response-text pre{overflow:auto;padding:9px;background:#0f172a;color:#e2e8f0;border-radius:4px;font-size:12px}
@@ -2109,7 +2109,7 @@ a:hover{color:var(--brand-lighter)}
 .qa-typing-cursor{display:inline-block;width:6px;height:15px;margin-left:3px;vertical-align:-2px;background:var(--brand);animation:qa-cursor-blink 1s step-end infinite}
 @keyframes qa-cursor-blink{50%{opacity:0}}
 .qa-toast{position:fixed;z-index:9999;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 13px;border:1px solid var(--border-standard);border-radius:4px;background:#fff;color:var(--text-primary);font-size:12px;box-shadow:0 4px 16px rgba(15,23,42,.15)}
-.qa-input-area .query-input{min-height:36px;max-height:120px;resize:none;line-height:1.45;padding-top:9px;padding-bottom:9px;overflow-y:hidden}
+.qa-input-area .query-input{min-height:32px;max-height:120px;resize:none;line-height:1.45;padding-top:7px;padding-bottom:7px;overflow-y:hidden}
 @media(max-width:760px){
   .conversation-toolbar{display:grid;grid-template-columns:minmax(0,1fr) 32px auto;align-items:center}
   .conversation-toolbar .session-picker>span{display:none}
@@ -2132,12 +2132,12 @@ a:hover{color:var(--brand-lighter)}
 
 /* ── centered reading column for conversation ── */
 .home-knowledge-section .conversation-history > *{
-  max-width:820px;
+  max-width:880px;
   margin-left:auto;
   margin-right:auto;
 }
 .home-knowledge-section .conversation-history .qa-message{
-  max-width:820px;
+  max-width:880px;
   margin-left:auto;
   margin-right:auto;
   width:100%;
@@ -2287,7 +2287,7 @@ a:hover{color:var(--brand-lighter)}
   margin:0;
 }
 .home-knowledge-section .conversation-panel:has(.qa-empty-state[hidden]) .query-box{
-  margin:0 0 22px;
+  margin:0 0 10px;
 }
 @media(max-width:760px){
   .home-knowledge-section .query-box{width:min(680px,calc(100% - 24px))}
@@ -2793,3 +2793,28 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 .home-knowledge-section .model-menu-item.selected{color:var(--brand)}
 .home-knowledge-section .model-menu-item.selected .model-menu-check{display:block}
 .home-knowledge-section .model-menu-item:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+
+/* ════════════════════════════════════════════
+   会话态整页化：有对话记录时隐藏星空，对话卡片 + 输入框占满右侧页面；
+   正文字号与侧边导航一致（13px）
+   ════════════════════════════════════════════ */
+.home-knowledge-section .qa-message-bubble{font-size:13px}
+.home-knowledge-section .qa-message .response-text,
+.home-knowledge-section .qa-message .response-text p{font-size:13px}
+.home-knowledge-section:has(.qa-empty-state[hidden]){
+  background:var(--bg-canvas);
+}
+.home-knowledge-section:has(.qa-empty-state[hidden]) .qa-graph-container{display:none}
+.home-knowledge-section:has(.qa-empty-state[hidden]) .conversation-history{
+  background:var(--bg-panel);
+  border-color:var(--border-subtle);
+  box-shadow:none;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+}
+.home-knowledge-section:has(.qa-empty-state[hidden]) .qa-input-area{
+  background:var(--bg-panel);
+  box-shadow:none;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+}
