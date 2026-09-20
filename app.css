@@ -1773,9 +1773,7 @@ a:hover{color:var(--brand-lighter)}
 .mind-node.depth-0>ul{gap:12px}
 .mind-node.leaf>.mind-card{background:var(--bg-panel)}
 .mind-node.leaf .mind-card{min-width:90px}
-.mind-node.leaf>details>summary{display:block}
 .mind-node.leaf>details>summary::before{display:none}
-.mind-node.leaf>details>summary>.mind-card{display:block}
 .mind-node.leaf{align-items:flex-start}
 .mind-node.leaf .leaf-tags{display:flex}
 .mind-node.match>.mind-card{outline:2px solid var(--brand-bg);border-color:var(--brand-light)}
