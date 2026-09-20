@@ -81,8 +81,9 @@ def test_answer_contains_inline_resource_slots_and_enter_send():
     assistant_text = css.split(".conversation-history .assistant-msg .response-text{", 1)[1].split("}", 1)[0]
     user_text = css.split(".conversation-history .user-msg p{", 1)[1].split("}", 1)[0]
     emphasis = css.split(".conversation-history .assistant-msg .response-text strong{", 1)[1].split("}", 1)[0]
-    assert "font-size:15px" in assistant_text
-    assert "font-size:15px" in user_text
+    # 对话正文字号与侧边导航一致（13px）
+    assert "font-size:13px" in assistant_text
+    assert "font-size:13px" in user_text
     assert "font-weight:700" in emphasis
     assert "background:var(--brand-bg)" in emphasis
     assert ".conversation-history .assistant-msg > strong" in css
