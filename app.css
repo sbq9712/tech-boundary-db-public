@@ -2806,14 +2806,14 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 }
 .home-knowledge-section:has(.qa-empty-state[hidden]) .qa-graph-container{display:none}
 .home-knowledge-section:has(.qa-empty-state[hidden]) .conversation-history{
-  background:var(--bg-panel);
-  border-color:var(--border-subtle);
+  background:transparent;
+  border-color:transparent;
   box-shadow:none;
   backdrop-filter:none;
   -webkit-backdrop-filter:none;
 }
 .home-knowledge-section:has(.qa-empty-state[hidden]) .qa-input-area{
-  background:var(--bg-panel);
+  background:#ffffff;
   box-shadow:none;
   backdrop-filter:none;
   -webkit-backdrop-filter:none;
