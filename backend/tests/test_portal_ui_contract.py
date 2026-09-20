@@ -105,14 +105,14 @@ def test_answer_contains_inline_resource_slots_and_enter_send():
 def test_home_exposes_model_selector_and_sends_model_param():
     js = load_served_js()
     css = load_served_css()
-    assert "modelSelect" in js
+    assert "modelPickerBtn" in js and "modelMenu" in js
     assert "assistant_model" in js
     assert "/api/assistant/models" in js
     assert "glm-5.1" in js
     assert "method:'POST'" in js
     assert "session_id:requestedSessionId||null" in js
     assert "AbortController" in js
-    assert ".model-select" in css
+    assert ".model-menu" in css and ".model-picker-btn" in css
 
 
 def test_home_exposes_persisted_conversations_in_sidebar():

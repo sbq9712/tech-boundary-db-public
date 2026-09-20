@@ -2754,10 +2754,6 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 }
 .home-knowledge-section .query-input{color:var(--text-primary);caret-color:var(--brand)}
 .home-knowledge-section .query-input::placeholder{color:var(--text-quaternary)}
-.home-knowledge-section .model-picker{border:1px solid rgba(99,102,241,.2);background:rgba(255,255,255,.6)}
-.home-knowledge-section .model-picker span{color:var(--text-quaternary)}
-.home-knowledge-section .model-select{color:var(--text-secondary)}
-.home-knowledge-section .model-select option{background:#fff;color:var(--text-primary)}
 
 /* 星空上的按钮与历史面板：品牌渐变主按钮 + 同色系玻璃描边 */
 .home-knowledge-section .primary-btn{
@@ -2780,38 +2776,80 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
   margin-top:10px;
   background:linear-gradient(90deg,rgba(99,102,241,0),rgba(99,102,241,.5) 50%,rgba(139,92,246,0));
 }
-/* 星空左上角的模型选择器：纯文字 + 动态宽度（三角随选中名收尾） */
+/* 星空左上角模型选择器：纯文字按钮 + 玻璃质感下拉菜单 */
 .home-knowledge-section .model-picker{
   position:absolute;
   top:18px;
   left:22px;
-  z-index:2;
+  z-index:3;
+}
+.home-knowledge-section .model-picker-btn{
   display:inline-flex;
   align-items:center;
-  gap:8px;
-  height:auto;
-  padding:0;
+  gap:5px;
+  padding:4px 6px;
+  margin:-4px -6px;
   border:0;
+  border-radius:8px;
   background:transparent;
-  box-shadow:none;
-}
-.home-knowledge-section .model-picker:focus-within{background:transparent;box-shadow:none;border:0}
-.home-knowledge-section .model-picker:hover .model-select{color:var(--brand)}
-.home-knowledge-section .model-select{
-  width:auto;
-  max-width:none;
-  min-width:0;
-  flex:0 0 auto;
-  height:auto;
-  padding:4px 16px 4px 0;
-  border:0;
-  border-radius:4px;
-  background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 2px center;
-  -webkit-appearance:none;
-  appearance:none;
   color:var(--text-secondary);
   font:600 12px/1.4 var(--sans);
   cursor:pointer;
-  transition:color .15s;
+  transition:color .15s,background .15s;
 }
-.home-knowledge-section .model-select:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.home-knowledge-section .model-picker-btn:hover,
+.home-knowledge-section .model-picker.open .model-picker-btn{color:var(--brand);background:rgba(99,102,241,.07)}
+.home-knowledge-section .model-picker-caret{
+  width:10px;
+  height:6px;
+  flex:none;
+  color:var(--text-quaternary);
+  transition:transform .18s,color .15s;
+}
+.home-knowledge-section .model-picker.open .model-picker-caret{transform:rotate(180deg);color:var(--brand)}
+.home-knowledge-section .model-menu{
+  position:absolute;
+  top:calc(100% + 8px);
+  left:0;
+  z-index:4;
+  min-width:100%;
+  width:max-content;
+  max-width:min(320px,60vw);
+  max-height:min(420px,62vh);
+  overflow-y:auto;
+  scrollbar-width:thin;
+  padding:6px;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  border:1px solid rgba(99,102,241,.18);
+  border-radius:12px;
+  background:rgba(255,255,255,.88);
+  box-shadow:0 24px 48px -16px rgba(79,70,229,.28),0 4px 14px rgba(15,23,42,.06);
+  backdrop-filter:blur(18px) saturate(1.3);
+  -webkit-backdrop-filter:blur(18px) saturate(1.3);
+  transform-origin:top left;
+  animation:modelMenuIn .16s ease;
+}
+@keyframes modelMenuIn{from{opacity:0;transform:translateY(-4px) scale(.97)}to{opacity:1;transform:none}}
+.home-knowledge-section .model-menu-item{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:7px 10px;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:var(--text-secondary);
+  font:600 12.5px/1.4 var(--sans);
+  text-align:left;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:background .13s,color .13s;
+}
+.home-knowledge-section .model-menu-item:hover{background:rgba(99,102,241,.09);color:var(--brand)}
+.home-knowledge-section .model-menu-item .model-menu-check{display:none;width:12px;height:10px;flex:none}
+.home-knowledge-section .model-menu-item.selected{color:var(--brand)}
+.home-knowledge-section .model-menu-item.selected .model-menu-check{display:block}
+.home-knowledge-section .model-menu-item:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
