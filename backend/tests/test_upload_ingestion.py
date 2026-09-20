@@ -18,13 +18,16 @@ def clear_taxonomy_cache():
     upload_ingestion.load_taxonomy.cache_clear()
 
 
-def test_taxonomy_manifest_defines_77_outputs():
+def test_taxonomy_manifest_defines_outputs():
     taxonomy = upload_ingestion.load_taxonomy()
 
-    assert len(taxonomy.categories) == 77
-    assert len(taxonomy.business_categories) == 75
+    assert len(taxonomy.categories) == 127
+    assert len(taxonomy.business_categories) == 125
     assert set(taxonomy.result_labels) == {"未分类", "不相关"}
-    assert taxonomy.version == "4f8594fbc86ebe15948f06496e916fce120f57c8"
+    assert taxonomy.version == "ac95327bf4f1c377da618828f12fd980f014482d8dc0cd5bc2d3441cddc4ef8b"
+    # 2026-09-20 版行业图景：新分类在列、旧分类不再出现
+    assert "零碳产业/能量转化/能源测/一次能源转化/太阳能转化/光伏" in taxonomy.categories
+    assert "零碳产业/物质循环/资源处理/勘探技术" not in taxonomy.categories
 
 
 def test_persist_upload_writes_immutable_object_and_checksum(tmp_path, monkeypatch):
@@ -50,7 +53,7 @@ def test_safe_upload_path_rejects_path_traversal(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(
     ("category", "expected"),
-    [("未分类", "unclassified"), ("不相关", "irrelevant"), ("通用技术/催化剂", "classified")],
+    [("未分类", "unclassified"), ("不相关", "irrelevant"), ("通用技术/材料工程/特种功能材料/催化材料", "classified")],
 )
 def test_classification_status_mapping(category, expected):
     assert upload_ingestion.classification_status_for(category) == expected
@@ -203,8 +206,13 @@ def test_manual_classification_accepts_non_leaf_node():
     # 全树路径：含叶子、含中间节点、含根，且按层级有序
     assert "零碳产业" in paths
     assert "零碳产业/物质循环" in paths
-    assert "零碳产业/物质循环/资源处理/勘探技术" in paths
+    assert "零碳产业/物质循环/资源获取/勘探技术" in paths
     assert "不相关" not in paths and "未分类" not in paths
+    # 复合标题（标题含 "/"）保持整体，不产生幻影中间节点
+    assert "零碳产业/物质循环/资源加工/有机物/平台化工品/乙烯/丙烯/丁二烯" in paths
+    assert "零碳产业/物质循环/资源加工/有机物/平台化工品/乙烯" not in paths
+    assert "零碳产业/能量转化/能源测/一次能源转化/燃料转化（热/电）" in paths
+    assert "零碳产业/能量转化/能源测/一次能源转化/燃料转化（热" not in paths
 
     # 非叶子节点可以人工指定
     primary, _ = _validate_category("零碳产业/物质循环")
@@ -332,7 +340,7 @@ def test_incremental_index_request_contains_durable_metadata(monkeypatch):
         id=file_id,
         original_filename="report.txt",
         title="测试资料",
-        primary_category="通用技术/催化剂",
+        primary_category="通用技术/材料工程/特种功能材料/催化材料",
         secondary_categories=["通用技术/材料"],
         confidentiality="内部",
         source_type="研报",
@@ -350,7 +358,7 @@ def test_incremental_index_request_contains_durable_metadata(monkeypatch):
     assert captured["url"] == "http://canonical-qa:8765/api/index/upsert"
     assert captured["headers"] == {"X-TechDB-Index-Token": "test-token"}
     assert captured["json"]["document_id"] == str(file_id)
-    assert captured["json"]["primary_category"] == "通用技术/催化剂"
+    assert captured["json"]["primary_category"] == "通用技术/材料工程/特种功能材料/催化材料"
     assert captured["json"]["checksum_sha256"] == "a" * 64
     assert captured["json"]["chunks"] == chunks
 

@@ -1,0 +1,14 @@
+{
+ "taxonomy_id": "techdb-industry-map",
+ "taxonomy_version": "ac95327bf4f1c377da618828f12fd980f014482d8dc0cd5bc2d3441cddc4ef8b",
+ "source_file": "category-taxonomy.json",
+ "leaf_source": "industry-map-leaves.txt",
+ "synced_at": "2026-09-20",
+ "output_count": 127,
+ "business_category_count": 125,
+ "result_labels": [
+  "不相关",
+  "未分类"
+ ],
+ "note": "行业图景 2026-09-20 版：本仓库本地维护，与 data/industry_map.json 同源；breadth_data 挂载仅作回退。"
+}

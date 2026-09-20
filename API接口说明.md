@@ -826,7 +826,7 @@ GET /api/info-items?status=draft,ai_suggested
 
 ### `GET /api/uploads/taxonomy`
 
-返回当前分类目录 ID、版本、77 项完整输出、75 项业务分类，以及“未分类/不相关”两个结果标签。
+返回当前分类目录 ID、版本、127 项完整输出、125 项业务分类，以及“未分类/不相关”两个结果标签。
 
 ### `POST /api/uploads`
 
@@ -858,13 +858,13 @@ GET /api/info-items?status=draft,ai_suggested
 
 ```json
 {
-  "primary_category": "通用技术/催化剂",
+  "primary_category": "通用技术/材料工程/特种功能材料/催化材料",
   "secondary_categories": [],
   "reason": "管理员复核"
 }
 ```
 
-主分类必须精确匹配 77 项目录，辅助分类最多 3 项且只能使用 75 个业务分类。
+主分类必须精确匹配 127 项目录（树上任意节点均可人工指定），辅助分类最多 3 项且只能使用 125 个业务叶子分类。
 
 ### `GET /api/uploads/{id}/download`
 

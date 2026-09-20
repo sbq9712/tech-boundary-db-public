@@ -66,11 +66,17 @@ def upload_root() -> Path:
 
 
 def _project_taxonomy_paths() -> tuple[Path, Path]:
-    project_root = Path(__file__).resolve().parents[3]
+    """行业图景分类的首选来源是本仓库 data/（与行业图景页面同源）；
+    breadth_data 挂载（另一仓库同步）仅作为回退。"""
+    module_root = Path(__file__).resolve()
+    candidates = [module_root.parents[2] / "data", module_root.parents[3] / "data"]
     data_root = Path(os.getenv("BREADTH_DATA_PATH", "/app/breadth_data"))
-    if not data_root.exists():
-        data_root = project_root / "breadth" / "data"
-    return data_root / "category-taxonomy.json", data_root / "taxonomy-manifest.json"
+    candidates.append(data_root if data_root.exists() else module_root.parents[3] / "breadth" / "data")
+    for base in candidates:
+        if (base / "category-taxonomy.json").exists() and (base / "taxonomy-manifest.json").exists():
+            return base / "category-taxonomy.json", base / "taxonomy-manifest.json"
+    fallback = candidates[0]
+    return fallback / "category-taxonomy.json", fallback / "taxonomy-manifest.json"
 
 
 @lru_cache(maxsize=1)
@@ -246,13 +252,47 @@ def apply_document_date(chunks: list[dict], document_date: str | None) -> list[d
     return chunks
 
 
+# 标题本身含 "/" 的复合节点（与 scripts/build_industry_map.py 保持一致）。
+# 拆分路径时必须作为一个整体，避免产生 乙烯、丙烯 这类幻影中间节点。
+COMPOSITE_PATH_TITLES: frozenset[str] = frozenset({
+    "乙烯/丙烯/丁二烯",
+    "苯/甲苯/二甲苯",
+    "水/油储热",
+    "介电/导电材料",
+    "导热/耐热材料",
+    "燃料转化（热/电）",
+    "隔离材料（膜材料/密封材料）",
+    "直接电加热（电阻/电弧加热）",
+})
+
+
+def split_category_path(category: str) -> list[str]:
+    """按 "/" 拆分分类路径，但复合标题保持为一个整体。"""
+    parts = category.split("/")
+    merged: list[str] = []
+    index = 0
+    while index < len(parts):
+        three = "/".join(parts[index : index + 3])
+        two = "/".join(parts[index : index + 2])
+        if len(parts) - index >= 3 and three in COMPOSITE_PATH_TITLES:
+            merged.append(three)
+            index += 3
+        elif len(parts) - index >= 2 and two in COMPOSITE_PATH_TITLES:
+            merged.append(two)
+            index += 2
+        else:
+            merged.append(parts[index])
+            index += 1
+    return merged
+
+
 def taxonomy_tree_paths(taxonomy: Taxonomy) -> list[str]:
     """行业图景全节点路径：叶子路径 + 所有中间节点路径（广度优先排序）。"""
     paths: set[str] = set()
     for category in taxonomy.categories:
         if "/" not in category:
             continue
-        parts = category.split("/")
+        parts = split_category_path(category)
         for i in range(1, len(parts) + 1):
             paths.add("/".join(parts[:i]))
     return sorted(paths)
