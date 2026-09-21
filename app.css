@@ -106,11 +106,12 @@ a:hover{color:var(--brand-lighter)}
 .workspace{
   margin-left:var(--sidebar-rail-w);
 }
-/* 文字标签：收起时隐藏，展开时淡入 */
+/* 文字标签：收起时隐藏（含可访问性树），展开时淡入 */
 .sidebar-nav-label{
   opacity:0;
+  visibility:hidden;
   transform:translateX(4px);
-  transition:opacity .14s ease .05s, transform .14s ease .05s;
+  transition:opacity .14s ease .05s, transform .14s ease .05s, visibility 0s linear .19s;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -118,7 +119,9 @@ a:hover{color:var(--brand-lighter)}
 }
 .sidebar:hover .sidebar-nav-label,.sidebar:focus-within .sidebar-nav-label{
   opacity:1;
+  visibility:visible;
   transform:translateX(0);
+  transition:opacity .14s ease .05s, transform .14s ease .05s, visibility 0s;
 }
 .sidebar-brand{
   display:flex;
@@ -1324,23 +1327,17 @@ a:hover{color:var(--brand-lighter)}
   .knowledge-hint{display:none}
 }
 @media(max-width:640px){
-  .sidebar{width:64px}
-  .sidebar-brand{justify-content:center;padding:14px 8px}
-  .sidebar-title{display:none}
-  .sidebar-nav{padding:10px 6px}
-  .sidebar-nav-item{
-    justify-content:center;
-    padding:9px 4px;
-    font-size:11px;
-    line-height:1.2;
-    text-align:center;
-    white-space:normal;
-  }
-  .sidebar-conversation-hub{display:none}
-  .sidebar-account{flex-direction:column;padding:8px 4px;gap:5px}
-  .sidebar-account-info{display:none}
-  .sidebar-actions{flex-direction:column;gap:3px}
-  .sidebar-actions .ghost-btn{width:52px;padding:3px 4px;font-size:10px}
+  /* 触屏无悬停：侧边栏恒为窄条，与收起态一致（禁用悬停展开） */
+  .sidebar{width:var(--sidebar-rail-w)}
+  .sidebar:hover,.sidebar:focus-within{width:var(--sidebar-rail-w);box-shadow:none}
+  .sidebar .sidebar-nav-label{opacity:0;visibility:hidden}
+  .sidebar .sidebar-nav{padding:12px 0}
+  .sidebar .sidebar-nav-item{justify-content:center;padding:8px 0;width:100%}
+  .sidebar .sidebar-brand{padding-left:0;padding-right:0}
+  .sidebar .sidebar-brand-btn{justify-content:center;width:100%}
+  .sidebar .sidebar-account{padding-left:0;padding-right:0}
+  .sidebar .sidebar-account-btn{justify-content:center;width:100%}
+  .sidebar .sidebar-conversation-hub{display:none}
   .home-body{padding:12px}
   .home-section-heading{padding:14px}
   .home-boundary-grid{grid-template-columns:1fr;padding:0 10px 10px;overflow-x:visible}
