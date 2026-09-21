@@ -334,7 +334,63 @@ async def hybrid_search(query: str) -> tuple:
         # Relevant if vector score is decent OR BM25 found something
         is_relevant = best_vec_score >= RELEVANCE_FLOOR or has_bm25_hit
 
+    results, _dropped = dedup_search_results(results)
     return results, is_relevant
+
+
+def dedup_search_results(results: list) -> tuple:
+    """Collapse near-duplicate records before context building.
+
+    Same article ingested in different pipeline batches ends up as distinct
+    record_idx entries with identical title/date/source/url (and uploads have
+    one entry per chunk). Keeps the first (highest-scored) entry per
+    record identity: record_id → url → (title|date|source). Ported from
+    tech-db qa-backend/server.py (2026-09-20 retrieval dedup).
+
+    Returns (deduped_results, dropped_count).
+    """
+    if not results:
+        return results, 0
+
+    records = load_records()
+
+    def _resolve(result: dict) -> tuple:
+        meta = result.get("meta") or {}
+        rid = str(meta.get("record_id", "") or "")
+        if meta.get("kind") == "upload":
+            # uploads are chunk-level; dedupe by document so one doc keeps
+            # only its best chunk
+            return f"doc:{meta.get('document_id', rid or meta.get('idx', ''))}", meta
+        orig_idx = meta.get("idx", -1)
+        record = records[orig_idx] if isinstance(orig_idx, int) and 0 <= orig_idx < len(records) else {}
+        title = " ".join(str(record.get("t", "") or "").split()).strip()
+        date = str(record.get("d", "") or "").strip()
+        source = str(record.get("a", record.get("s", "")) or "").strip()
+        url = str(record.get("u", "") or "").strip()
+        return "", (record or {}) | {"__title": title, "__date": date, "__source": source, "__url": url, "__rid": rid}
+
+    seen: set = set()
+    out = []
+    dropped = 0
+    for r in results:
+        rid_or_doc, info = _resolve(r)
+        if rid_or_doc:
+            key = rid_or_doc
+        else:
+            title, date = info["__title"], info["__date"]
+            source, url = info["__source"], info["__url"]
+            if url:
+                key = f"url:{url}"
+            elif title:
+                key = f"art:{title[:80]}|{date}|{source[:40]}"
+            else:
+                key = f"idx:{(r.get('meta') or {}).get('idx', len(seen))}"
+        if key in seen:
+            dropped += 1
+            continue
+        seen.add(key)
+        out.append(r)
+    return out, dropped
 
 
 def build_context(search_results: list) -> tuple:
