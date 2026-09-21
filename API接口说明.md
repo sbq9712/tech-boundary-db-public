@@ -842,7 +842,7 @@ GET /api/info-items?status=draft,ai_suggested
 
 ### `POST /api/uploads`
 
-`multipart/form-data`。`files` 可重复，不限制份数、单文件或单批大小。可选字段：`title`、`confidentiality`、`source_type`、`note`、`primary_category`。批量上传不能填写共享标题。上传时同步校验文本可提取性：无法提取文本（如扫描版/纯图片 PDF、加密文档、空文档）的文件会被整批拒绝（HTTP 422），并在 `detail` 中逐个列出文件名与原因。
+`multipart/form-data`。`files` 可重复，不限制份数、单文件或单批大小。可选字段：`title`、`confidentiality`、`source_type`、`note`、`primary_category`。批量上传不能填写共享标题。上传时只校验文件名与 Docling 支持的文件类型（含 `.png`/`.jpg`/`.jpeg` 等图片格式，由 Docling 原生 OCR 处理）。文本可提取性在后台摄取阶段校验：无法提取文本（如加密文档、空文档、OCR 后仍无文本的扫描件）的文件不会被整批拒绝，而是正常落盘并把分类状态标记为 `failed`，`classification_error` 中给出原因，管理员可修复后调用重试接口。
 
 `confidentiality` 只接受 `公开`、`内部`、`管理员`。历史值（如“付费来源”“秘密”）兼容导入时归一为 `内部`；AI 自动补齐只允许 `公开` 或 `内部`，`管理员` 需要上传者明确选择。密级当前仅作元数据标签，不单独改变下载权限；“付费数据库”属于 `source_type`，不是密级。
 

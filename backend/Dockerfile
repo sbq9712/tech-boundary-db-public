@@ -9,11 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY backend/requirements.txt /app/requirements.txt
-# 离线依赖：若 backend/wheels/ 存在，先从本地 wheel 安装（服务器可能碰不到 PyPI）。
-# wheels 内含 pypdf/python-docx/openpyxl 及其传递依赖（lxml/et_xmlfile/typing_extensions）。
+# 离线兜底缓存：backend/wheels/ 仅含少量传递依赖 wheel（lxml/typing_extensions）。
+# 镜像统一在联网环境构建后打包搬运，目标机不需要重建 wheels；
+# 若目录存在则先用 --no-deps 预装，再由 --find-links 在缺网时兜底。
 COPY backend/wheels /app/wheels
-# 第一步用 --no-deps 装 wheels（避免缺传递依赖 lxml 时报错），
-# 第二步用 requirements 解析完整依赖树；find-links 让离线环境从 wheels 补 lxml。
 RUN if [ -n "$(ls -A /app/wheels 2>/dev/null)" ]; then \
         pip install --no-cache-dir --no-deps /app/wheels/*.whl; \
     fi \
