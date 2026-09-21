@@ -16,14 +16,28 @@ def load_served_js() -> str:
 
 
 def test_sidebar_is_visually_stable():
+    """侧边栏 2026-09-22 改版契约：默认收起窄条（--sidebar-rail-w），悬停 overlay 展开。
+
+    改版决策见 docs/2026-09-21-sidebar-redesign-spec.md（D2 overlay 不挤压主区）。
+    """
     css = load_served_css()
+    assert "--sidebar-rail-w:64px" in css
+    assert "--sidebar-expanded-w:228px" in css
     sidebar = css.split(".sidebar{", 1)[1].split("}", 1)[0]
-    assert "width:196px" in sidebar
-    assert "flex-shrink:0" in sidebar
-    assert "height:100dvh" in css.split(".app-shell{", 1)[1].split("}", 1)[0]
-    assert "transition:width" not in css
-    assert "overflow:hidden" in css.split(".workspace{", 1)[1].split("}", 1)[0]
+    assert "position:fixed" in sidebar
+    assert "width:var(--sidebar-expanded-w)" in sidebar
+    assert "width:var(--sidebar-rail-w)" in css.split(".sidebar:not(:hover):not(:focus-within){", 1)[1].split("}", 1)[0]
+    assert "transition:width" in sidebar
+    assert "overflow:hidden" in sidebar
+    workspace = css.split(".workspace{", 1)[1].split("}", 1)[0]
+    assert "margin-left:var(--sidebar-rail-w)" in workspace or "margin-left" in css
+    assert "overflow:hidden" in css.split(".workspace{\n  flex:1;", 1)[1].split("}", 1)[0]
     assert "overflow-y:auto" in css.split(".main{", 1)[1].split("}", 1)[0]
+    # 账户行整行成按钮（旧的 密码/退出 小按钮已移除）
+    js = load_served_js()
+    assert "sidebar-account-btn" in js
+    assert 'id="changePwdBtn"' not in js
+    assert "accountMenu" in js and "settingsItem" in js and "logoutItem" in js
 
 
 def test_home_layout_is_boundary_alert_and_knowledge_workbench():
