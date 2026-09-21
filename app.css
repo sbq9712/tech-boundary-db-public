@@ -153,6 +153,9 @@ a:hover{color:var(--brand-lighter)}
   flex-shrink:0;
 }
 .sidebar-brand-icon svg{width:18px;height:18px}
+/* 品牌 logo：正式图片素材（浅色底、无边框），替换原层叠图形块 */
+.sidebar-brand-img{width:30px;height:30px;object-fit:contain;display:block}
+.sidebar-brand-btn .sidebar-brand-icon:has(.sidebar-brand-img){background:transparent}
 .sidebar-title{
   font-size:14px;
   font-weight:700;
@@ -192,6 +195,7 @@ a:hover{color:var(--brand-lighter)}
   flex-shrink:0;
 }
 .sidebar-nav-icon svg{width:17px;height:17px}
+.sidebar-nav-img{width:22px;height:22px;object-fit:contain;display:block}
 .sidebar-nav-item:hover{background:var(--bg-surface);color:var(--text-primary)}
 .sidebar-nav-item.active{background:var(--brand-bg);color:var(--brand);font-weight:600}
 /* 收起时：导航项居中，会话中枢隐藏 */

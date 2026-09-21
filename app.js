@@ -8,16 +8,21 @@ const routes = {
 };
 const navItems = [["home","HOME"],["breadth","BRD"],["dashboard","DDY"],["library","LIB"],["users","USR"]];
 /* 侧边栏图标（收起条 + 展开态共用）。
-   素材到位后：把《..AAA UI设计》里的 品牌logo/按键logo 裁切导入，仅替换本常量与 BRAND_LOGO。 */
-const NAV_ICONS = {
+   正式素材：《..AAA UI设计》品牌logo/按键logo 裁切 → assets/nav/*.png；
+   图片加载失败时回退内联 SVG。 */
+const NAV_ICON_FALLBACK = {
   home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/></svg>`,
   breadth: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2.5-7 5 14 2.5-7h4"/></svg>`,
   dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M8.2 11h5.6M11 8.2v5.6"/></svg>`,
   library: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
   users: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
 };
-/* 品牌 logo：占位用现有层叠图形，素材到位后替换。 */
-const BRAND_LOGO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
+const NAV_IMG = { home: "assets/nav/portal.png", breadth: "assets/nav/breadth.png", dashboard: "assets/nav/depth.png", library: "assets/nav/lib.png", users: "assets/nav/users.png" };
+const navIcon = key => `<img class="sidebar-nav-img" src="${NAV_IMG[key]}" alt="" onerror="this.outerHTML=window.__navFallback&&window.__navFallback('${key}')||''">`;
+window.__navFallback = key => NAV_ICON_FALLBACK[key] || "";
+/* 品牌 logo：品牌logo.png 裁切（assets/nav/brand.png），失败回退层叠图形。 */
+const BRAND_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
+const BRAND_LOGO = `<img class="sidebar-brand-img" src="assets/nav/brand.png" alt="" onerror="this.outerHTML='${BRAND_FALLBACK.replace(/'/g, "\\'").replace(/\n/g, "")}'">`;
 let currentUser = null;  // {username, display_name, role} filled by loadCurrentUser()
 const sourceCards = [];
 
@@ -406,7 +411,7 @@ function shell(state){
   const avatarLetter=(accName||'?')[0].toUpperCase();
   const navHtml=visibleNav.map(([key,code])=>{
     const r=routes[key];
-    const icon=`<span class="sidebar-nav-icon" aria-hidden="true">${NAV_ICONS[key]||BRAND_LOGO}</span>`;
+    const icon=`<span class="sidebar-nav-icon" aria-hidden="true">${navIcon(key)}</span>`;
     const label=`<span class="sidebar-nav-label">${r.label}</span>`;
     if(r&&r.href){return `<a class="sidebar-nav-item" href="${r.href}">${icon}${label}</a>`;}
     const item=`<button class="sidebar-nav-item ${state.route===key?'active':''}" data-route="${key}">${icon}${label}</button>`;
