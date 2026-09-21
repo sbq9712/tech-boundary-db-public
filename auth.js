@@ -64,7 +64,8 @@
     modal.innerHTML = `
       <div style="background:#131d30;border:1px solid rgba(255,255,255,.12);border-radius:14px;
                   padding:28px 32px;width:340px;max-width:92vw;color:#e9eefc;font-family:inherit;">
-        <div style="font-weight:700;font-size:16px;margin-bottom:20px;">修改密码</div>
+        <div style="font-weight:700;font-size:16px;">设置</div>
+        <div style="font-size:12px;color:#a8b3d6;margin:2px 0 18px;">修改密码</div>
         <div style="margin-bottom:12px;">
           <label style="font-size:13px;color:#a8b3d6;display:block;margin-bottom:4px;">当前密码</label>
           <input id="_cpOld" type="password" autocomplete="current-password"
