@@ -25,3 +25,21 @@
 ## 验收
 - node --check 通过；无头浏览器截图收起/展开/账户面板/图景 tab 四态。
 - `#map`、`#dashboard?tab=map`、门户"查看全部"跳转均可达图景。
+
+## v6 增补（2026-09-22 下午，用户反馈第 5 轮）
+- D7 图标横向基准＝收起态：收起态 rail 56px 居中给出 img x=17。展开态全部对齐到同一 x：
+  brand padding-left 17→16、nav 横向 padding 10→8、account 横向 padding 10→12（+btn 4px）；
+  Playwright 断言两态下 brand/门户/广度/深度/资料库/用户管理 img 均 22px 宽、x=17。
+- D8 收起/展开图标全态同尺寸：展开态右侧按钮 16px → 22px，与收起态品牌悬浮图标一致（用户报"大小不一样"根因）。
+- D9 「历史对话」折叠失效根因：`.sidebar-conversation-list{display:flex}` 覆盖 UA 的
+  `[hidden]{display:none}`，JS 设 hidden 属性无视觉效果。修复：补
+  `.sidebar-conversation-list[hidden]{display:none}`；测试改断 computed display 而非 hidden 属性。
+- D10 导航按钮纵向位置两态不变：brand 行固定 52px（v5 已做），v6 断言 [data-route] 按钮 y 在收起/展开两态逐项相等。
+- D11 资料库列表不再显示原文件名（s41467-….pdf 等），只显示资料标题（AI 标记保留，note 追加显示）；原文件名在下载时仍作为保存文件名。
+- D12 上传弹窗改版：去掉密级/来源类型字段；初始只显示拖拽区；选定文件后出现表格（一行一文件：
+  文件/资料标题/资料日期/行业图景节点/备注/移除），弹窗加宽 min(1000px)；自定义日历删除，
+  日期用原生 input[type=date]；提交按行逐个文件上传（title/document_date/primary_category/note 随行生效），
+  单行失败不影响其余行，已成功行重试时跳过。
+- D13 Hermes 清理（服务器侧，已授权）：hermes-gateway.service 停用并删除 unit；~/.hermes（20GB）删除；
+  ~/.local/bin/hermes 与 .bashrc 音效 hook 删除。headroom-hermes-proxy.service 为独立代理（仅名字带 hermes，
+  读 ~/.headroom），保留。仓库内 hermes_bridge/readonly-agent HTTP 链路为在用功能，不改。

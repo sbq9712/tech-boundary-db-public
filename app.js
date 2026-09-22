@@ -1708,7 +1708,7 @@ async function loadLibrary(){
     const assetBtns=libCanManage&&f.document_assets?`<button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|markdown" data-lib-name="${escapeHtml(baseName+"-document.md")}">Markdown</button><button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|chunks" data-lib-name="${escapeHtml(baseName+"-chunks.jsonl")}">Chunk</button>`:"";
     const catActions=(canClassify||canRetry)?`<div class="cat-actions">${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}</div>`:"";
     return `<tr>
-      <td class="fname">${escapeHtml(f.title||f.original_filename)}${aiMark}<small>${escapeHtml(f.original_filename)}${f.note?" · "+escapeHtml(f.note):""}</small></td>
+      <td class="fname">${escapeHtml(f.title||f.original_filename)}${aiMark}${f.note?`<small>${escapeHtml(f.note)}</small>`:""}</td>
       <td class="category-cell" title="${escapeHtml(categoryTitle||nodeName)}">${escapeHtml(nodeName)}${catActions}</td>
       <td><span class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub?`<div class="status-sub">${escapeHtml(statusSub)}</div>`:""}${canRetryIndex?`<div class="cat-actions"><button class="secondary-btn" data-retry-index="${escapeHtml(f.id)}">重试构建索引</button></div>`:""}</td>
       <td><span class="src-badge">${escapeHtml(f.source_type||"-")}</span></td>
@@ -1872,25 +1872,13 @@ function openUploadModal(){
   const overlay=document.createElement("div");
   overlay.id="uploadModalOverlay";
   overlay.style.cssText="position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px 16px;overflow-y:auto;";
+  /* v6 改版：初始只有拖拽区；选定文件后出现表格（一行一文件，逐行填写元数据）；
+     密级/来源类型字段移除；自定义日历替换为原生 date 输入 */
   overlay.innerHTML=`<div class="lib-upload-dialog" role="dialog" aria-modal="true" aria-label="上传资料" style="margin:auto;">
     <div class="lib-upload-head"><h2>上传资料</h2><button class="lib-upload-close" id="upCloseBtn" type="button" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="lib-upload-body">
-      <div class="lib-upload-drop" id="upDrop"><input id="upInput" type="file" multiple hidden><div class="lib-upload-hint">拖拽文件到此处，或 <button class="lib-upload-pick" id="upPick" type="button">点击选择文件</button></div><div class="lib-upload-types">支持当前 Docling 文档格式（含扫描件、图片与演示文稿），后台完成解析与索引</div></div>
-      <div class="lib-upload-list" id="upList"></div>
-      <div class="lib-upload-field"><label for="upTitle">资料标题</label><input id="upTitle" class="lib-upload-input" type="text" placeholder="留空则自动识别（多文件时不可指定）"></div>
-      <div class="lib-upload-row">
-        <div class="lib-upload-field"><label for="upConf">密级</label><select id="upConf" class="lib-upload-input"><option value="">不指定</option><option>公开</option><option>内部</option><option>管理员</option></select></div>
-        <div class="lib-upload-field"><label for="upSrc">来源类型</label><select id="upSrc" class="lib-upload-input"><option value="">不指定</option><option>论文</option><option>专利</option><option>研报</option><option>网页快照</option><option>同事材料</option><option>付费数据库</option><option>其他</option></select></div>
-      </div>
-      <div class="lib-upload-field"><label for="upDocumentDate">资料日期</label>
-        <div class="up-date-row" id="upDateRow">
-          <input id="upDocumentDate" class="lib-upload-input" type="text" placeholder="如 2026-09-18（选填）" autocomplete="off">
-          <button type="button" id="upDateBtn" class="up-date-btn" title="打开日历选择" aria-label="打开日历选择"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
-          <div class="up-date-pop" id="upDatePop" hidden></div>
-        </div>
-      </div>
-      <div class="lib-upload-field"><label for="upCategory">行业图景节点</label><select id="upCategory" class="lib-upload-input"><option value="">不指定</option></select></div>
-      <div class="lib-upload-field"><label for="upNote">备注</label><textarea id="upNote" class="lib-upload-input" rows="2" placeholder="选填"></textarea></div>
+      <div class="lib-upload-drop" id="upDrop"><input id="upInput" type="file" multiple hidden><div class="lib-upload-hint">拖曳文件至此处，或 <button class="lib-upload-pick" id="upPick" type="button">点击选择文件</button></div><div class="lib-upload-types">支持当前 Docling 文档格式（含扫描件、图片与演示文稿），后台完成解析与索引</div></div>
+      <div class="lib-upload-tablewrap" id="upTableWrap" hidden><table class="lib-upload-table"><thead><tr><th>文件</th><th>资料标题</th><th>资料日期</th><th>行业图景节点</th><th>备注</th><th></th></tr></thead><tbody id="upList"></tbody></table></div>
       <div class="lib-upload-result" id="upResult" style="display:none;"></div>
     </div>
     <div class="lib-upload-actions"><button class="secondary-btn" id="upCancel" type="button">取消</button><button class="primary-btn" id="upSubmit" type="button" disabled>上传</button></div>
@@ -1911,7 +1899,6 @@ function openUploadModal(){
   document.getElementById("upCloseBtn").onclick=closeUploadModal;
   document.getElementById("upCancel").onclick=closeUploadModal;
   document.getElementById("upSubmit").onclick=upSubmit;
-  document.getElementById("upDateBtn").onclick=upOpenDatePicker;
   overlay.addEventListener("click",e=>{if(e.target===overlay)closeUploadModal();});
   document.addEventListener("keydown",upEscClose);
   upEnsureTaxonomy();
@@ -1923,10 +1910,9 @@ function closeUploadModal(){
   upPending=[];
   document.removeEventListener("keydown",upEscClose);
 }
-function upEscClose(e){if(e.key==="Escape"){const pop=document.getElementById("upDatePop");if(pop&&!pop.hidden){upCloseDatePicker();return;}closeUploadModal();}}
+function upEscClose(e){if(e.key==="Escape")closeUploadModal();}
 
-/* ── 资料日期：手输 + 小日历弹层（仅日期，不含时间） ── */
-let upDateState={year:0,month:0,sel:null};
+/* ── 资料日期：表格内每行原生 date 输入；upNormalizeDate 仅做格式校验兜底 ── */
 function upNormalizeDate(value){
   const text=String(value||"").trim();
   if(!text)return "";
@@ -1939,58 +1925,6 @@ function upNormalizeDate(value){
   const pad=n=>String(n).padStart(2,"0");
   return `${y}-${pad(mo)}-${pad(d)}`;
 }
-function upWriteDateInput(){
-  const st=upDateState,inp=document.getElementById("upDocumentDate");
-  if(!inp||!st.sel)return;
-  const pad=n=>String(n).padStart(2,"0");
-  inp.value=`${st.sel.getFullYear()}-${pad(st.sel.getMonth()+1)}-${pad(st.sel.getDate())}`;
-}
-function upRenderDatePicker(){
-  const pop=document.getElementById("upDatePop");if(!pop)return;
-  const st=upDateState;
-  const startDow=new Date(st.year,st.month,1).getDay();
-  const daysInMonth=new Date(st.year,st.month+1,0).getDate();
-  const now=new Date();
-  let cells="";
-  for(let i=0;i<startDow;i++)cells+="<span></span>";
-  for(let d=1;d<=daysInMonth;d++){
-    const sel=st.sel&&st.sel.getFullYear()===st.year&&st.sel.getMonth()===st.month&&st.sel.getDate()===d;
-    const isToday=st.year===now.getFullYear()&&st.month===now.getMonth()&&d===now.getDate();
-    cells+=`<button type="button" class="up-date-day${sel?" sel":""}${isToday?" today":""}" data-up-day="${d}">${d}</button>`;
-  }
-  const pad=n=>String(n).padStart(2,"0");
-  pop.innerHTML=`
-    <div class="up-date-head"><button type="button" class="up-date-nav" data-up-nav="-1" aria-label="上一月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><strong>${st.year}年${st.month+1}月</strong><button type="button" class="up-date-nav" data-up-nav="1" aria-label="下一月"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button></div>
-    <div class="up-date-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
-    <div class="up-date-grid">${cells}</div>
-    <div class="up-date-foot"><button type="button" data-up-now>此刻</button><span class="up-date-foot-right"><button type="button" data-up-clear>清除</button><button type="button" class="up-date-ok" data-up-ok>确定</button></span></div>`;
-  pop.querySelectorAll("[data-up-nav]").forEach(b=>b.onclick=()=>{st.month+=Number(b.dataset.upNav);if(st.month<0){st.month=11;st.year-=1;}if(st.month>11){st.month=0;st.year+=1;}upRenderDatePicker();});
-  pop.querySelectorAll("[data-up-day]").forEach(b=>b.onclick=()=>{st.sel=new Date(st.year,st.month,Number(b.dataset.upDay));upWriteDateInput();upRenderDatePicker();});
-  pop.querySelector("[data-up-now]").onclick=()=>{const t=new Date();st.sel=new Date(t.getFullYear(),t.getMonth(),t.getDate());st.year=t.getFullYear();st.month=t.getMonth();upWriteDateInput();upRenderDatePicker();};
-  pop.querySelector("[data-up-clear]").onclick=()=>{const inp=document.getElementById("upDocumentDate");if(inp)inp.value="";st.sel=null;upCloseDatePicker();};
-  pop.querySelector("[data-up-ok]").onclick=upCloseDatePicker;
-}
-function upOpenDatePicker(){
-  const pop=document.getElementById("upDatePop");if(!pop)return;
-  if(!pop.hidden){upCloseDatePicker();return;}
-  const st=upDateState,now=new Date();
-  const parsed=upNormalizeDate(document.getElementById("upDocumentDate").value);
-  if(parsed){
-    const m=parsed.match(/^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/);
-    if(m)st.sel=new Date(+m[1],+m[2]-1,+m[3],m[4]?+m[4]:now.getHours(),m[5]?+m[5]:now.getMinutes());
-  }else st.sel=null;
-  st.year=st.sel?st.sel.getFullYear():now.getFullYear();
-  st.month=st.sel?st.sel.getMonth():now.getMonth();
-  upRenderDatePicker();
-  pop.hidden=false;
-  setTimeout(()=>document.addEventListener("click",upDateOutside),0);
-}
-function upCloseDatePicker(){
-  const pop=document.getElementById("upDatePop");
-  if(pop)pop.hidden=true;
-  document.removeEventListener("click",upDateOutside);
-}
-function upDateOutside(e){if(!e.target.closest("#upDateRow"))upCloseDatePicker();}
 function upAddFiles(fileList){
   const duplicated=[];
   for(const f of fileList){
@@ -2001,13 +1935,28 @@ function upAddFiles(fileList){
   if(duplicated.length)upShowResult("已添加过（未重复加入）："+duplicated.join("、"),"");
   upRenderList();
 }
+function upTaxonomyOptions(){
+  return '<option value="">不指定</option>'+upTaxonomy.filter(c=>c.includes("/")).map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.split("/").join(" › "))}</option>`).join("");
+}
 function upRenderList(){
-  const list=document.getElementById("upList");if(!list)return;
-  list.innerHTML=upPending.map((f,i)=>`<div class="lib-upload-file"><span class="lib-upload-file-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span><span class="lib-upload-file-size">${libFmtSize(f.size)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></div>`).join("");
+  const wrap=document.getElementById("upTableWrap"),list=document.getElementById("upList");
+  if(!wrap||!list)return;
+  const dialog=document.querySelector("#uploadModalOverlay .lib-upload-dialog");
+  const has=upPending.length>0;
+  wrap.hidden=!has;
+  if(dialog)dialog.classList.toggle("has-table",has);
+  list.innerHTML=upPending.map((f,i)=>`<tr data-up-row="${i}">
+      <td class="lib-up-fname" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}<small>${libFmtSize(f.size)}</small></td>
+      <td><input class="lib-upload-input lib-up-title" type="text" placeholder="留空则自动识别" aria-label="资料标题"></td>
+      <td><input class="lib-upload-input lib-up-date" type="date" aria-label="资料日期"></td>
+      <td><select class="lib-upload-input lib-up-cat" aria-label="行业图景节点">${upTaxonomy?upTaxonomyOptions():'<option value="">不指定</option>'}</select></td>
+      <td><input class="lib-upload-input lib-up-note" type="text" placeholder="选填" aria-label="备注"></td>
+      <td class="lib-up-op"><span class="lib-up-state"></span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
+    </tr>`).join("");
   list.querySelectorAll("button[data-up-rm]").forEach(b=>b.onclick=()=>{upPending.splice(Number(b.dataset.upRm),1);upRenderList();});
-  const title=document.getElementById("upTitle"),submit=document.getElementById("upSubmit");
-  if(title)title.disabled=upPending.length>1;
+  const submit=document.getElementById("upSubmit");
   if(submit)submit.disabled=upPending.length===0;
+  upFillTaxonomy();
 }
 function upShowResult(msg,cls){
   const el=document.getElementById("upResult");if(!el)return;
@@ -2016,9 +1965,10 @@ function upShowResult(msg,cls){
   el.style.display=msg?"block":"none";
 }
 function upFillTaxonomy(){
-  const select=document.getElementById("upCategory");
-  if(!select||select.options.length>1)return;
-  select.innerHTML='<option value="">不指定</option>'+upTaxonomy.filter(c=>c.includes("/")).map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.split("/").join(" › "))}</option>`).join("");
+  document.querySelectorAll("#upList .lib-up-cat").forEach(select=>{
+    if(select.options.length>1)return;
+    select.innerHTML=upTaxonomyOptions();
+  });
 }
 async function upEnsureTaxonomy(){
   if(upTaxonomy){upFillTaxonomy();return;}
@@ -2032,37 +1982,67 @@ async function upSubmit(){
   if(!upPending.length)return;
   const submit=document.getElementById("upSubmit"),cancel=document.getElementById("upCancel");
   if(!submit||submit.disabled)return;
-  const fd=new FormData();
-  upPending.forEach(f=>fd.append("files",f));
-  const title=document.getElementById("upTitle").value.trim();
-  if(title&&upPending.length===1)fd.append("title",title);
-  const conf=document.getElementById("upConf").value,src=document.getElementById("upSrc").value,cat=document.getElementById("upCategory").value,note=document.getElementById("upNote").value.trim();
-  if(conf)fd.append("confidentiality",conf);
-  if(src)fd.append("source_type",src);
-  if(cat)fd.append("primary_category",cat);
-  if(note)fd.append("note",note);
-  const docDateNormalized=upNormalizeDate(document.getElementById("upDocumentDate").value);
-  if(docDateNormalized===null){
-    upShowResult("资料日期格式不正确，应为 2026-09-18","err");
-    return;
+  /* v6：一行一文件——逐行读取元数据，逐个文件单独上传（每行可独立成功/失败）；
+     已成功的行（✓）在部分失败重试时自动跳过 */
+  const rows=[...document.querySelectorAll("#upList [data-up-row]")];
+  const targets=upPending.map((f,i)=>({file:f,row:rows[i]})).filter(t=>t.row&&!t.row.classList.contains("up-row-done"));
+  if(!targets.length)return;
+  let dateErr=0;
+  for(const t of targets){
+    if(upNormalizeDate(t.row.querySelector(".lib-up-date")?.value)===null){
+      t.row.classList.add("up-row-err");
+      const st=t.row.querySelector(".lib-up-state");if(st)st.textContent="✗ 日期";
+      dateErr++;
+    }
   }
-  if(docDateNormalized)fd.append("document_date",docDateNormalized);
+  if(dateErr){
+    upShowResult(`${dateErr} 行的资料日期不合法——已标红，请修正后再上传`,"err");
+    submit.disabled=false;return;
+  }
   submit.disabled=true;cancel.disabled=true;
   upShowResult("正在上传…","");
-  try{
-    const r=await apiFetch("/api/uploads",{method:"POST",body:fd});
-    if(r&&r.ok){
-      const data=await r.json().catch(()=>({}));
-      const pendingCount=(data.files||[]).filter(f=>f.classification_status==="pending").length;
-      upShowResult("成功落盘 "+data.count+" 个文件，后台正在"+(pendingCount?"分类和索引":"建立索引"),"ok");
-      upCloseTimer=setTimeout(()=>{upCloseTimer=null;closeUploadModal();loadLibrary();},1200);
-    }else{
-      const j=r?await r.json().catch(()=>({})):{};
-      upShowResult(j.detail||("上传失败 "+(r?r.status:"")),"err");
-      submit.disabled=false;cancel.disabled=false;
+  let ok=0,fail=0;
+  for(const t of targets){
+    const fd=new FormData();
+    fd.append("files",t.file);
+    const title=t.row.querySelector(".lib-up-title")?.value.trim()||"";
+    const cat=t.row.querySelector(".lib-up-cat")?.value||"";
+    const note=t.row.querySelector(".lib-up-note")?.value.trim()||"";
+    const docDate=upNormalizeDate(t.row.querySelector(".lib-up-date")?.value);
+    if(title)fd.append("title",title);
+    if(cat)fd.append("primary_category",cat);
+    if(note)fd.append("note",note);
+    if(docDate)fd.append("document_date",docDate);
+    const st=t.row.querySelector(".lib-up-state");
+    if(st)st.textContent="上传中…";
+    try{
+      const r=await apiFetch("/api/uploads",{method:"POST",body:fd});
+      if(r&&r.ok){
+        ok++;
+        t.row.classList.remove("up-row-err");
+        t.row.classList.add("up-row-done");
+        if(st)st.textContent="✓";
+      }else{
+        fail++;
+        const j=r?await r.json().catch(()=>({})):{};
+        t.row.classList.add("up-row-err");
+        if(st)st.textContent="✗ "+(j.detail||("HTTP "+(r?r.status:"")));
+      }
+    }catch(e){
+      fail++;
+      t.row.classList.add("up-row-err");
+      if(st)st.textContent="✗ 网络错误";
     }
-  }catch(e){
-    upShowResult("网络错误："+e.message,"err");
+  }
+  const doneRows=document.querySelectorAll("#upList tr.up-row-done").length;
+  if(fail===0){
+    upShowResult(`成功上传 ${ok} 个文件，后台正在分类和索引`,"ok");
+    upCloseTimer=setTimeout(()=>{upCloseTimer=null;closeUploadModal();loadLibrary();},1200);
+  }else if(ok>0||doneRows>0){
+    upShowResult(`成功 ${doneRows} 个、失败 ${fail} 个——修正标红行后再次点击「上传」，已成功的行不会重复上传`,"err");
+    submit.disabled=false;cancel.disabled=false;
+  }else{
+    upShowResult("上传失败——请修正标红行后重试","err");
     submit.disabled=false;cancel.disabled=false;
   }
 }

@@ -120,11 +120,11 @@ a:hover{color:var(--brand-lighter)}
   display:flex;
   align-items:center;
   gap:4px;
-  /* v5：固定行高——收起/展开两态下导航按钮纵向位置完全不变；
-     左内边距与导航图标 x 对齐（nav padding 10 + item padding 8 = 18px，
-     图标在 24px 容器内居中再 +1px） */
+  /* v6：固定行高——收起/展开两态下导航按钮纵向位置完全不变；
+     图标 x 与导航/账户完全对齐（收起态为基准）：
+     brand padding 16 + 图标容器 24px 内 img 居中 +1 = 17px */
   height:52px;
-  padding:0 10px 0 17px;
+  padding:0 10px 0 16px;
   border-bottom:1px solid var(--border-subtle);
   flex-shrink:0;
 }
@@ -144,7 +144,8 @@ a:hover{color:var(--brand-lighter)}
   transition:background .15s,color .15s;
 }
 .sidebar-collapse-side:hover{background:var(--bg-surface);color:var(--text-primary)}
-.sidebar-collapse-side .sidebar-collapse-img{width:16px;height:16px}
+/* v6：收起/展开图标在所有状态下同尺寸（22px，与收起态品牌悬浮图标一致） */
+.sidebar-collapse-side .sidebar-collapse-img{width:22px;height:22px}
 .sidebar-brand-btn{
   display:flex;
   align-items:center;
@@ -186,7 +187,9 @@ a:hover{color:var(--brand-lighter)}
   display:flex;
   flex-direction:column;
   gap:2px;
-  padding:12px 10px;
+  /* v6：横向 8px —— item padding 8 + 容器 24px 内 img +1 = 图标 x 17，
+     与收起态（rail 56 居中）完全一致 */
+  padding:12px 8px;
   overflow-y:auto;
   overflow-x:hidden;
   scrollbar-width:none;
@@ -239,7 +242,8 @@ a:hover{color:var(--brand-lighter)}
 /* 账户整行按钮（替代原 密码/退出 小按钮） */
 .sidebar-account{
   flex-shrink:0;
-  padding:10px;
+  /* v6：横向 12px —— btn padding 4 → 图标 x 16，与导航/品牌对齐 */
+  padding:10px 12px;
   border-top:1px solid var(--border-subtle);
 }
 .sidebar-account-btn{
@@ -361,6 +365,9 @@ a:hover{color:var(--brand-lighter)}
   gap:1px;
   outline:none;
 }
+/* v6 修复：display:flex 会覆盖 UA 的 [hidden]{display:none}——
+   「历史对话」按钮此前形同虚设的根因 */
+.sidebar-conversation-list[hidden]{display:none}
 .sidebar-conversation-list:hover,
 .sidebar-conversation-list:focus,
 .sidebar-conversation-list:focus-within{overflow-y:auto}
@@ -2579,6 +2586,20 @@ a:hover{color:var(--brand-lighter)}
 .library .cat-actions .secondary-btn{padding:3px 9px;font-size:11.5px}
 /* 上传资料 in-app 弹窗 */
 .lib-upload-dialog{width:min(640px,100%);background:var(--bg-canvas);border:1px solid var(--border-standard);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg,0 24px 64px rgba(15,23,42,.24));max-height:calc(100vh - 96px);display:flex;flex-direction:column}
+/* v6：选定文件后出现表格 → 弹窗加宽 */
+.lib-upload-dialog.has-table{width:min(1000px,100%)}
+.lib-upload-tablewrap{border:1px solid var(--border-subtle);border-radius:var(--radius-md);overflow-x:auto;background:#fff}
+.lib-upload-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.lib-upload-table th{position:sticky;top:0;z-index:1;background:var(--bg-surface);color:var(--text-secondary);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-subtle);white-space:nowrap;font-size:12px}
+.lib-upload-table td{padding:6px 8px;border-bottom:1px solid var(--border-subtle);vertical-align:middle}
+.lib-upload-table tr:last-child td{border-bottom:0}
+.lib-up-fname{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:550;color:var(--text-primary)}
+.lib-up-fname small{display:block;color:var(--text-tertiary);font-weight:400;font-size:11px;margin-top:2px}
+.lib-upload-table .lib-upload-input{width:100%;min-width:110px;padding:6px 8px;font-size:12.5px}
+.lib-up-op{white-space:nowrap;text-align:right}
+.lib-up-state{margin-right:8px;font-size:12px;color:var(--text-tertiary)}
+tr.up-row-err .lib-up-state{color:var(--red)}
+tr.up-row-done .lib-up-state{color:var(--brand)}
 .lib-upload-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border-subtle)}
 .lib-upload-head h2{margin:0;font-size:15px;font-weight:650;color:var(--text-primary)}
 .lib-upload-close{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--text-tertiary);cursor:pointer;transition:background .15s,color .15s}

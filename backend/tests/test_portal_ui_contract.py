@@ -1,3 +1,4 @@
+import re
 from urllib.request import urlopen
 
 
@@ -41,6 +42,16 @@ def test_sidebar_is_visually_stable():
     assert "sidebar-account-btn" in js
     assert 'id="changePwdBtn"' not in js
     assert "accountMenu" in js and "settingsItem" in js and "logoutItem" in js
+    # v6：display:flex 覆盖 UA 的 [hidden]{display:none}——「历史对话」折叠按钮失效根因
+    assert ".sidebar-conversation-list[hidden]{display:none}" in css
+    # v6：收起/展开图标在所有状态下同尺寸（22px）
+    assert ".sidebar-collapse-side .sidebar-collapse-img{width:22px;height:22px}" in css
+    # v6：图标横向对齐以收起态为基准（brand padding 16 / nav padding 8 → img x=17）
+    brand_block = css.split(".sidebar-brand{", 1)[1].split("}", 1)[0]
+    assert "padding:0 10px 0 16px" in brand_block
+    nav_block = css.split(".sidebar-nav{", 1)[1].split("}", 1)[0]
+    assert "padding:12px 8px" in nav_block
+    assert re.search(r"(?m)^\.sidebar-account\{[^}]*padding:10px 12px", css)
 
 
 def test_home_layout_is_boundary_alert_and_knowledge_workbench():
@@ -203,6 +214,29 @@ def test_deep_research_metrics_use_commercial_readiness_statuses():
     assert "isSofcReport?'':indicatorGrid('关键指标（经济）'" in js
     assert ".commercial-status-missing" in css
     assert "color:var(--red);background:var(--red-bg)" in css
+
+
+def test_upload_dialog_is_per_file_table_without_confidentiality():
+    """资料库上传弹窗 v6 契约：
+    - 初始只有拖拽区；选定文件后出现表格（一行一文件）
+    - 密级/来源类型字段移除；自定义日历移除（原生 date 输入）
+    - 选定文件后弹窗加宽（.has-table）
+    - 列表不再显示原文件名，只显示资料标题
+    """
+    js = load_served_js()
+    css = load_served_css()
+    assert 'id="upConf"' not in js and 'id="upSrc"' not in js
+    assert "upDatePop" not in js and "upDateBtn" not in js
+    assert 'id="upTableWrap"' in js
+    assert "lib-upload-table" in js
+    assert "lib-up-title" in js and "lib-up-date" in js
+    assert "lib-up-cat" in js and "lib-up-note" in js
+    assert 'type="date"' in js
+    assert ".lib-upload-dialog.has-table" in css
+    assert "lib-upload-tablewrap" in css
+    assert "has-table" in js
+    # 资料列表不再输出原文件名列
+    assert "<small>${escapeHtml(f.original_filename)}" not in js
 
 
 def test_breadth_portal_focuses_the_exact_alert_record():
