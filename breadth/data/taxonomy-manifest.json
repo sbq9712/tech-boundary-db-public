@@ -1,10 +1,10 @@
 {
-  "taxonomy_id": "breadth-4f8594fbc86e",
-  "taxonomy_version": "4f8594fbc86ebe15948f06496e916fce120f57c8",
+  "taxonomy_id": "breadth-ed2d422a1ea4",
+  "taxonomy_version": "ed2d422a1ea43bb45ab1b2a5387b6dfe8211b011",
   "source_repository": "https://github.com/sbq9712/tech-db",
   "source_file": "category-taxonomy.json",
-  "synced_at": "2026-07-29",
-  "output_count": 77,
-  "business_category_count": 75,
+  "synced_at": "2026-09-21",
+  "output_count": 127,
+  "business_category_count": 125,
   "result_labels": ["未分类", "不相关"]
 }

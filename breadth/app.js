@@ -37,6 +37,7 @@ const state = {
   collapsedGroups: new Set(),
   expandedClusters: new Set(),
   sortBy: 'date',
+  // Portal deep-link state (tech-boundary-db portal integration)
   focusRecord: null,
   focusApplied: false,
   // Report view state
@@ -112,8 +113,25 @@ function switchView(view) {
   if (calendarSidebar) calendarSidebar.style.display = 'none';
   if (reportContent) reportContent.style.display = 'none';
   if (calendarContent) calendarContent.style.display = 'none';
+  const qaSidebar = $('qaSidebar');
+  if (qaSidebar) qaSidebar.style.display = 'none';
 
-  if (view === 'reports') {
+  const qaView = $('qaView');
+  const mainContent = document.querySelector('.content');
+
+  if (view === 'qa') {
+    if (qaView) qaView.style.display = 'flex';
+    if (mainContent) mainContent.style.display = 'none';
+    filterBlocks.forEach((b) => { b.style.display = 'none'; });
+    if (qaSidebar) qaSidebar.style.display = '';
+    if (contentToolbar) contentToolbar.style.display = 'none';
+    recordList.style.display = 'none';
+    if (window.qaModule && window.qaModule.switchToQAView) {
+      window.qaModule.switchToQAView();
+    }
+  } else if (view === 'reports') {
+    if (qaView) qaView.style.display = 'none';
+    if (mainContent) mainContent.style.display = '';
     if (reportView) reportView.style.display = '';
     filterBlocks.forEach((b) => { b.style.display = 'none'; });
     if (contentToolbar) contentToolbar.style.display = 'none';
@@ -127,6 +145,8 @@ function switchView(view) {
     reportContent.style.display = '';
     renderReportView();
   } else if (view === 'calendar') {
+    if (qaView) qaView.style.display = 'none';
+    if (mainContent) mainContent.style.display = '';
     if (calendarSidebar) calendarSidebar.style.display = '';
     filterBlocks.forEach((b) => { b.style.display = 'none'; });
     if (contentToolbar) contentToolbar.style.display = 'none';
@@ -140,6 +160,8 @@ function switchView(view) {
     calendarContent.style.display = '';
     renderCalendarView();
   } else {
+    if (qaView) qaView.style.display = 'none';
+    if (mainContent) mainContent.style.display = '';
     filterBlocks.forEach((b) => { b.style.display = ''; });
     if (contentToolbar) contentToolbar.style.display = '';
     recordList.style.display = '';
@@ -1035,7 +1057,7 @@ function renderToolbar() {
   const displayCount = levelCounts[state.alertLevel] !== undefined
     ? levelCounts[state.alertLevel]
     : state.filtered.length;
-  $('resultCount').innerHTML = `共 <strong>${displayCount.toLocaleString()}</strong> 条结果`;
+  $('resultCount').innerHTML = `共 <strong>${displayCount.toLocaleString()}</strong> 条结果（本页 ${state.filtered.length > 0 ? Math.min(PAGE_SIZE, state.filtered.length - (state.page - 1) * PAGE_SIZE) : 0} 条）`;
   // Alert level clear button removed (now in top bar)
   const chips = [];
   if (state.query.trim()) chips.push({ label: '检索', value: state.query.trim(), key: 'query' });
@@ -1121,7 +1143,9 @@ function renderRecords() {
   state.page = Math.min(state.page, pages);
   const start = (state.page - 1) * PAGE_SIZE;
   const rows = state.filtered.slice(start, start + PAGE_SIZE);
-  $('pageLabel').textContent = `第 ${state.page} / ${pages} 页`;
+  const pi = $('pageInput');
+  if (pi && document.activeElement !== pi) pi.value = state.page;
+  $('pageTotal').textContent = pages;
   $('prevPage').disabled = state.page <= 1;
   $('nextPage').disabled = state.page >= pages;
   if (!rows.length) {
@@ -1129,15 +1153,6 @@ function renderRecords() {
     return;
   }
   $('recordList').innerHTML = rows.map(renderRecordCard).join('');
-  if (focusIndex >= 0) {
-    const focused = state.filtered[focusIndex];
-    requestAnimationFrame(() => {
-      const card = document.querySelector(`[data-record-index="${focused._idx}"]`);
-      const toolbar = document.querySelector('.content-toolbar');
-      if (card) card.style.scrollMarginTop = `${(toolbar?.offsetHeight || 0) + 8}px`;
-      card?.scrollIntoView({ block: 'start' });
-    });
-  }
 }
 
 function renderRecordCard(item) {
@@ -1263,7 +1278,7 @@ function renderRecordCard(item) {
     }
   }
 
-  return `<article class="record-card" data-record-index="${item._idx ?? -1}">
+  return `<article class="record-card">
     <div class="record-title">${levelBadges}${titleHtml}${clusterHtml}</div>
     ${topicHtml}
     ${metaLine}
@@ -1433,6 +1448,21 @@ function bindEvents() {
   });
   on('prevPage', 'click', () => { if (state.page > 1) { state.page -= 1; renderRecords(); document.querySelector('.content').scrollTo({ top: 0, behavior: 'instant' }); } });
   on('nextPage', 'click', () => { const pages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE)); if (state.page < pages) { state.page += 1; renderRecords(); document.querySelector('.content').scrollTo({ top: 0, behavior: 'instant' }); } });
+  // Page input: allow typing a page number to jump directly
+  const pageInputEl = $('pageInput');
+  if (pageInputEl) {
+    pageInputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); pageInputEl.blur(); }
+    });
+    pageInputEl.addEventListener('blur', () => {
+      const pages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
+      const n = parseInt(pageInputEl.value, 10);
+      if (isNaN(n) || n < 1 || n > pages) { pageInputEl.value = state.page; return; }
+      state.page = n;
+      renderRecords();
+      document.querySelector('.content').scrollTo({ top: 0, behavior: 'instant' });
+    });
+  }
 
   // ── Global score tooltip (single floating div, not a child of score-box) ──
   const scoreTooltip = document.createElement('div');
@@ -1666,9 +1696,8 @@ load().catch((error) => {
 // ═══════════════════════════════════════════════════════════════
 
 state.calendarData = null;
-// Defaults; applyPortalAlert may have already set these from portal deep-link params.
-if (typeof state.calendarYear !== 'number') state.calendarYear = new Date().getFullYear();
-if (typeof state.calendarMonth !== 'number') state.calendarMonth = new Date().getMonth();
+state.calendarYear = new Date().getFullYear();
+state.calendarMonth = new Date().getMonth();
 state.calendarCategories = new Set(['零碳产业', 'AI与智能科技', '通用技术']);
 
 async function loadCalendarData() {
@@ -1687,12 +1716,13 @@ function renderCalendarView() {
   const container = $('calendarContent');
   if (!container) return;
 
+  const yearSel = $('calYear');
+  const monthPicker = $('calMonthPicker');
+  const catList = $('calCatList');
+
   // Attach sidebar event listeners (once)
   if (!container._calInit) {
     container._calInit = true;
-    const yearSel = $('calYear');
-    const monthPicker = $('calMonthPicker');
-    const catList = $('calCatList');
 
     if (yearSel) yearSel.addEventListener('change', () => {
       state.calendarYear = parseInt(yearSel.value);
@@ -1714,18 +1744,43 @@ function renderCalendarView() {
         calRender();
       }
     });
-
-    // Sync sidebar controls to the actual state (portal deep link or today's month)
-    if (yearSel) yearSel.value = String(state.calendarYear);
+    // Sync month button highlight with actual state.calendarMonth
     if (monthPicker) {
-      monthPicker.querySelectorAll('.cal-month-btn').forEach((b) => {
+      monthPicker.querySelectorAll('.cal-month-btn').forEach(b => {
         b.classList.toggle('active', parseInt(b.dataset.month, 10) === state.calendarMonth);
       });
     }
+    // Sync year selector with actual state.calendarYear
+    if (yearSel) yearSel.value = String(state.calendarYear);
   }
 
   container.innerHTML = `<div class="calendar-main" id="calMain"><p class="empty-hint">正在载入会议数据…</p></div>`;
-  loadCalendarData().then(() => calRender());
+  loadCalendarData().then(() => {
+    // Populate year selector dynamically based on conference data
+    const confData = state.calendarData || [];
+    const confYears = [...new Set(confData.map(c => {
+      if (!c.start_date) return null;
+      const d = new Date(c.start_date);
+      return isNaN(d.getTime()) ? null : d.getFullYear();
+    }).filter(y => y !== null))].sort((a, b) => a - b);
+    if (yearSel) {
+      const currentVal = state.calendarYear;
+      // Compare by option values (robust against browser innerHTML normalization)
+      const existingValues = Array.from(yearSel.options).map(o => o.value);
+      const targetValues = confYears.length > 0 ? confYears.map(String) : [String(currentVal)];
+      const needsRebuild = existingValues.length !== targetValues.length ||
+        targetValues.some((v, i) => existingValues[i] !== v);
+      if (needsRebuild) {
+        yearSel.innerHTML = targetValues.map(v => `<option value="${v}">${v}年</option>`).join('');
+      }
+      // If current year not in data, default to the most recent available year
+      if (confYears.length > 0 && !confYears.includes(currentVal)) {
+        state.calendarYear = confYears[confYears.length - 1]; // most recent
+      }
+      yearSel.value = String(state.calendarYear);
+    }
+    calRender();
+  });
 }
 
 function calGetFiltered() {

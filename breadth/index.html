@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=138" />
+  <link rel="stylesheet" href="styles.css?v=226" />
 </head>
 <body>
   <div class="layout">
@@ -17,7 +17,6 @@
         <button class="view-tab" data-view="reports" type="button">日报/周报/月报</button>
         <button class="view-tab" data-view="calendar" type="button">会议日历</button>
       </div>
-
       <div id="reportView" style="display:none">
         <div class="filter-block">
           <div class="filter-head"><span class="filter-title">报告类型</span></div>
@@ -36,9 +35,7 @@
         <div class="filter-block">
           <div class="filter-head"><span class="filter-title">年份</span></div>
           <select id="calYear" class="cal-year-select">
-            <option value="2025">2025年</option>
-            <option value="2026" selected>2026年</option>
-            <option value="2027">2027年</option>
+            <!-- Dynamically populated by app.js based on conference data -->
           </select>
         </div>
         <div class="filter-block">
@@ -51,7 +48,7 @@
             <button class="cal-month-btn" data-month="3" type="button">4月</button>
             <button class="cal-month-btn" data-month="4" type="button">5月</button>
             <button class="cal-month-btn" data-month="5" type="button">6月</button>
-            <button class="cal-month-btn active" data-month="6" type="button">7月</button>
+            <button class="cal-month-btn" data-month="6" type="button">7月</button>
             <button class="cal-month-btn" data-month="7" type="button">8月</button>
             <button class="cal-month-btn" data-month="8" type="button">9月</button>
             <button class="cal-month-btn" data-month="9" type="button">10月</button>
@@ -67,6 +64,8 @@
             <label class="cal-cat-item"><input type="checkbox" value="通用技术" checked><span>通用技术</span></label>
           </div>
         </div>
+      </div>
+
       </div>
 
       <div class="filter-block">
@@ -142,7 +141,9 @@
           </button>
           <div class="pagination-inline">
             <button id="prevPage" type="button">‹</button>
-            <span id="pageLabel"></span>
+            <span>第</span>
+            <input id="pageInput" type="text" inputmode="numeric" size="3" style="width:3em;text-align:center;" />
+            <span> / <span id="pageTotal"></span> 页</span>
             <button id="nextPage" type="button">›</button>
           </div>
           <div class="search-bar-top">
@@ -305,7 +306,7 @@
   </script>
   <script src="data/processed/manifest-data.js"></script>
   <script src="data/category-order-data.js"></script>
-  <script src="app.js?v=139"></script>
+  <script src="app.js?v=148"></script>
   <script>
     // Information Sources Panel Data
     window.__SOURCES__ = {

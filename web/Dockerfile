@@ -18,5 +18,5 @@ RUN set -eu; \
     done; \
     for prefix in lite-part meta-part summary-part; do \
       count="$(find "$runtime" -type f -name "$prefix-*.js" | wc -l | tr -d ' ')"; \
-      test "$count" -eq 30 || { echo "Expected 30 $prefix shards, found $count" >&2; exit 1; }; \
+      test "$count" -eq 33 || { echo "Expected 33 $prefix shards, found $count" >&2; exit 1; }; \
     done
