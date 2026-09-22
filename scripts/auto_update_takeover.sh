@@ -28,14 +28,26 @@ fi
 echo "[takeover] $(date -Is) === boundary breadth hydrate ==="
 cd "$BOUNDARY"
 git fetch origin main
-# 更新 hydrate 钉扎（PINS 由 hydrate 脚本自身校验，失败即中断）
+# 动态改写 hydrate 钉扎：UPSTREAM_COMMIT=刚推送的 SHA；
+# DATA_VERSION/RECORDS/SHARDS 从本次管线产物（tech-db manifest）读取，
+# 避免静态 pins 在数据演进后失效。PINS 由 hydrate 自身校验，失败即中断。
 python3 - << PY
-import re, subprocess
+import json, re
 from pathlib import Path
+techdb = Path("$TECHDB")
+manifest_raw = (techdb / "data" / "processed" / "manifest-data.js").read_text(encoding="utf-8")
+meta = json.loads(manifest_raw[manifest_raw.find("{"):manifest_raw.rfind("}") + 1])["meta"]
+data_version = meta["data_version"]
+records = int(meta["records_total"])
+shards = int(meta["total_shards"])
 p = Path("scripts/hydrate_breadth_runtime.py")
 s = p.read_text(encoding="utf-8")
 s = re.sub(r'UPSTREAM_COMMIT = "[^"]+"', f'UPSTREAM_COMMIT = "$PUSHED_SHA"', s)
+s = re.sub(r'EXPECTED_DATA_VERSION = "[^"]+"', f'EXPECTED_DATA_VERSION = "{data_version}"', s)
+s = re.sub(r'EXPECTED_RECORDS = [\d_]+', f'EXPECTED_RECORDS = {records}', s)
+s = re.sub(r'EXPECTED_SHARDS = \d+', f'EXPECTED_SHARDS = {shards}', s)
 p.write_text(s, encoding="utf-8")
+print(f"[takeover] pins -> $PUSHED_SHA {data_version} records={records} shards={shards}")
 PY
 python3 scripts/sync_breadth_from_techdb.sh
 
