@@ -398,17 +398,17 @@ function isAdmin(){return currentUser&&currentUser.role==="admin";}
 // 资料库权限三级：管理员(上传/下载/删除) > ATSC用户(上传/下载) > 普通用户(仅查看)
 const ROLE_LABELS={admin:"管理员",atsc:"ATSC用户",user:"普通用户"};
 function canManageFiles(){const r=currentUser&&currentUser.role;return r==="admin"||r==="atsc";}
-/* 侧边栏收起/展开：点击切换，状态持久化；默认收起（首次进入为收起态） */
-const SIDEBAR_COLLAPSED_KEY="sidebar_collapsed";
-let sidebarCollapsed=(function(){try{const s=localStorage.getItem(SIDEBAR_COLLAPSED_KEY);if(s!==null)return s==="1";}catch(e){}return true;})();
-function toggleSidebarCollapsed(){sidebarCollapsed=!sidebarCollapsed;try{localStorage.setItem(SIDEBAR_COLLAPSED_KEY,sidebarCollapsed?"1":"0");}catch(e){}render();}
+/* 侧边栏收起/展开：点击切换；每次进入页面一律从收起态开始——
+   不再读取/持久化展开偏好（旧版本写过的 sidebar_collapsed 存储一律忽略） */
+let sidebarCollapsed=true;
+function toggleSidebarCollapsed(){sidebarCollapsed=!sidebarCollapsed;render();}
 /* v5：历史对话列表折叠（仅折叠列表，不动侧边栏宽度） */
 let convListCollapsed=false;
 function toggleConversationListCollapsed(){convListCollapsed=!convListCollapsed;const btn=document.getElementById("convListToggleBtn");if(btn){btn.setAttribute("aria-expanded",convListCollapsed?"false":"true");btn.querySelector(".sidebar-toggle-chevron")?.classList.toggle("is-down",convListCollapsed);}const list=document.getElementById("sidebarConversationList");if(list)list.hidden=convListCollapsed;}
 /* v4：品牌行的收起/展开控件——展开态贴左的 collapse 图标按钮负责收起；
    收起态顶部品牌 logo 悬停变收起/展开图标，点击展开（翻转状态后整行重渲染） */
-function collapseSidebar(){if(sidebarCollapsed)return;sidebarCollapsed=true;try{localStorage.setItem(SIDEBAR_COLLAPSED_KEY,"1");}catch(e){}render();}
-function expandSidebar(){if(sidebarCollapsed){sidebarCollapsed=false;try{localStorage.setItem(SIDEBAR_COLLAPSED_KEY,"0");}catch(e){}render();}}
+function collapseSidebar(){if(sidebarCollapsed)return;sidebarCollapsed=true;render();}
+function expandSidebar(){if(sidebarCollapsed){sidebarCollapsed=false;render();}}
 /* 导航切换时清除历史对话高亮（深灰底/深蓝字只在正查看该对话时存在） */
 function clearActiveConversation(){if(activeSessionId===null)return;activeSessionId=null;renderSidebarConversations();}
 /* v5：门户按钮高亮与「是否正查看历史对话」同步 */

@@ -38,7 +38,8 @@ def test_sidebar_is_visually_stable():
     assert "convListToggleBtn" in js and "toggleSidebarCollapsed" in js
     assert "collapseSideBtn" in js and "brandToggleBtn" in js
     assert "syncNavHomeActive" in js and "toggleConversationListCollapsed" in js
-    assert "sidebar_collapsed" in js
+    assert "let sidebarCollapsed=true" in js  # 每次进入页面一律从收起态开始，不读取/持久化展开偏好
+    assert "localStorage.getItem(SIDEBAR_COLLAPSED_KEY)" not in js
     assert "sidebar-account-btn" in js
     assert 'id="changePwdBtn"' not in js
     assert "accountMenu" in js and "settingsItem" in js and "logoutItem" in js
