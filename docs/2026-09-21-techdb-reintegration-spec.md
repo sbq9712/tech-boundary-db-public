@@ -48,3 +48,14 @@
 - 管线 timers（techdb-pipeline/data-sync/vector/graph）在重分类期间暂停，
   完成并索引重建后恢复（防并发写坏 lite/shards）。
 - D5 修复后弃用旧进程（kill 566781），checkpoint 续跑无损。
+
+## PR #1 评审项闭环（2026-09-22）
+阻塞项 ①②③ 于 0cf5c94 修复并合入。非阻塞项 ④-⑧（原定"下轮迭代"）本轮全部落地：
+- ④ 用户管理副标题删除 —— 随 2026-09 UI 改版完成。
+- ⑤ 侧边栏"历史对话"区块（logo 列表下方、收起/展开切换按钮 + 会话列表整体滚动）—— v5/v6 完成，
+  Playwright 断言折叠为 computed display:none。
+- ⑥ TZ=Asia/Shanghai —— docker-compose 四服务（db/canonical-qa/api/readonly-agent）统一注入。
+- ⑦ README 状态章节 —— 更新至 2026-09-22（tech-db 125 叶子基线、4h 接管、UI 改版）。
+- ⑧ 登录失败提示 —— 核对为已满足：后端区分「用户名或密码错误/账号已禁用/限流」，
+  前端透传 detail，无通用化文案，不需改动。
+另：评审建议的 TECHDB_INGEST_MAX_CONCURRENCY 全局并发闸门一并落地（默认 2，0=不限）。
