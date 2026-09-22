@@ -77,6 +77,8 @@ data_sources/tech_kb_builder_2025w41/rag/
 # Canonical QA release assets are delivered inside the docker-images tar only.
 services/canonical-qa/bge-m3-model/
 services/canonical-qa/data/lightrag/*.pkl
+services/canonical-qa/data/lightrag/graph-export.json
+services/canonical-qa/data/lightrag/jieba_custom_dict.txt
 services/canonical-qa/data/processed/all-records-lite.json
 
 # Breadth-tracking generated data (shards + knowledge index). Downloaded from upstream.
