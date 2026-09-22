@@ -1153,6 +1153,15 @@ function renderRecords() {
     return;
   }
   $('recordList').innerHTML = rows.map(renderRecordCard).join('');
+  if (focusIndex >= 0) {
+    const focused = state.filtered[focusIndex];
+    requestAnimationFrame(() => {
+      const card = document.querySelector(`[data-record-index="${focused._idx}"]`);
+      const toolbar = document.querySelector('.content-toolbar');
+      if (card) card.style.scrollMarginTop = `${(toolbar?.offsetHeight || 0) + 8}px`;
+      card?.scrollIntoView({ block: 'start' });
+    });
+  }
 }
 
 function renderRecordCard(item) {
@@ -1278,7 +1287,7 @@ function renderRecordCard(item) {
     }
   }
 
-  return `<article class="record-card">
+  return `<article class="record-card" data-record-index="${item._idx ?? -1}">
     <div class="record-title">${levelBadges}${titleHtml}${clusterHtml}</div>
     ${topicHtml}
     ${metaLine}

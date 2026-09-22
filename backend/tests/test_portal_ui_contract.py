@@ -24,7 +24,7 @@ def test_sidebar_is_visually_stable():
     """
     css = load_served_css()
     assert "--sidebar-rail-w:56px" in css
-    assert "--sidebar-expanded-w:228px" in css
+    assert "--sidebar-expanded-w:210px" in css
     sidebar = css.split(".sidebar{", 1)[1].split("}", 1)[0]
     assert "position:fixed" in sidebar
     assert "width:var(--sidebar-expanded-w)" in sidebar
@@ -34,7 +34,9 @@ def test_sidebar_is_visually_stable():
     assert "background:#fff" in sidebar
     assert ".sidebar:hover" not in css  # 悬停展开已移除
     js = load_served_js()
-    assert "sidebarToggleBtn" in js and "toggleSidebarCollapsed" in js
+    assert "convListToggleBtn" in js and "toggleSidebarCollapsed" in js
+    assert "collapseSideBtn" in js and "brandToggleBtn" in js
+    assert "syncNavHomeActive" in js and "toggleConversationListCollapsed" in js
     assert "sidebar_collapsed" in js
     assert "sidebar-account-btn" in js
     assert 'id="changePwdBtn"' not in js
@@ -135,7 +137,10 @@ def test_home_exposes_persisted_conversations_in_sidebar():
     js = load_served_js()
     css = load_served_css()
     assert "/api/conversations" in js
-    assert "sidebarNewConversationBtn" in js
+    # v4：「新对话」按钮移除——点击「门户」即开始新对话
+    assert "sidebarNewConversationBtn" not in js
+    assert "sidebarToggleBtn" not in js  # 旧侧边栏收起按钮已由品牌行按钮取代
+    assert "clearActiveConversation" in js
     assert "sidebarConversationList" in js
     assert "data-conversation-id" in js
     assert "data-delete-conversation" in js
@@ -148,7 +153,6 @@ def test_home_exposes_persisted_conversations_in_sidebar():
     assert "if(deletingActive)startNewConversation()" in js
     assert "loadConversationMessages" in js
     assert "pendingConversation={id:`pending-${requestEpoch}`,title:'新对话',pending:true}" in js
-    assert "event.target?.closest?.('#sidebarNewConversationBtn')" in js
     assert "qa-message-avatar" not in js
     assert "sidebar-conversation-heading" not in js
     assert "sidebar-retrieval-status" not in css
@@ -164,8 +168,8 @@ def test_home_exposes_persisted_conversations_in_sidebar():
     assert ".sidebar-conversation-hub" in css
     nav_block = css.split(".sidebar-nav{", 1)[1].split("}", 1)[0]
     assert "overflow-y:auto" in nav_block
-    assert "sidebarToggleBtn" in js
-    assert 'id="sidebarToggleLabel"' in js
+    assert "convListToggleBtn" in js
+    assert 'id="sidebarConversationList"' in js
 
 
 def test_industry_map_page_uses_server_tree():

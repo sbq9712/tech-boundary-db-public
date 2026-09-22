@@ -81,7 +81,7 @@ a:hover{color:var(--brand-lighter)}
 /* ── Sidebar：默认收起为图标窄条，悬停展开（overlay，不挤压主区） ── */
 :root{
   --sidebar-rail-w:56px;
-  --sidebar-expanded-w:228px;
+  --sidebar-expanded-w:210px;
 }
 .sidebar{
   position:fixed;
@@ -119,17 +119,39 @@ a:hover{color:var(--brand-lighter)}
 .sidebar-brand{
   display:flex;
   align-items:center;
-  padding:14px 14px 12px;
+  gap:4px;
+  /* v5：固定行高——收起/展开两态下导航按钮纵向位置完全不变；
+     左内边距与导航图标 x 对齐（nav padding 10 + item padding 8 = 18px，
+     图标在 24px 容器内居中再 +1px） */
+  height:52px;
+  padding:0 10px 0 17px;
   border-bottom:1px solid var(--border-subtle);
   flex-shrink:0;
 }
+/* v5：品牌行右侧的侧边栏收起/展开按钮（收起侧边栏的唯一入口之一） */
+.sidebar-collapse-side{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-left:auto;
+  border:0;
+  background:none;
+  padding:4px;
+  cursor:pointer;
+  color:var(--text-tertiary);
+  border-radius:var(--radius-md);
+  flex-shrink:0;
+  transition:background .15s,color .15s;
+}
+.sidebar-collapse-side:hover{background:var(--bg-surface);color:var(--text-primary)}
+.sidebar-collapse-side .sidebar-collapse-img{width:16px;height:16px}
 .sidebar-brand-btn{
   display:flex;
   align-items:center;
   gap:10px;
   border:0;
   background:none;
-  padding:2px;
+  padding:0;
   cursor:pointer;
   color:var(--brand);
   border-radius:var(--radius-md);
@@ -138,14 +160,21 @@ a:hover{color:var(--brand-lighter)}
 .sidebar-brand-btn:hover .sidebar-title{color:var(--text-primary)}
 .sidebar-brand-icon .sidebar-nav-icon,
 .sidebar-brand-icon{
-  width:32px;height:32px;
+  width:24px;height:24px;
   display:flex;align-items:center;justify-content:center;
   flex-shrink:0;
 }
 .sidebar-brand-icon svg{width:18px;height:18px}
-/* 品牌 logo：正式图片素材（浅色底、无边框），替换原层叠图形块 */
-.sidebar-brand-img{width:30px;height:30px;object-fit:contain;display:block}
-.sidebar-brand-btn .sidebar-brand-icon:has(.sidebar-brand-img){background:transparent}
+/* 品牌 logo：镂空素材，与导航图标同一显示尺寸 */
+.sidebar-brand-img{width:22px;height:22px;object-fit:contain;display:block}
+/* v4：收起态品牌行——默认显示品牌 logo，悬停切换为收起/展开图标，点击展开 */
+/* v5：face/hover 切换仅用于收起态（展开态按钮右侧有独立收起按钮） */
+.sidebar.collapsed .sidebar-brand-toggle{justify-content:center;width:100%;padding:0}
+.sidebar-brand-face,.sidebar-brand-hover{display:flex;align-items:center;justify-content:center;width:24px;height:24px}
+.sidebar-brand-hover{display:none}
+.sidebar-brand-hover .sidebar-collapse-img{width:22px;height:22px}
+.sidebar.collapsed .sidebar-brand-toggle:hover .sidebar-brand-face{display:none}
+.sidebar.collapsed .sidebar-brand-toggle:hover .sidebar-brand-hover{display:flex}
 .sidebar-title{
   font-size:14px;
   font-weight:700;
@@ -192,11 +221,11 @@ a:hover{color:var(--brand-lighter)}
 .sidebar.collapsed .sidebar-nav{padding:12px 0}
 .sidebar.collapsed .sidebar-nav-item{justify-content:center;padding:8px 0;width:100%}
 .sidebar.collapsed .sidebar-brand{padding-left:0;padding-right:0}
-.sidebar.collapsed .sidebar-brand-btn{justify-content:center;width:100%}
+.sidebar.collapsed .sidebar-brand-btn{justify-content:center;width:100%;padding:0}
+.sidebar.collapsed .sidebar-collapse-side{display:none}
 .sidebar.collapsed .sidebar-account{padding-left:0;padding-right:0}
 .sidebar.collapsed .sidebar-account-btn{justify-content:center;width:100%}
-.sidebar.collapsed .sidebar-conversation-hub .sidebar-conversation-list,
-.sidebar.collapsed .sidebar-conversation-hub .sidebar-conversation-new{
+.sidebar.collapsed .sidebar-conversation-hub .sidebar-conversation-list{
   display:none;
 }
 .sidebar.collapsed .sidebar-toggle .sidebar-toggle-chevron.is-down{
@@ -311,11 +340,11 @@ a:hover{color:var(--brand-lighter)}
   transition:background .15s,color .15s;
 }
 .sidebar-toggle:hover{background:var(--bg-surface);color:var(--text-primary)}
-.sidebar-toggle-img{width:16px;height:16px;object-fit:contain;display:block;flex-shrink:0}
-.sidebar-toggle-chevron{width:12px;height:12px;flex-shrink:0;margin-left:auto;transition:transform .15s}
+/* v4：小三角紧随文字右侧（不再推到行尾）；行内容靠左 */
+.sidebar-toggle-chevron{width:12px;height:12px;flex-shrink:0;margin-left:4px;transition:transform .15s}
 .sidebar.collapsed .sidebar-toggle{justify-content:center;padding:7px 0}
-.sidebar.collapsed .sidebar-toggle .sidebar-toggle-img{display:none}
-.sidebar.collapsed .sidebar-toggle .sidebar-nav-label{display:inline;opacity:1;visibility:visible;pointer-events:auto}
+.sidebar.collapsed .sidebar-toggle .sidebar-nav-label{display:none}
+.sidebar.collapsed .sidebar-toggle .sidebar-toggle-chevron{margin-left:0}
 .sidebar-conversation-hub{
   display:flex;
   flex-direction:column;
@@ -324,27 +353,7 @@ a:hover{color:var(--brand-lighter)}
   border-top:1px solid var(--border-subtle);
   margin:8px 2px 10px;
 }
-.sidebar-conversation-new{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:6px;
-  width:100%;
-  min-height:28px;
-  padding:0 8px;
-  border:1px solid var(--border-subtle);
-  border-radius:var(--radius-md);
-  background:var(--bg-canvas);
-  color:var(--text-secondary);
-  font-size:12px;
-  font-weight:600;
-  line-height:1;
-  cursor:pointer;
-  transition:border-color .15s,background .15s,color .15s;
-}
-.sidebar-conversation-new svg{width:12px;height:12px;flex:none}
-.sidebar-conversation-new:hover{border-color:var(--brand-border);background:var(--brand-bg);color:var(--brand)}
-.sidebar-conversation-new:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+/* v4：「新对话」按钮已移除——点击「门户」即开始新对话 */
 .sidebar-conversation-list{
   /* 与上方按钮整体滚动：不再内部限高滚动 */
   display:flex;
