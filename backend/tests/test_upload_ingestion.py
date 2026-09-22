@@ -556,3 +556,28 @@ def test_delete_uploaded_file_removes_index_disk_and_record(tmp_path, monkeypatc
     assert "db-delete" in calls and "db-commit" in calls
     assert not stored.exists(), "落盘文件必须被删除"
 
+
+
+def test_ingest_semaphore_limits_global_concurrency(monkeypatch):
+    """TECHDB_INGEST_MAX_CONCURRENCY 全局并发闸门（评审非阻塞项）。"""
+    from app.services import upload_ingestion as ui
+
+    monkeypatch.setenv("TECHDB_INGEST_MAX_CONCURRENCY", "2")
+    # 重置缓存的单例
+    monkeypatch.setattr(ui, "_INGEST_SEMAPHORE", None)
+    sem = ui._ingest_semaphore()
+    assert sem is not None
+    assert sem._value == 2
+    # 第二次调用返回同一实例（缓存生效）
+    assert ui._ingest_semaphore() is sem
+    with sem:
+        assert sem._value == 1
+    assert sem._value == 2
+
+
+def test_ingest_semaphore_zero_disables_gate(monkeypatch):
+    from app.services import upload_ingestion as ui
+
+    monkeypatch.setenv("TECHDB_INGEST_MAX_CONCURRENCY", "0")
+    monkeypatch.setattr(ui, "_INGEST_SEMAPHORE", None)
+    assert ui._ingest_semaphore() is None

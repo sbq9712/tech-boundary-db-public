@@ -7,9 +7,14 @@
 本仓库的 `main` 分支是**活动开发版**（工作区内对应目录 `#DEV`），日常开发全部发生在这里。它**不是**任何一次服务器交付的快照。
 
 - **最新稳定 tag**：`v260801.2`（2026-08-03，已交付公司服务器，对应 `techdb-*:0801` 系列镜像）。
-- **`main` 领先该 tag 16+ 个提交**：0804 问答补丁、0807 分类健壮化、0818 判断树试点等。这些改动已进库，但**尚未打新稳定 tag、尚未部署服务器**。
+- **`main` 已远超该 tag**：0804 问答补丁、0807 分类健壮化、0818 判断树试点、2026-09 门户/资料库/深度调研改版、广度追踪 tech-db 收编（125 叶子分类法）等。这些改动已进库，但**尚未打新稳定 tag、尚未部署服务器**。
 - 因此：clone 本仓库得到的是开发中代码；要复现服务器上运行的 0801 版本，应 checkout `v260801.2`。
 - 版本、tag 与交付事件的完整对照：[docs/版本索引.md](./docs/版本索引.md)。
+
+## 当前状态（2026-09-22）
+
+- **广度追踪数据源已切换至 tech-db**（[sbq9712/tech-db](https://github.com/sbq9712/tech-db)）：125 叶子领域分类法全量重分类基线（33 shards、65,605 条，`data_version c3a54b75d9d3`，基线 commit `c00d7b9`）。运行时数据经 hydration 脚本钉扎该基线；后续由 tech-db 侧 4h 自动管线发布、本仓库接管脚本同步（`scripts/auto_update_takeover.sh` + systemd user timer）。
+- **门户/资料库/深度调研 UI 完成 2026-09 改版**：侧边栏点击式收起/展开、历史对话折叠、上传弹窗表格化（逐文件元数据）、行业图景树样式修复。契约测试见 `backend/tests/test_portal_ui_contract.py`。
 
 ## 快速开始（开发者）
 
@@ -77,7 +82,7 @@ readonly-agent (:8765 容器内部；:8766 为兼容宿主机端口)
 
 ## 数据模型
 
-19 张业务表，核心包括 `info_items`、`domains`、`sources`、`knowledge_artifacts`、`uploaded_files` 和 `users`。上传 embedding 状态作为 `uploaded_files` 的字段维护；新上传采用广度追踪 77 项分类目录，历史行业图景保留为快照。
+19 张业务表，核心包括 `info_items`、`domains`、`sources`、`knowledge_artifacts`、`uploaded_files` 和 `users`。上传 embedding 状态作为 `uploaded_files` 的字段维护；新上传采用广度追踪 125 叶子分类目录，历史行业图景保留为快照。
 
 "文件落盘"指对象写入服务器持久目录且数据库登记 SHA-256；"资料入库"指该文件已得到分类终态；只有 `embedding_status=ready` 才代表新资料已进入问答检索。门户以 canonical QA 的既有基线索引为基础，并在其上融合上传资料增量索引；不重建或修改基线资产。完整术语定义见 [CONTEXT.md](./CONTEXT.md)。
 

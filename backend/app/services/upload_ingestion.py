@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -26,6 +27,26 @@ from app.db.session import SessionLocal
 from app.models.uploaded_file import UploadedFile
 
 logger = logging.getLogger(__name__)
+
+# 全局并发闸门：限制同时在处理的上传文件数，防止极端情况下大量
+# Docling 解析/embedding 请求同时打向 canonical-qa 造成超时雪崩。
+# 评审非阻塞项落地（TECHDB_INGEST_MAX_CONCURRENCY，默认 2，0=不限）。
+_INGEST_SEMAPHORE: threading.Semaphore | None = None
+_INGEST_SEM_LOCK = threading.Lock()
+
+
+def _ingest_semaphore() -> threading.Semaphore | None:
+    global _INGEST_SEMAPHORE
+    if _INGEST_SEMAPHORE is None:
+        with _INGEST_SEM_LOCK:
+            if _INGEST_SEMAPHORE is None:
+                try:
+                    limit = int(os.getenv("TECHDB_INGEST_MAX_CONCURRENCY", "2").strip() or "2")
+                except ValueError:
+                    limit = 2
+                _INGEST_SEMAPHORE = threading.Semaphore(limit) if limit > 0 else None
+    return _INGEST_SEMAPHORE
+
 
 STREAM_CHUNK_BYTES = 1024 * 1024
 # 分类输入取整篇代表性采样（头/中/尾），而非只截前若干字，避免封面/目录主导模型判断。
@@ -614,6 +635,14 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
     except ValueError:
         return False
 
+    sem = _ingest_semaphore()
+    if sem is None:
+        return _process_uploaded_file_impl(uid)
+    with sem:
+        return _process_uploaded_file_impl(uid)
+
+
+def _process_uploaded_file_impl(uid: uuid.UUID) -> bool:
     db = SessionLocal()
     classification_claimed = False
     try:
@@ -747,7 +776,7 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
     except Exception as exc:
         db.rollback()
         message = str(exc)[:2000]
-        logger.warning("upload ingestion failed for %s: %s", file_id, message)
+        logger.warning("upload ingestion failed for %s: %s", uid, message)
         try:
             values = {"embedding_status": "failed", "embedding_error": message}
             failed_record = db.get(UploadedFile, uid)
@@ -757,7 +786,7 @@ def process_uploaded_file(file_id: str | uuid.UUID) -> bool:
             db.commit()
         except Exception:
             db.rollback()
-            logger.exception("failed to persist upload ingestion error for %s", file_id)
+            logger.exception("failed to persist upload ingestion error for %s", uid)
         return False
     finally:
         db.close()
