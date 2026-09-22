@@ -80,7 +80,7 @@ a:hover{color:var(--brand-lighter)}
 
 /* ── Sidebar：默认收起为图标窄条，悬停展开（overlay，不挤压主区） ── */
 :root{
-  --sidebar-rail-w:64px;
+  --sidebar-rail-w:56px;
   --sidebar-expanded-w:228px;
 }
 .sidebar{
@@ -89,39 +89,32 @@ a:hover{color:var(--brand-lighter)}
   width:var(--sidebar-expanded-w);
   display:flex;
   flex-direction:column;
-  background:var(--bg-panel);
+  background:#fff; /* 与 logo 图片白底融为一体 */
   border-right:1px solid var(--border-subtle);
   z-index:60;
   overflow:hidden;
-  transition:width .18s ease, box-shadow .18s ease;
+  transition:width .16s ease;
 }
-.sidebar:hover,.sidebar:focus-within{
-  width:var(--sidebar-expanded-w);
-  box-shadow:8px 0 28px rgba(0,0,0,.10);
-}
-/* 收起态：宽度=窄条；展开态由 :hover 驱动 */
-.sidebar:not(:hover):not(:focus-within){
+/* 收起态：点击「收起」按钮驱动（.collapsed），非悬停 */
+.sidebar.collapsed{
   width:var(--sidebar-rail-w);
 }
 .workspace{
+  margin-left:var(--sidebar-expanded-w);
+  transition:margin-left .16s ease;
+}
+.sidebar.collapsed ~ .workspace{
   margin-left:var(--sidebar-rail-w);
 }
-/* 文字标签：收起时隐藏（含可访问性树），展开时淡入 */
+/* 文字标签：收起时隐藏（含可访问性树） */
 .sidebar-nav-label{
-  opacity:0;
-  visibility:hidden;
-  transform:translateX(4px);
-  transition:opacity .14s ease .05s, transform .14s ease .05s, visibility 0s linear .19s;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-  pointer-events:none;
 }
-.sidebar:hover .sidebar-nav-label,.sidebar:focus-within .sidebar-nav-label{
-  opacity:1;
-  visibility:visible;
-  transform:translateX(0);
-  transition:opacity .14s ease .05s, transform .14s ease .05s, visibility 0s;
+.sidebar.collapsed .sidebar-nav-label{
+  /* display:none 而非 visibility:hidden：visibility 仍占 flex 空间，会把图标挤离中线 */
+  display:none;
 }
 .sidebar-brand{
   display:flex;
@@ -147,9 +140,6 @@ a:hover{color:var(--brand-lighter)}
 .sidebar-brand-icon{
   width:32px;height:32px;
   display:flex;align-items:center;justify-content:center;
-  border-radius:var(--radius-md);
-  background:var(--brand);
-  color:#fff;
   flex-shrink:0;
 }
 .sidebar-brand-icon svg{width:18px;height:18px}
@@ -199,20 +189,22 @@ a:hover{color:var(--brand-lighter)}
 .sidebar-nav-item:hover{background:var(--bg-surface);color:var(--text-primary)}
 .sidebar-nav-item.active{background:var(--brand-bg);color:var(--brand);font-weight:600}
 /* 收起时：导航项居中，会话中枢隐藏 */
-.sidebar:not(:hover):not(:focus-within) .sidebar-nav{padding:12px 0}
-.sidebar:not(:hover):not(:focus-within) .sidebar-nav-item{justify-content:center;padding:8px 0;width:100%}
-.sidebar:not(:hover):not(:focus-within) .sidebar-brand{padding-left:0;padding-right:0}
-.sidebar:not(:hover):not(:focus-within) .sidebar-brand-btn{justify-content:center;width:100%}
-.sidebar:not(:hover):not(:focus-within) .sidebar-account{padding-left:0;padding-right:0}
-.sidebar:not(:hover):not(:focus-within) .sidebar-account-btn{justify-content:center;width:100%}
-.sidebar:not(:hover):not(:focus-within) .sidebar-conversation-hub{
-  opacity:0;
-  pointer-events:none;
-  visibility:hidden;
-  height:0;
-  margin:0;
-  padding:0;
-  overflow:hidden;
+.sidebar.collapsed .sidebar-nav{padding:12px 0}
+.sidebar.collapsed .sidebar-nav-item{justify-content:center;padding:8px 0;width:100%}
+.sidebar.collapsed .sidebar-brand{padding-left:0;padding-right:0}
+.sidebar.collapsed .sidebar-brand-btn{justify-content:center;width:100%}
+.sidebar.collapsed .sidebar-account{padding-left:0;padding-right:0}
+.sidebar.collapsed .sidebar-account-btn{justify-content:center;width:100%}
+.sidebar.collapsed .sidebar-conversation-hub .sidebar-conversation-list,
+.sidebar.collapsed .sidebar-conversation-hub .sidebar-conversation-new{
+  display:none;
+}
+.sidebar.collapsed .sidebar-toggle .sidebar-toggle-chevron.is-down{
+  display:block;
+}
+.sidebar-toggle .sidebar-toggle-chevron.is-down{
+  transform:rotate(180deg);
+  display:none;
 }
 
 /* 账户整行按钮（替代原 密码/退出 小按钮） */
@@ -301,10 +293,35 @@ a:hover{color:var(--brand-lighter)}
 }
 
 /* 门户会话：把新建、历史记录、删除和检索状态收进左侧导航 */
+.sidebar-toggle{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  border:0;
+  background:none;
+  padding:7px 8px;
+  border-radius:var(--radius-md);
+  cursor:pointer;
+  color:var(--text-secondary);
+  font:inherit;
+  font-size:12.5px;
+  font-weight:500;
+  text-align:left;
+  transition:background .15s,color .15s;
+}
+.sidebar-toggle:hover{background:var(--bg-surface);color:var(--text-primary)}
+.sidebar-toggle-img{width:16px;height:16px;object-fit:contain;display:block;flex-shrink:0}
+.sidebar-toggle-chevron{width:12px;height:12px;flex-shrink:0;margin-left:auto;transition:transform .15s}
+.sidebar.collapsed .sidebar-toggle{justify-content:center;padding:7px 0}
+.sidebar.collapsed .sidebar-toggle .sidebar-toggle-img{display:none}
+.sidebar.collapsed .sidebar-toggle .sidebar-nav-label{display:inline;opacity:1;visibility:visible;pointer-events:auto}
 .sidebar-conversation-hub{
   display:flex;
   flex-direction:column;
   gap:4px;
+  padding-top:10px;
+  border-top:1px solid var(--border-subtle);
   margin:8px 2px 10px;
 }
 .sidebar-conversation-new{
@@ -329,12 +346,10 @@ a:hover{color:var(--brand-lighter)}
 .sidebar-conversation-new:hover{border-color:var(--brand-border);background:var(--brand-bg);color:var(--brand)}
 .sidebar-conversation-new:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
 .sidebar-conversation-list{
-  max-height:168px;
-  overflow-y:hidden;
+  /* 与上方按钮整体滚动：不再内部限高滚动 */
   display:flex;
   flex-direction:column;
   gap:1px;
-  scrollbar-gutter:stable;
   outline:none;
 }
 .sidebar-conversation-list:hover,
@@ -411,11 +426,9 @@ a:hover{color:var(--brand-lighter)}
   font-size:11px;
   line-height:1.4;
 }
-@media(hover:none){
-  .sidebar-conversation-list{overflow-y:auto}
-}
 @media(prefers-reduced-motion:reduce){
   .sidebar-conversation-pendot{animation:none}
+  .sidebar,.workspace{transition:none}
 }
 
 .sidebar-account{
@@ -1331,17 +1344,7 @@ a:hover{color:var(--brand-lighter)}
   .knowledge-hint{display:none}
 }
 @media(max-width:640px){
-  /* 触屏无悬停：侧边栏恒为窄条，与收起态一致（禁用悬停展开） */
-  .sidebar{width:var(--sidebar-rail-w)}
-  .sidebar:hover,.sidebar:focus-within{width:var(--sidebar-rail-w);box-shadow:none}
-  .sidebar .sidebar-nav-label{opacity:0;visibility:hidden}
-  .sidebar .sidebar-nav{padding:12px 0}
-  .sidebar .sidebar-nav-item{justify-content:center;padding:8px 0;width:100%}
-  .sidebar .sidebar-brand{padding-left:0;padding-right:0}
-  .sidebar .sidebar-brand-btn{justify-content:center;width:100%}
-  .sidebar .sidebar-account{padding-left:0;padding-right:0}
-  .sidebar .sidebar-account-btn{justify-content:center;width:100%}
-  .sidebar .sidebar-conversation-hub{display:none}
+  /* 触屏：默认由 JS 置为收起（sidebarCollapsed 初始值），点击「展开」可展开 */
   .home-body{padding:12px}
   .home-section-heading{padding:14px}
   .home-boundary-grid{grid-template-columns:1fr;padding:0 10px 10px;overflow-x:visible}

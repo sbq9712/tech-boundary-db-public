@@ -16,25 +16,26 @@ def load_served_js() -> str:
 
 
 def test_sidebar_is_visually_stable():
-    """侧边栏 2026-09-22 改版契约：默认收起窄条（--sidebar-rail-w），悬停 overlay 展开。
+    """侧边栏 2026-09-22 二次改版契约：点击「收起/展开」按钮切换（无悬停展开）。
 
-    改版决策见 docs/2026-09-21-sidebar-redesign-spec.md（D2 overlay 不挤压主区）。
+    - 收起窄条 --sidebar-rail-w:56px；展开 228px；fixed overlay
+    - logo 白底与侧边栏白底融合；历史对话区在导航 logo 下方整体滚动
+    - 决策见 docs/2026-09-21-sidebar-redesign-spec.md
     """
     css = load_served_css()
-    assert "--sidebar-rail-w:64px" in css
+    assert "--sidebar-rail-w:56px" in css
     assert "--sidebar-expanded-w:228px" in css
     sidebar = css.split(".sidebar{", 1)[1].split("}", 1)[0]
     assert "position:fixed" in sidebar
     assert "width:var(--sidebar-expanded-w)" in sidebar
-    assert "width:var(--sidebar-rail-w)" in css.split(".sidebar:not(:hover):not(:focus-within){", 1)[1].split("}", 1)[0]
+    assert "width:var(--sidebar-rail-w)" in css.split(".sidebar.collapsed{", 1)[1].split("}", 1)[0]
     assert "transition:width" in sidebar
     assert "overflow:hidden" in sidebar
-    workspace = css.split(".workspace{", 1)[1].split("}", 1)[0]
-    assert "margin-left:var(--sidebar-rail-w)" in workspace or "margin-left" in css
-    assert "overflow:hidden" in css.split(".workspace{\n  flex:1;", 1)[1].split("}", 1)[0]
-    assert "overflow-y:auto" in css.split(".main{", 1)[1].split("}", 1)[0]
-    # 账户行整行成按钮（旧的 密码/退出 小按钮已移除）
+    assert "background:#fff" in sidebar
+    assert ".sidebar:hover" not in css  # 悬停展开已移除
     js = load_served_js()
+    assert "sidebarToggleBtn" in js and "toggleSidebarCollapsed" in js
+    assert "sidebar_collapsed" in js
     assert "sidebar-account-btn" in js
     assert 'id="changePwdBtn"' not in js
     assert "accountMenu" in js and "settingsItem" in js and "logoutItem" in js
@@ -158,9 +159,13 @@ def test_home_exposes_persisted_conversations_in_sidebar():
     assert "TECHDB_QA_SERVICE_URL" not in js
     assert "regenerate,retry" in js
     assert ".sidebar-conversation-list" in css
-    assert "max-height:168px" in css
-    assert "overflow-y:hidden" in css
-    assert ".sidebar-conversation-list:hover" in css
+    # v3：历史对话不再内部限高滚动，与上方按钮/导航 logo 作为一个整体滚动
+    assert "max-height:168px" not in css
+    assert ".sidebar-conversation-hub" in css
+    nav_block = css.split(".sidebar-nav{", 1)[1].split("}", 1)[0]
+    assert "overflow-y:auto" in nav_block
+    assert "sidebarToggleBtn" in js
+    assert 'id="sidebarToggleLabel"' in js
 
 
 def test_industry_map_page_uses_server_tree():
