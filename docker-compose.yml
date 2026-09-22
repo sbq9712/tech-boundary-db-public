@@ -92,6 +92,8 @@ services:
       TECHDB_DOCUMENT_CHUNK_TOKENS: ${TECHDB_DOCUMENT_CHUNK_TOKENS:-512}
       TECHDB_DOCUMENT_TIMEOUT_SECONDS: ${TECHDB_DOCUMENT_TIMEOUT_SECONDS:-900}
       TECHDB_UPLOAD_RECOVERY_ENABLED: ${TECHDB_UPLOAD_RECOVERY_ENABLED:-true}
+      # 上传摄取全局并发闸门（单进程信号量；0=不限）——Codex 评审项
+      TECHDB_INGEST_MAX_CONCURRENCY: ${TECHDB_INGEST_MAX_CONCURRENCY:-2}
     volumes:
       - ./backend/scripts:/app/scripts:ro
       - ${TECHDB_KB_PATH:-./external-data/knowledge-base}:/knowledge-base:ro

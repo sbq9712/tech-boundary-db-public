@@ -1938,6 +1938,11 @@ function upAddFiles(fileList){
 function upTaxonomyOptions(){
   return '<option value="">不指定</option>'+upTaxonomy.filter(c=>c.includes("/")).map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.split("/").join(" › "))}</option>`).join("");
 }
+/* 单行状态以 upPending 条目为唯一事实源（Codex P1：重渲染不得丢失 done/err 状态）：
+   f.upState ∈ ""|"uploading"|"done"|"err"；f.upMsg 为状态列文本 */
+function upRowStateMeta(f){
+  return {cls:f.upState==="done"?" up-row-done":f.upState==="err"?" up-row-err":"",text:f.upState==="uploading"?"上传中…":(f.upMsg||"")};
+}
 function upRenderList(){
   const wrap=document.getElementById("upTableWrap"),list=document.getElementById("upList");
   if(!wrap||!list)return;
@@ -1945,18 +1950,40 @@ function upRenderList(){
   const has=upPending.length>0;
   wrap.hidden=!has;
   if(dialog)dialog.classList.toggle("has-table",has);
-  list.innerHTML=upPending.map((f,i)=>`<tr data-up-row="${i}">
+  list.innerHTML=upPending.map((f,i)=>{
+    const meta=upRowStateMeta(f);
+    return `<tr data-up-row="${i}" class="${meta.cls.trim()}">
       <td class="lib-up-fname" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}<small>${libFmtSize(f.size)}</small></td>
-      <td><input class="lib-upload-input lib-up-title" type="text" placeholder="留空则自动识别" aria-label="资料标题"></td>
-      <td><input class="lib-upload-input lib-up-date" type="date" aria-label="资料日期"></td>
+      <td><input class="lib-upload-input lib-up-title" type="text" placeholder="留空则自动识别" aria-label="资料标题" value="${escapeHtml(f.upTitle||"")}"></td>
+      <td><input class="lib-upload-input lib-up-date" type="date" aria-label="资料日期" value="${escapeHtml(f.upDate||"")}"></td>
       <td><select class="lib-upload-input lib-up-cat" aria-label="行业图景节点">${upTaxonomy?upTaxonomyOptions():'<option value="">不指定</option>'}</select></td>
-      <td><input class="lib-upload-input lib-up-note" type="text" placeholder="选填" aria-label="备注"></td>
-      <td class="lib-up-op"><span class="lib-up-state"></span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
-    </tr>`).join("");
+      <td><input class="lib-upload-input lib-up-note" type="text" placeholder="选填" aria-label="备注" value="${escapeHtml(f.upNote||"")}"></td>
+      <td class="lib-up-op"><span class="lib-up-state">${escapeHtml(meta.text)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
+    </tr>`;}).join("");
+  /* 已选分类回显（value 不能直接内联在 select 上） */
+  list.querySelectorAll("[data-up-row]").forEach(tr=>{
+    const f=upPending[Number(tr.dataset.upRow)];
+    if(f&&f.upCat){const sel=tr.querySelector(".lib-up-cat");if(sel)sel.value=f.upCat;}
+  });
   list.querySelectorAll("button[data-up-rm]").forEach(b=>b.onclick=()=>{upPending.splice(Number(b.dataset.upRm),1);upRenderList();});
+  upBindRowInputs();
   const submit=document.getElementById("upSubmit");
   if(submit)submit.disabled=upPending.length===0;
   upFillTaxonomy();
+}
+/* 输入框变化写回 upPending——状态源迁移的配套（编辑后重渲染不丢用户输入） */
+function upBindRowInputs(){
+  const list=document.getElementById("upList");if(!list)return;
+  list.querySelectorAll("[data-up-row]").forEach(tr=>{
+    const f=upPending[Number(tr.dataset.upRow)];if(!f)return;
+    const bind=(sel,key,trim)=>{const el=tr.querySelector(sel);if(!el)return;
+      el.addEventListener("input",()=>{f[key]=trim?el.value.trim():el.value;});};
+    bind(".lib-up-title","upTitle",true);
+    bind(".lib-up-note","upNote",true);
+    bind(".lib-up-date","upDate",false);
+    const cat=tr.querySelector(".lib-up-cat");
+    if(cat)cat.addEventListener("change",()=>{f.upCat=cat.value;});
+  });
 }
 function upShowResult(msg,cls){
   const el=document.getElementById("upResult");if(!el)return;
@@ -1982,64 +2009,42 @@ async function upSubmit(){
   if(!upPending.length)return;
   const submit=document.getElementById("upSubmit"),cancel=document.getElementById("upCancel");
   if(!submit||submit.disabled)return;
-  /* v6：一行一文件——逐行读取元数据，逐个文件单独上传（每行可独立成功/失败）；
-     已成功的行（✓）在部分失败重试时自动跳过 */
-  const rows=[...document.querySelectorAll("#upList [data-up-row]")];
-  const targets=upPending.map((f,i)=>({file:f,row:rows[i]})).filter(t=>t.row&&!t.row.classList.contains("up-row-done"));
+  /* v6.1（Codex P1 修复）：行状态以 upPending 条目为唯一事实源（f.upState/upMsg/upTitle…），
+     DOM 仅为投影——重渲染（追加文件/移除行）不会丢失已完成状态与用户输入；
+     已成功行（upState==="done"）重试时自动跳过，避免重复创建资料。 */
+  const targets=upPending.filter(f=>f.upState!=="done");
   if(!targets.length)return;
   let dateErr=0;
-  for(const t of targets){
-    if(upNormalizeDate(t.row.querySelector(".lib-up-date")?.value)===null){
-      t.row.classList.add("up-row-err");
-      const st=t.row.querySelector(".lib-up-state");if(st)st.textContent="✗ 日期";
-      dateErr++;
-    }
+  for(const f of targets){
+    if(upNormalizeDate(f.upDate)==null){f.upState="err";f.upMsg="✗ 日期";dateErr++;}
   }
-  if(dateErr){
-    upShowResult(`${dateErr} 行的资料日期不合法——已标红，请修正后再上传`,"err");
-    submit.disabled=false;return;
-  }
+  if(dateErr){upRenderList();upShowResult(`${dateErr} 行的资料日期不合法——已标红，请修正后再上传`,"err");submit.disabled=false;return;}
   submit.disabled=true;cancel.disabled=true;
   upShowResult("正在上传…","");
   let ok=0,fail=0;
-  for(const t of targets){
+  for(const f of targets){
     const fd=new FormData();
-    fd.append("files",t.file);
-    const title=t.row.querySelector(".lib-up-title")?.value.trim()||"";
-    const cat=t.row.querySelector(".lib-up-cat")?.value||"";
-    const note=t.row.querySelector(".lib-up-note")?.value.trim()||"";
-    const docDate=upNormalizeDate(t.row.querySelector(".lib-up-date")?.value);
-    if(title)fd.append("title",title);
-    if(cat)fd.append("primary_category",cat);
-    if(note)fd.append("note",note);
+    fd.append("files",f);
+    if(f.upTitle)fd.append("title",f.upTitle);
+    if(f.upCat)fd.append("primary_category",f.upCat);
+    if(f.upNote)fd.append("note",f.upNote);
+    const docDate=upNormalizeDate(f.upDate);
     if(docDate)fd.append("document_date",docDate);
-    const st=t.row.querySelector(".lib-up-state");
-    if(st)st.textContent="上传中…";
+    f.upState="uploading";f.upMsg="";
+    upRenderList();
     try{
       const r=await apiFetch("/api/uploads",{method:"POST",body:fd});
-      if(r&&r.ok){
-        ok++;
-        t.row.classList.remove("up-row-err");
-        t.row.classList.add("up-row-done");
-        if(st)st.textContent="✓";
-      }else{
-        fail++;
-        const j=r?await r.json().catch(()=>({})):{};
-        t.row.classList.add("up-row-err");
-        if(st)st.textContent="✗ "+(j.detail||("HTTP "+(r?r.status:"")));
-      }
-    }catch(e){
-      fail++;
-      t.row.classList.add("up-row-err");
-      if(st)st.textContent="✗ 网络错误";
-    }
+      if(r&&r.ok){ok++;f.upState="done";f.upMsg="✓";}
+      else{fail++;const j=r?await r.json().catch(()=>({})):{};f.upState="err";f.upMsg="✗ "+(j.detail||("HTTP "+(r?r.status:"")));}
+    }catch(e){fail++;f.upState="err";f.upMsg="✗ 网络错误";}
+    upRenderList();
   }
-  const doneRows=document.querySelectorAll("#upList tr.up-row-done").length;
+  const doneCount=upPending.filter(f=>f.upState==="done").length;
   if(fail===0){
     upShowResult(`成功上传 ${ok} 个文件，后台正在分类和索引`,"ok");
     upCloseTimer=setTimeout(()=>{upCloseTimer=null;closeUploadModal();loadLibrary();},1200);
-  }else if(ok>0||doneRows>0){
-    upShowResult(`成功 ${doneRows} 个、失败 ${fail} 个——修正标红行后再次点击「上传」，已成功的行不会重复上传`,"err");
+  }else if(doneCount>0){
+    upShowResult(`成功 ${doneCount} 个、失败 ${fail} 个——修正标红行后再次点击「上传」，已成功的行不会重复上传`,"err");
     submit.disabled=false;cancel.disabled=false;
   }else{
     upShowResult("上传失败——请修正标红行后重试","err");

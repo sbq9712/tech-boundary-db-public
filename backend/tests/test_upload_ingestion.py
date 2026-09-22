@@ -581,3 +581,57 @@ def test_ingest_semaphore_zero_disables_gate(monkeypatch):
     monkeypatch.setenv("TECHDB_INGEST_MAX_CONCURRENCY", "0")
     monkeypatch.setattr(ui, "_INGEST_SEMAPHORE", None)
     assert ui._ingest_semaphore() is None
+
+
+def test_ingest_semaphore_gates_concurrent_entries(monkeypatch):
+    """并发闸门实际限流：上限 1 时第二个进入者必须等待。"""
+    import threading
+    import time as _t
+    from app.services import upload_ingestion as ui
+
+    monkeypatch.setenv("TECHDB_INGEST_MAX_CONCURRENCY", "1")
+    monkeypatch.setattr(ui, "_INGEST_SEMAPHORE", None)
+    sem = ui._ingest_semaphore()
+    assert sem is not None and sem._value == 1
+    order = []
+
+    def worker():
+        with sem:
+            order.append("in")
+            _t.sleep(0.05)
+            order.append("out")
+
+    threads = [threading.Thread(target=worker) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    # 串行化：每对 in/out 交替
+    assert order == ["in", "out", "in", "out", "in", "out"], order
+
+
+def test_ingest_semaphore_invalid_env_falls_back(monkeypatch):
+    from app.services import upload_ingestion as ui
+
+    monkeypatch.setenv("TECHDB_INGEST_MAX_CONCURRENCY", "not-a-number")
+    monkeypatch.setattr(ui, "_INGEST_SEMAPHORE", None)
+    sem = ui._ingest_semaphore()
+    assert sem is not None and sem._value == 2  # 回退默认 2
+
+
+def test_ingest_max_concurrency_mapped_in_compose():
+    """docker-compose 必须把 TECHDB_INGEST_MAX_CONCURRENCY 透传给 api 容器。
+    容器内无 compose 文件（镜像不含），向上找不到时跳过。"""
+    from pathlib import Path
+
+    here = Path(__file__).resolve()
+    compose_path = None
+    for parent in here.parents:
+        candidate = parent / "docker-compose.yml"
+        if candidate.is_file():
+            compose_path = candidate
+            break
+    if compose_path is None:
+        pytest.skip("docker-compose.yml not available (running inside image)")
+    compose = compose_path.read_text(encoding="utf-8")
+    assert "TECHDB_INGEST_MAX_CONCURRENCY: ${TECHDB_INGEST_MAX_CONCURRENCY:-2}" in compose
