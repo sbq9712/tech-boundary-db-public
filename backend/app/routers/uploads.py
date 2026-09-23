@@ -56,6 +56,10 @@ def _validate_section_combo(primary_section: str | None, breadth_source: str | N
     if section == "breadth":
         if source not in BREADTH_SOURCES:
             raise HTTPException(400, "广度追踪必须选择二级来源：github（GitHub广度情报）或 other（其他广度情报）")
+        if source == "github":
+            # GitHub 增量包导入协议尚未确定：正式提交通道后端一律拒绝（前端入口同步禁用）。
+            # 协议接入后移除此守卫，并走 docs/design/github-incremental-dedup.md 的去重契约。
+            raise HTTPException(400, "GitHub增量包导入协议尚未接入，暂不支持该来源的资料提交")
     elif source is not None:
         raise HTTPException(400, "仅广度追踪可以选择二级来源")
     return section, source

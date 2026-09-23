@@ -1813,6 +1813,18 @@ function libraryView(){
       </div>
     </div></section>`;
   }
+  /* GitHub增量包页：列头固定为 资料/状态/上传者/上传时间/原文件；无人工等级控件；
+     导入协议未接入 → 明确展示"待接入"状态，正式提交入口禁用 */
+  if(section==="breadth"&&sub==="github"){
+    return `<section class="flat-content library">${navBtn}
+      <div class="lib-github-pending">
+        <span class="lib-github-pending-badge">待接入</span>
+        <span>增量包导入待接入：导入协议尚未确定，正式提交暂未开放。页面就绪不代表导入已完成。</span>
+      </div>
+      <div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>状态</th><th>上传者</th><th>上传时间</th><th>原文件</th></tr></thead><tbody id="rows"></tbody></table></div>
+      <div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无增量包</div><div class="lib-empty-hint">GitHub 增量包导入协议接入后，此处将展示导入的增量包及其处理状态</div></div>
+    </section>`;
+  }
   /* 列表页（广度子页或 industry/atsc）：顶部三分区按钮恒定展示 */
   return `<section class="flat-content library">${navBtn}<div class="lib-head"><div class="filter-row"><select id="categoryFilter" aria-label="行业图景节点"><option value="">全部节点</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>行业图景节点</th><th>状态</th><th>资料时间</th><th>上传者</th><th>上传时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">ATSC用户与管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;
 }
@@ -1851,11 +1863,14 @@ async function initLibrary(){
   });
   /* 二选一页没有列表元素，直接返回 */
   if(!section||(section==="breadth"&&!sub))return;
+  const isGithub=section==="breadth"&&sub==="github";
   ["categoryFilter","statusFilter"].forEach(id=>{const el=document.getElementById(id);if(el)el.onchange=()=>{libOffset=0;loadLibrary();};});
   const prev=document.getElementById("prevBtn"),next=document.getElementById("nextBtn");
   if(prev)prev.onclick=()=>{libOffset=Math.max(0,libOffset-30);loadLibrary();};
   if(next)next.onclick=()=>{if(libOffset+30<libTotal){libOffset+=30;loadLibrary();}};
-  try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";libCanManage=j.role==="admin"||j.role==="atsc";const link=document.getElementById("uploadLink");if(libCanManage&&link){link.style.display="";link.onclick=()=>openUploadModal(section,sub);}}}catch(e){}
+  try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";libCanManage=j.role==="admin"||j.role==="atsc";
+    /* GitHub增量包页：导入协议未接入 → 不提供上传入口 */
+    const link=document.getElementById("uploadLink");if(libCanManage&&link&&!isGithub){link.style.display="";link.onclick=()=>openUploadModal(section,sub);}}}catch(e){}
   try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];const select=document.getElementById("categoryFilter");if(select){const treePaths=data.all_paths||(data.categories||[]).filter(c=>c.includes("/"));select.innerHTML='<option value="">全部节点</option>'+treePaths.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")+'<option value="不相关">不相关</option><option value="未分类">未分类</option>';}}}catch(e){}
   loadLibrary();
 }
@@ -1885,6 +1900,21 @@ async function loadLibrary(){
   const tableWrap=tb.closest(".lib-table-scroll"),footEl=document.querySelector(".library .lib-foot");
   if(tableWrap)tableWrap.style.display=data.files.length?"":"none";
   if(footEl)footEl.style.display=data.files.length?"":"none";
+  if(isGithub){
+    /* GitHub增量包页：仅 5 列（资料/状态/上传者/上传时间/原文件），无人工等级与分类控件 */
+    tb.innerHTML=data.files.map(f=>{
+      const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
+      return `<tr>
+      <td class="fname">${escapeHtml(f.title||f.original_filename)}</td>
+      <td><span class="status ${escapeHtml(status)}">${escapeHtml(libStatusLabels[status]||status)}</span></td>
+      <td>${escapeHtml(f.submitted_by)}</td>
+      <td class="size-cell">${libFmtTime(f.created_at)}</td>
+      <td>${escapeHtml(f.original_filename)}</td>
+    </tr>`;}).join("");
+    const countInfo=document.getElementById("countInfo");
+    if(countInfo)countInfo.textContent="共 "+libTotal+" 个增量包";
+    return;
+  }
   tb.innerHTML=data.files.map(f=>{
     const aiMark=f.title_source==="manual"?"":`<span class="ai-mark ${escapeHtml(f.title_source||"")}">${f.title_source==="ai_filled"?"AI":"…"}</span>`;
     const canClassify=libIsAdmin&&["classified","unclassified","irrelevant","legacy_unclassified","failed"].includes(f.classification_status);
@@ -2108,6 +2138,8 @@ function openUploadModal(section,sub){
   upSection=section||(parseHash().params.get("section")||"");
   upSub=sub||(parseHash().params.get("sub")||"");
   if(upSection==="breadth"&&!["github","other"].includes(upSub))upSub="";
+  /* GitHub增量包导入协议未接入：上传弹窗一律不打开（后端同样拒绝该组合提交） */
+  if(upSection==="breadth"&&upSub==="github")return;
   if(!["breadth","industry","atsc"].includes(upSection))upSection="industry";
   if(document.getElementById("uploadModalOverlay"))return;
   const overlay=document.createElement("div");

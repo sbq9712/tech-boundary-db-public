@@ -3081,3 +3081,7 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 .lib-up-cal:hover{border-color:var(--border-strong);color:var(--text-primary)}
 .lib-up-cal:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
 .lib-up-datebox.invalid .lib-up-seg{border-color:var(--red,#d92d20)}
+
+/* GitHub增量包页：待接入提示条 */
+.lib-github-pending{display:flex;align-items:center;gap:10px;padding:12px 16px;margin-bottom:14px;border:1px dashed var(--border-strong,#c9cfd6);border-radius:10px;background:var(--bg-canvas,#fafafa);color:var(--text-secondary);font-size:13px;line-height:1.5}
+.lib-github-pending-badge{flex:none;padding:2px 10px;border-radius:999px;background:#fff7e6;color:#b25e09;border:1px solid #f3d19e;font-size:12px;font-weight:600}
