@@ -1913,6 +1913,7 @@ async function loadLibrary(){
   const section=libSectionFromParams(state.params);
   const sub=libSubFromParams(state.params);
   if(!section||(section==="breadth"&&!sub))return; /* 二选一页无列表 */
+  const isGithub=section==="breadth"&&sub==="github";
   const category=document.getElementById("categoryFilter")?.value||"";
   const status=document.getElementById("statusFilter")?.value||"";
   let url="/api/uploads?limit=30&offset="+libOffset+"&section="+encodeURIComponent(section);
