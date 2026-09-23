@@ -275,6 +275,7 @@ let pendingConversation = null;
 function renderSidebarConversations(){
   const list=document.getElementById('sidebarConversationList');
   if(!list)return;
+  convListScrollTop=list.scrollTop||convListScrollTop;
   const live=[...conversationRequests].map(request=>({id:request.sessionId||request.localId,title:conversationSessions.find(item=>item.id===request.sessionId)?.title||'新对话'}));
   const items=[...live,...conversationSessions.filter(item=>!live.some(request=>request.id===item.id))];
   if(!items.length){
@@ -401,24 +402,34 @@ function canManageFiles(){const r=currentUser&&currentUser.role;return r==="admi
 /* 侧边栏收起/展开：点击切换；每次进入页面一律从收起态开始——
    不再读取/持久化展开偏好（旧版本写过的 sidebar_collapsed 存储一律忽略） */
 let sidebarCollapsed=true;
-function toggleSidebarCollapsed(){sidebarCollapsed=!sidebarCollapsed;render();}
+/* v7：切换只重建侧边栏自身（#sidebar 整个 aside），不触碰 .workspace/#main——
+   广度 iframe、输入草稿、流式回答、上传/分类弹窗、滚动位置全部原样保留 */
+function renderSidebarOnly(){
+  const old=document.getElementById('sidebar');
+  if(!old){render();return;}
+  const accName=(currentUser&&(currentUser.display_name||currentUser.username))||'加载中…';
+  const avatarLetter=(accName||'?')[0].toUpperCase();
+  const tmp=document.createElement('div');
+  tmp.innerHTML=sidebarHtml(parseHash(),accName,avatarLetter);
+  const fresh=tmp.firstElementChild;
+  old.replaceWith(fresh);
+  bindSidebarEvents();
+}
+function toggleSidebarCollapsed(){sidebarCollapsed=!sidebarCollapsed;renderSidebarOnly();}
 /* v5：历史对话列表折叠（仅折叠列表，不动侧边栏宽度） */
 let convListCollapsed=false;
 function toggleConversationListCollapsed(){convListCollapsed=!convListCollapsed;const btn=document.getElementById("convListToggleBtn");if(btn){btn.setAttribute("aria-expanded",convListCollapsed?"false":"true");btn.querySelector(".sidebar-toggle-chevron")?.classList.toggle("is-down",convListCollapsed);}const list=document.getElementById("sidebarConversationList");if(list)list.hidden=convListCollapsed;}
 /* v4：品牌行的收起/展开控件——展开态贴左的 collapse 图标按钮负责收起；
    收起态顶部品牌 logo 悬停变收起/展开图标，点击展开（翻转状态后整行重渲染） */
-function collapseSidebar(){if(sidebarCollapsed)return;sidebarCollapsed=true;render();}
-function expandSidebar(){if(sidebarCollapsed){sidebarCollapsed=false;render();}}
+function collapseSidebar(){if(sidebarCollapsed)return;sidebarCollapsed=true;renderSidebarOnly();}
+function expandSidebar(){if(sidebarCollapsed){sidebarCollapsed=false;renderSidebarOnly();}}
 /* 导航切换时清除历史对话高亮（深灰底/深蓝字只在正查看该对话时存在） */
 function clearActiveConversation(){if(activeSessionId===null)return;activeSessionId=null;renderSidebarConversations();}
 /* v5：门户按钮高亮与「是否正查看历史对话」同步 */
 function syncNavHomeActive(){const on=parseHash().route==='home'&&activeSessionId===null;document.querySelectorAll('[data-route="home"]').forEach(b=>b.classList.toggle('active',on));}
-function shell(state){
-  const data=routes[state.route];
+/* v7：侧边栏 markup 独立成函数——shell 与局部更新（renderSidebarOnly）共用 */
+function sidebarHtml(state,accName,avatarLetter){
   const visibleNav=navItems.filter(([key])=>key!=='users'||isAdmin());
-  const accName=(currentUser&&(currentUser.display_name||currentUser.username))||'加载中…';
-  const accRole=currentUser?(ROLE_LABELS[currentUser.role]||currentUser.role):'';
-  const avatarLetter=(accName||'?')[0].toUpperCase();
   const navHtml=visibleNav.map(([key,code])=>{
     const r=routes[key];
     const icon=`<span class="sidebar-nav-icon" aria-hidden="true">${navIcon(key)}</span>`;
@@ -431,11 +442,18 @@ function shell(state){
   const convHub=sidebarCollapsed
     ?`<section class="sidebar-conversation-hub" aria-label="门户会话" hidden></section>`
     :`<section class="sidebar-conversation-hub" aria-label="门户会话">
-      <button class="sidebar-toggle" id="convListToggleBtn" type="button" title="折叠历史对话" aria-expanded="true" aria-controls="sidebarConversationList"><span class="sidebar-nav-label">历史对话</span><svg class="sidebar-toggle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
-      <div class="sidebar-conversation-list" id="sidebarConversationList" tabindex="0" aria-label="历史对话列表"><div class="sidebar-conversation-empty">正在加载…</div></div>
+      <button class="sidebar-toggle" id="convListToggleBtn" type="button" title="折叠历史对话" aria-expanded="${convListCollapsed?'false':'true'}" aria-controls="sidebarConversationList"><span class="sidebar-nav-label">历史对话</span><svg class="sidebar-toggle-chevron ${convListCollapsed?'is-down':''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></button>
+      <div class="sidebar-conversation-list" id="sidebarConversationList" tabindex="0" aria-label="历史对话列表" ${convListCollapsed?'hidden':''}><div class="sidebar-conversation-empty">正在加载…</div></div>
     </section>`;
   const brandHeader=`<div class="sidebar-brand"><button class="sidebar-brand-btn sidebar-brand-toggle" id="brandToggleBtn" type="button" title="${sidebarCollapsed?'展开侧边栏':'收起侧边栏'}" aria-expanded="${!sidebarCollapsed}" aria-controls="sidebar"><span class="sidebar-nav-icon sidebar-brand-icon"><span class="sidebar-brand-face">${BRAND_LOGO}</span><span class="sidebar-brand-hover">${COLLAPSE_IMG}</span></span><span class="sidebar-nav-label sidebar-title">技术边界数据库</span></button><button class="sidebar-collapse-side" id="collapseSideBtn" type="button" title="${sidebarCollapsed?'展开侧边栏':'收起侧边栏'}" aria-expanded="${!sidebarCollapsed}" aria-controls="sidebar">${COLLAPSE_IMG}</button></div>`;
-  return `<aside class="sidebar ${sidebarCollapsed?'collapsed':''}" id="sidebar" aria-label="主导航">${brandHeader}<nav class="sidebar-nav">${navHtml}${convHub}</nav><div class="sidebar-account"><button class="sidebar-account-btn" id="accountBtn" type="button" aria-haspopup="menu" aria-expanded="false" title="${escapeHtml(accName)}"><span class="sidebar-avatar">${escapeHtml(avatarLetter)}</span><span class="sidebar-nav-label sidebar-account-name">${escapeHtml(accName)}</span></button></div></aside><section class="workspace"><main class="main ${state.route==='home'?'home-main':state.route==='breadth'?'breadth-main':''}" id="main" tabindex="-1">${view(state.route)}</main></section>`;
+  return `<aside class="sidebar ${sidebarCollapsed?'collapsed':''}" id="sidebar" aria-label="主导航">${brandHeader}<nav class="sidebar-nav">${navHtml}${convHub}</nav><div class="sidebar-account"><button class="sidebar-account-btn" id="accountBtn" type="button" aria-haspopup="menu" aria-expanded="false" title="${escapeHtml(accName)}"><span class="sidebar-avatar">${escapeHtml(avatarLetter)}</span><span class="sidebar-nav-label sidebar-account-name">${escapeHtml(accName)}</span></button></div></aside>`;
+}
+function shell(state){
+  const data=routes[state.route];
+  const accName=(currentUser&&(currentUser.display_name||currentUser.username))||'加载中…';
+  const accRole=currentUser?(ROLE_LABELS[currentUser.role]||currentUser.role):'';
+  const avatarLetter=(accName||'?')[0].toUpperCase();
+  return `${sidebarHtml(state,accName,avatarLetter)}<section class="workspace"><main class="main ${state.route==='home'?'home-main':state.route==='breadth'?'breadth-main':''}" id="main" tabindex="-1">${view(state.route)}</main></section>`;
 }
 function view(route){const m={home:homeView,breadth:breadthView,dashboard:dashboardView,map:mapView,users:usersView,library:libraryView};return (m[route]||homeView)();}
 function closeAccountMenu(){const menu=document.getElementById("accountMenu");if(menu)menu.remove();const btn=document.getElementById("accountBtn");if(btn)btn.setAttribute("aria-expanded","false");}
@@ -529,7 +547,24 @@ function sourcesView(){
 }
 function mapBody(){const state=parseHash();const group=state.params.get('group')||'zero-carbon';const tabs=[["zero-carbon","零碳产业"],["ai-intelligent","AI与智能科技"],["general-tech","通用技术"]];const titleMap={"zero-carbon":"零碳产业","ai-intelligent":"AI与智能科技","general-tech":"通用技术"};return `<div class="map-head"><div class="map-tools"><input id="mapSearch" value="${escapeHtml(mapSearchDraft)}" placeholder="搜索节点" aria-label="搜索行业图景节点"/><button class="secondary-btn" id="mapExpandAll" type="button">展开全部</button><button class="secondary-btn" id="mapCollapse" type="button">折叠到二级</button></div></div><div class="bookmark-tabs">${tabs.map(([key,label])=>`<button class="bookmark-tab ${group===key?'active':''}" data-map-group="${key}">${label}</button>`).join('')}</div><div class="map-shell"><header class="map-summary"><strong>${titleMap[group]||'零碳产业'}</strong><span id="industryMapMeta">正在加载图景…</span><span class="map-hint">按住空白处拖动平移 · 点击叶子节点查看关联内容</span></header><div class="industry-tree" id="industryTree"><div class="status-note">正在加载图景…</div></div></div>`;}
 function mapView(){return `<section class="flat-content map-content-panel"><div class="dash-head"><div class="dash-tabs" role="tablist" aria-label="深度调研视图切换"><button class="dash-tab" data-dash-tab="report" role="tab" aria-selected="false">深度调研报告</button><button class="dash-tab active" data-dash-tab="map" role="tab" aria-selected="true">行业图景</button></div></div>${mapBody()}</section>`;}
-function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>{const target=btn.dataset.route;const cur=parseHash().route;clearActiveConversation();syncNavHomeActive();if(target==='home'&&cur==='home'){startNewConversation();return;}setRoute(target);}));document.querySelectorAll("[data-dash-tab]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('tab',btn.dataset.dashTab);setRoute('dashboard',p);}));const collapseSide=document.getElementById("collapseSideBtn");if(collapseSide)collapseSide.addEventListener("click",collapseSidebar);const brandToggle=document.getElementById("brandToggleBtn");if(brandToggle)brandToggle.addEventListener("click",expandSidebar);const dashTabs=document.getElementById('dashTabs');if(dashTabs)dashTabs.addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;const order=['report','map'];const cur=order.indexOf(dashTab());const next=order[(cur+(e.key==='ArrowRight'?1:order.length-1))%order.length];const p=new URLSearchParams(parseHash().params.toString());p.set('tab',next);setRoute('dashboard',p);});document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const cur=parseHash();const p=new URLSearchParams(cur.params.toString());p.set('group',btn.dataset.mapGroup);p.set('tab','map');setRoute(cur.route==='map'?'map':'dashboard',p);}));const accountBtn=document.getElementById("accountBtn");if(accountBtn)accountBtn.addEventListener("click",e=>{e.stopPropagation();toggleAccountMenu(accountBtn);});const convListToggle=document.getElementById("convListToggleBtn");if(convListToggle)convListToggle.addEventListener("click",toggleConversationListCollapsed);const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");const modelPickerBtn=document.getElementById('modelPickerBtn');const modelMenu=document.getElementById('modelMenu');if(modelPickerBtn&&modelMenu){modelPickerBtn.addEventListener('click',()=>setModelMenu(modelMenu.hidden));modelMenu.addEventListener('click',event=>{const item=event.target.closest('.model-menu-item');if(!item)return;selectedModel=item.dataset.model;localStorage.setItem('assistant_model',selectedModel);syncModelPicker();});}if(!window.__modelMenuOutsideBound){window.__modelMenuOutsideBound=true;document.addEventListener('click',event=>{if(!event.target.closest('.model-picker-top'))setModelMenu(false);});document.addEventListener('keydown',event=>{if(event.key==='Escape')setModelMenu(false);});}if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,120)}px`;});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const homeBodyEl=document.querySelector('.home-body');const homeDrawerOpenBtn=document.getElementById('homeDrawerOpen');const setDrawerCollapsed=(body,collapsed)=>{body.classList.toggle('drawer-collapsed',collapsed);if(homeDrawerOpenBtn)homeDrawerOpenBtn.setAttribute('aria-expanded',collapsed?'true':'false');};if(homeDrawerOpenBtn&&homeBodyEl)homeDrawerOpenBtn.addEventListener('click',()=>setDrawerCollapsed(homeBodyEl,false));if(homeBodyEl&&!window.__homeDrawerOutsideBound){window.__homeDrawerOutsideBound=true;document.addEventListener('click',event=>{const body=document.querySelector('.home-body');if(!body||body.classList.contains('drawer-collapsed'))return;if(!event.target.closest('.home-drawer,.home-drawer-tab'))setDrawerCollapsed(body,true);});}const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});const createUserBtn=document.getElementById("createUserBtn");if(createUserBtn)createUserBtn.addEventListener("click",showCreateUserModal);}
+/* v7：侧边栏局部事件绑定——renderSidebarOnly 后只重绑 sidebar 内部控件；
+   同时恢复历史对话列表内容与滚动位置（侧边栏切换不丢列表/位置） */
+let convListScrollTop=0;
+function bindSidebarEvents(){
+  const collapseSide=document.getElementById("collapseSideBtn");
+  if(collapseSide)collapseSide.addEventListener("click",collapseSidebar);
+  const brandToggle=document.getElementById("brandToggleBtn");
+  if(brandToggle)brandToggle.addEventListener("click",expandSidebar);
+  const accountBtn=document.getElementById("accountBtn");
+  if(accountBtn)accountBtn.addEventListener("click",e=>{e.stopPropagation();toggleAccountMenu(accountBtn);});
+  const convListToggle=document.getElementById("convListToggleBtn");
+  if(convListToggle)convListToggle.addEventListener("click",toggleConversationListCollapsed);
+  document.querySelectorAll("#sidebar [data-route]").forEach(btn=>btn.addEventListener("click",()=>{const target=btn.dataset.route;const cur=parseHash().route;clearActiveConversation();syncNavHomeActive();if(target==='home'&&cur==='home'){startNewConversation();return;}setRoute(target);}));
+  renderSidebarConversations();
+  const list=document.getElementById('sidebarConversationList');
+  if(list&&convListScrollTop)list.scrollTop=convListScrollTop;
+}
+function bindEvents(){document.querySelectorAll("[data-route]").forEach(btn=>btn.addEventListener("click",()=>{const target=btn.dataset.route;const cur=parseHash().route;clearActiveConversation();syncNavHomeActive();if(target==='home'&&cur==='home'){startNewConversation();return;}setRoute(target);}));document.querySelectorAll("[data-dash-tab]").forEach(btn=>btn.addEventListener("click",()=>{const p=new URLSearchParams(parseHash().params.toString());p.set('tab',btn.dataset.dashTab);setRoute('dashboard',p);}));bindSidebarEvents();const dashTabs=document.getElementById('dashTabs');if(dashTabs)dashTabs.addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;const order=['report','map'];const cur=order.indexOf(dashTab());const next=order[(cur+(e.key==='ArrowRight'?1:order.length-1))%order.length];const p=new URLSearchParams(parseHash().params.toString());p.set('tab',next);setRoute('dashboard',p);});document.querySelectorAll("[data-map-group]").forEach(btn=>btn.addEventListener("click",()=>{const cur=parseHash();const p=new URLSearchParams(cur.params.toString());p.set('group',btn.dataset.mapGroup);p.set('tab','map');setRoute(cur.route==='map'?'map':'dashboard',p);}));const ask=document.getElementById("askBtn");const input=document.getElementById("queryInput");const modelPickerBtn=document.getElementById('modelPickerBtn');const modelMenu=document.getElementById('modelMenu');if(modelPickerBtn&&modelMenu){modelPickerBtn.addEventListener('click',()=>setModelMenu(modelMenu.hidden));modelMenu.addEventListener('click',event=>{const item=event.target.closest('.model-menu-item');if(!item)return;selectedModel=item.dataset.model;localStorage.setItem('assistant_model',selectedModel);syncModelPicker();});}if(!window.__modelMenuOutsideBound){window.__modelMenuOutsideBound=true;document.addEventListener('click',event=>{if(!event.target.closest('.model-picker-top'))setModelMenu(false);});document.addEventListener('keydown',event=>{if(event.key==='Escape')setModelMenu(false);});}if(input){input.value=homeDraft;if(!input.dataset.bound){input.addEventListener('input',()=>{homeDraft=input.value;localStorage.setItem('home_query_draft',homeDraft);input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,120)}px`;});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}});input.dataset.bound='1';}}if(ask)ask.addEventListener("click",submitQuery);const homeBodyEl=document.querySelector('.home-body');const homeDrawerOpenBtn=document.getElementById('homeDrawerOpen');const setDrawerCollapsed=(body,collapsed)=>{body.classList.toggle('drawer-collapsed',collapsed);if(homeDrawerOpenBtn)homeDrawerOpenBtn.setAttribute('aria-expanded',collapsed?'true':'false');};if(homeDrawerOpenBtn&&homeBodyEl)homeDrawerOpenBtn.addEventListener('click',()=>setDrawerCollapsed(homeBodyEl,false));if(homeBodyEl&&!window.__homeDrawerOutsideBound){window.__homeDrawerOutsideBound=true;document.addEventListener('click',event=>{const body=document.querySelector('.home-body');if(!body||body.classList.contains('drawer-collapsed'))return;if(!event.target.closest('.home-drawer,.home-drawer-tab'))setDrawerCollapsed(body,true);});}const dashboardFilter=document.getElementById("dashboardFilter");if(dashboardFilter)dashboardFilter.addEventListener("submit",e=>{e.preventDefault();loadDashboards();});const createUserBtn=document.getElementById("createUserBtn");if(createUserBtn)createUserBtn.addEventListener("click",showCreateUserModal);}
 async function loadKnowledgeGraph(){
   const container=document.getElementById('qaGraphContainer');
   if(!container)return;
