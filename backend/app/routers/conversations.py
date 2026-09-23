@@ -43,18 +43,71 @@ class MemoryIn(BaseModel):
 
 # ── Sessions ──────────────────────────────────────────────
 
+import base64
+import json
+from datetime import datetime
+from sqlalchemy import or_, and_
+
+
+def _encode_cursor(updated_at: datetime, session_id: uuid.UUID) -> str:
+    """游标 = (updated_at, id) base64。id 作为稳定排序并列条件，杜绝同刻丢项/重复。"""
+    raw = json.dumps({"u": updated_at.isoformat(), "i": str(session_id)}).encode()
+    return base64.urlsafe_b64encode(raw).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID] | None:
+    try:
+        raw = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+        return datetime.fromisoformat(raw["u"]), uuid.UUID(raw["i"])
+    except Exception:
+        return None
+
+
 @router.get("/conversations")
 def list_sessions(
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
+    limit: int = Query(default=20, ge=1, le=50),
+    cursor: str | None = Query(default=None),
 ) -> dict:
-    rows = db.scalars(
-        select(ConversationSession)
-        .where(ConversationSession.user_id == current_user)
-        .order_by(ConversationSession.updated_at.desc())
-        .limit(50)
-    ).all()
-    return {"sessions": [{"id": str(s.id), "title": s.title, "topic_hint": s.topic_hint, "updated_at": s.updated_at.isoformat()} for s in rows]}
+    """历史会话游标分页：按 updated_at 倒序 + id 稳定并列排序。
+
+    - 账号隔离在 WHERE 里，游标只是排序定位，不能绕过用户过滤；
+    - 游标无法解析时按 422 拒绝（而不是默默回到第一页）。
+    """
+    stmt = select(ConversationSession).where(
+        ConversationSession.user_id == current_user
+    )
+    if cursor:
+        key = _decode_cursor(cursor)
+        if key is None:
+            raise HTTPException(status_code=422, detail="无效的会话列表游标")
+        cu, cid = key
+        # (updated_at, id) 双键倒序的"下一页"条件：严格小于键元组
+        stmt = stmt.where(
+            or_(
+                ConversationSession.updated_at < cu,
+                and_(
+                    ConversationSession.updated_at == cu,
+                    ConversationSession.id < cid,
+                ),
+            )
+        )
+    stmt = stmt.order_by(
+        ConversationSession.updated_at.desc(), ConversationSession.id.desc()
+    ).limit(limit + 1)
+    rows = db.scalars(stmt).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    next_cursor = _encode_cursor(rows[-1].updated_at, rows[-1].id) if has_more and rows else None
+    return {
+        "sessions": [
+            {"id": str(s.id), "title": s.title, "topic_hint": s.topic_hint, "updated_at": s.updated_at.isoformat()}
+            for s in rows
+        ],
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+    }
 
 
 @router.post("/conversations", status_code=201)

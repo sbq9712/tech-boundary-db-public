@@ -363,12 +363,13 @@ a:hover{color:var(--brand-lighter)}
 }
 /* v4：「新对话」按钮已移除——点击「门户」即开始新对话 */
 .sidebar-conversation-list{
-  /* 与上方按钮整体滚动：不再内部限高滚动 */
   display:flex;
   flex-direction:column;
   gap:1px;
   outline:none;
-  /* v7 历史分页：列表区域独立滚动，导航/头像固定 */
+  /* v7 历史分页：列表区域独立滚动，导航/头像固定。
+     必须限高——否则首批 20 条可能恰好放得下，容器永不滚动，触底加载失效 */
+  max-height:46vh;
   overflow-y:auto;
   overscroll-behavior:contain;
 }
@@ -443,6 +444,25 @@ a:hover{color:var(--brand-lighter)}
 .sidebar-conversation-delete:focus-visible{opacity:1}
 .sidebar-conversation-delete:hover{background:var(--red-bg);color:var(--red)}
 .sidebar-conversation-delete:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+/* v7 历史分页: 底部状态行（加载更多/失败重试/没有更多） */
+.conv-list-more{
+  padding:8px 8px 10px;
+  font-size:11px;
+  color:var(--text-quaternary);
+  text-align:center;
+}
+.conv-list-more.conv-list-end{color:var(--text-quaternary)}
+.conv-list-more.conv-list-error{color:var(--text-danger,#c0392b)}
+.conv-retry-btn{
+  border:1px solid var(--border-subtle);
+  background:var(--bg-panel);
+  border-radius:var(--radius-sm);
+  padding:2px 10px;
+  font-size:11px;
+  cursor:pointer;
+  color:var(--text-secondary);
+}
+.conv-retry-btn:hover{background:var(--bg-surface);color:var(--text-primary)}
 .sidebar-conversation-empty{
   padding:8px 10px;
   color:var(--text-quaternary);

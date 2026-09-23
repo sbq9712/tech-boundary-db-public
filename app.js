@@ -272,16 +272,29 @@ async function loadAssistantModels(){
 let activeSessionMessages = [];
 let conversationSessions = [];
 let pendingConversation = null;
+/* v7 历史对话游标分页状态 */
+let convNextCursor = null;
+let convHasMore = false;
+let convLoadingMore = false;
+let convListFailed = false;
 function renderSidebarConversations(){
   const list=document.getElementById('sidebarConversationList');
   if(!list)return;
-  convListScrollTop=list.scrollTop||convListScrollTop;
+  const prevScroll=list.scrollTop||convListScrollTop;
   const live=[...conversationRequests].map(request=>({id:request.sessionId||request.localId,title:conversationSessions.find(item=>item.id===request.sessionId)?.title||'新对话'}));
   const items=[...live,...conversationSessions.filter(item=>!live.some(request=>request.id===item.id))];
   if(!items.length){
-    list.innerHTML='<div class="sidebar-conversation-empty">暂无历史对话</div>';
+    list.innerHTML=convListFailed
+      ?'<div class="sidebar-conversation-empty">历史对话加载失败 <button type="button" class="conv-retry-btn" id="convRetryBtn">重试</button></div>'
+      :'<div class="sidebar-conversation-empty">暂无历史对话</div>';
+    bindConvFooter();
     return;
   }
+  let footer='';
+  if(convListFailed)footer='<div class="conv-list-more conv-list-error">加载失败 <button type="button" class="conv-retry-btn" id="convRetryBtn">重试</button></div>';
+  else if(convLoadingMore)footer='<div class="conv-list-more">正在加载…</div>';
+  else if(convHasMore)footer='<div class="conv-list-more">向下滚动加载更多</div>';
+  else footer='<div class="conv-list-more conv-list-end">没有更多对话了</div>';
   list.innerHTML=items.map(item=>{
     const id=escapeHtml(String(item.id||''));
     const title=escapeHtml(item.title||'未命名对话');
@@ -290,23 +303,86 @@ function renderSidebarConversations(){
     if(pending)return `<div class="sidebar-conversation-row active pending"><div class="sidebar-conversation-item" aria-current="page"><span class="sidebar-conversation-pendot" aria-hidden="true"></span><span class="sidebar-conversation-text">${title}</span></div></div>`;
     return `<div class="sidebar-conversation-row ${active?'active':''}"><button class="sidebar-conversation-item" type="button" data-conversation-id="${id}" title="${title}" aria-current="${active?'page':'false'}"><span class="sidebar-conversation-text">${title}</span></button><button class="sidebar-conversation-delete" type="button" data-delete-conversation="${id}" title="删除此对话" aria-label="删除对话：${title}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>`;
   }).join('');
+  list.innerHTML+=footer;
+  list.scrollTop=prevScroll;
+  bindConvFooter();
+  /* v7 自动补页：视口过高时首批可能不足以撑出滚动条（触底永远无法触发）。
+     内容未溢出且有下一页时自动补一页，直到出现滚动条或没有更多。
+     clientHeight>0 排除列表被 hidden（display:none）时的误触发。 */
+  if(convHasMore&&!convLoadingMore&&list.clientHeight>0&&list.scrollHeight<=list.clientHeight+4){
+    queueMicrotask(()=>loadMoreConversations());
+  }
+}
+/* v7: 底部状态行事件（重试按钮）+ 触底加载 */
+function bindConvFooter(){
+  const list=document.getElementById('sidebarConversationList');
+  if(!list)return;
+  const retry=document.getElementById('convRetryBtn');
+  if(retry)retry.addEventListener('click',()=>loadMoreConversations(true));
+  if(list.dataset.scrollBound!=='1'){
+    list.dataset.scrollBound='1';
+    list.addEventListener('scroll',()=>{
+      convListScrollTop=list.scrollTop;
+      if(list.scrollHeight-list.scrollTop-list.clientHeight<24)loadMoreConversations();
+    });
+  }
+}
+async function loadMoreConversations(forceRetry=false){
+  if(convLoadingMore)return;
+  if(!forceRetry&&!convHasMore)return;
+  const epoch=conversationLoadEpoch;
+  const list=document.getElementById('sidebarConversationList');
+  const cursor=convNextCursor;
+  if(!cursor&&!forceRetry)return;
+  convLoadingMore=true;convListFailed=false;
+  renderSidebarConversations();
+  try{
+    const q=new URLSearchParams({limit:'20'});
+    if(cursor)q.set('cursor',cursor);
+    const res=await apiFetch('/api/conversations?'+q.toString());
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const data=await res.json();
+    if(epoch!==conversationLoadEpoch)return; // 切换账号/页面后旧响应作废
+    const byId=new Map(conversationSessions.map(s=>[s.id,s]));
+    for(const s of (data.sessions||[])){if(!byId.has(s.id))byId.set(s.id,s);}
+    conversationSessions=[...byId.values()].sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''));
+    convNextCursor=data.next_cursor||null;
+    convHasMore=Boolean(data.has_more);
+    convLoadingMore=false;convListFailed=false;
+    renderSidebarConversations();
+  }catch(_err){
+    if(epoch!==conversationLoadEpoch)return;
+    convLoadingMore=false;convListFailed=true;
+    renderSidebarConversations();
+  }
 }
 async function loadConversations(preferredId=null){
   const loadEpoch=conversationLoadEpoch;
-  const list=document.getElementById('sidebarConversationList');
-  if(!list)return;
+  /* v7 修复：侧边栏默认收起时列表元素不存在，但不能因此跳过数据加载——
+     否则展开后永远是"暂无历史对话"。渲染由 renderSidebarConversations 自行判空。 */
   try{
-    const res=await apiFetch('/api/conversations');
+    const res=await apiFetch('/api/conversations?limit=20');
     if(!res.ok)throw new Error(`HTTP ${res.status}`);
-    conversationSessions=(await res.json()).sessions||[];
+    const data=await res.json();
+    if(loadEpoch!==conversationLoadEpoch)return;
+    conversationSessions=data.sessions||[];
+    convNextCursor=data.next_cursor||null;
+    convHasMore=Boolean(data.has_more);
+    convLoadingMore=false;convListFailed=false;
     if(pendingConversation&&conversationSessions.some(item=>item.id===pendingConversation.id))pendingConversation=null;
     const target=preferredId&&conversationSessions.some(item=>item.id===preferredId)
       ?preferredId
       :(activeSessionId&&conversationSessions.some(item=>item.id===activeSessionId)?activeSessionId:null);
     renderSidebarConversations();
+    /* v7 刷新即回到列表顶部：旧的长列表滚动位置落到新的 20 条列表上会被钳在
+       底部附近，立刻误触"触底加载"，导致刷新后首批就超过 20 条 */
+    const freshList=document.getElementById('sidebarConversationList');
+    if(freshList){convListScrollTop=0;freshList.scrollTop=0;}
     if(loadEpoch===conversationLoadEpoch&&target&&target!==activeSessionId)await loadConversationMessages(target);
   }catch(_err){
-    list.innerHTML='<div class="sidebar-conversation-empty">历史对话加载失败</div>';
+    if(loadEpoch!==conversationLoadEpoch)return;
+    convListFailed=true;convLoadingMore=false;convNextCursor=null;convHasMore=false;
+    renderSidebarConversations();
   }
 }
 async function loadConversationMessages(sessionId){
