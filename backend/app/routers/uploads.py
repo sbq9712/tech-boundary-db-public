@@ -32,6 +32,7 @@ from app.services.upload_ingestion import (
     delete_uploaded_file,
     load_taxonomy,
     normalize_document_date,
+    rename_uploaded_file,
     persist_upload,
     process_uploaded_file,
     remove_stored_upload,
@@ -39,6 +40,24 @@ from app.services.upload_ingestion import (
     taxonomy_tree_paths,
     validate_filename,
 )
+
+PRIMARY_SECTIONS = {"breadth", "industry", "atsc"}
+BREADTH_SOURCES = {"github", "other"}
+
+
+def _validate_section_combo(primary_section: str | None, breadth_source: str | None) -> tuple[str, str | None]:
+    """校验分区组合：广度必须给出来源；非广度不允许来源。"""
+    section = (primary_section or "industry").strip()
+    if section not in PRIMARY_SECTIONS:
+        raise HTTPException(400, "一级分区只能是：breadth / industry / atsc")
+    source = (breadth_source or "").strip() or None
+    if section == "breadth":
+        if source not in BREADTH_SOURCES:
+            raise HTTPException(400, "广度追踪必须选择二级来源：github（GitHub广度情报）或 other（其他广度情报）")
+    elif source is not None:
+        raise HTTPException(400, "仅广度追踪可以选择二级来源")
+    return section, source
+
 
 router = APIRouter(tags=["uploads"])
 
@@ -111,6 +130,8 @@ def _serialize(record: UploadedFile) -> dict:
         "original_filename": record.original_filename,
         "stored_filename": record.stored_filename,
         "title": record.title,
+        "primary_section": record.primary_section,
+        "breadth_source": record.breadth_source,
         "domain_refs": record.domain_refs or [],
         "note": record.note,
         "title_source": record.title_source,
@@ -266,6 +287,8 @@ async def upload_files(
     files: list[UploadFile] = File(...),
     title: str | None = Form(None),
     note: str | None = Form(None),
+    primary_section: str | None = Form(None),
+    breadth_source: str | None = Form(None),
     primary_category: str | None = Form(None),
     document_date: str | None = Form(None),
     current_user: str = Depends(require_upload),
@@ -281,6 +304,8 @@ async def upload_files(
             validate_filename(upload.filename or "", upload.content_type)
         except UploadValidationError as exc:
             raise HTTPException(exc.status_code, str(exc)) from exc
+
+    section, bsource = _validate_section_combo(primary_section, breadth_source)
 
     taxonomy = load_taxonomy()
     manual_category = None
@@ -312,6 +337,8 @@ async def upload_files(
                 domain_refs=None,
                 note=note,
                 document_date=document_date,
+                primary_section=section,
+                breadth_source=bsource,
                 title_source="manual" if manual_title else "filename_fallback",
                 taxonomy_version=taxonomy.version if manual_category else None,
                 primary_category=manual_category,
@@ -348,6 +375,8 @@ async def upload_files(
 
 @router.get("/uploads")
 def list_uploads(
+    section: str | None = None,
+    breadth_source: str | None = None,
     primary_category: str | None = None,
     classification_status: str | None = None,
     limit: int = 100,
@@ -355,7 +384,17 @@ def list_uploads(
     current_user: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    """按分区过滤；同时返回各分区计数（counts/counts_breadth），供资料库导航展示。"""
     filters = []
+    if section:
+        if section not in PRIMARY_SECTIONS:
+            raise HTTPException(400, "一级分区只能是：breadth / industry / atsc")
+        filters.append(UploadedFile.primary_section == section)
+        # 广度二级：请求具体来源时精确过滤；未指明来源时返回该一级分区全部
+        if breadth_source:
+            if breadth_source not in BREADTH_SOURCES:
+                raise HTTPException(400, "广度来源只能是：github / other")
+            filters.append(UploadedFile.breadth_source == breadth_source)
     if primary_category:
         filters.append(UploadedFile.primary_category == primary_category)
     if classification_status:
@@ -364,7 +403,30 @@ def list_uploads(
     query = select(UploadedFile).where(*filters).order_by(UploadedFile.created_at.desc())
     count_query = select(func.count()).select_from(UploadedFile).where(*filters)
     rows = db.scalars(query.limit(max(1, min(limit, 500))).offset(max(0, offset))).all()
-    return {"count": db.scalar(count_query) or 0, "files": [_serialize(row) for row in rows]}
+    # 各分区计数（不受当前过滤影响，供导航角标/计数展示）
+    section_counts = dict(
+        db.execute(
+            select(UploadedFile.primary_section, func.count()).group_by(UploadedFile.primary_section)
+        ).all()
+    )
+    breadth_counts = dict(
+        db.execute(
+            select(UploadedFile.breadth_source, func.count())
+            .where(UploadedFile.primary_section == "breadth")
+            .group_by(UploadedFile.breadth_source)
+        ).all()
+    )
+    return {
+        "count": db.scalar(count_query) or 0,
+        "files": [_serialize(row) for row in rows],
+        "counts": {
+            "breadth": section_counts.get("breadth", 0),
+            "industry": section_counts.get("industry", 0),
+            "atsc": section_counts.get("atsc", 0),
+            "github": breadth_counts.get("github", 0),
+            "other": breadth_counts.get("other", 0),
+        },
+    }
 
 
 @router.post("/uploads/{file_id}/classification/retry", status_code=202)
@@ -450,6 +512,27 @@ def override_upload_classification(
     db.refresh(record)
     background_tasks.add_task(process_uploaded_file, str(record.id))
     return _serialize(record)
+
+
+class RenamePayload(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+
+
+@router.patch("/uploads/{file_id}/title")
+def rename_upload(
+    file_id: str,
+    payload: RenamePayload,
+    current_user: str = Depends(require_upload),
+    db: Session = Depends(get_db),
+) -> dict:
+    """重命名资料标题：admin 与 ATSC 可改名任意资料；普通用户 403（require_upload）。"""
+    record = db.get(UploadedFile, _uuid_or_400(file_id))
+    if record is None:
+        raise HTTPException(404, "资料不存在")
+    try:
+        return rename_uploaded_file(db, record, payload.title)
+    except UploadValidationError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
 
 
 @router.get("/uploads/{file_id}/download")

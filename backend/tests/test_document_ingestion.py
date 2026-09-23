@@ -376,6 +376,7 @@ def test_upload_status_exposes_docling_before_classification():
         classification_status="pending", id=uuid.uuid4(), original_filename="paper.pdf",
         chunk_count=0, stored_filename="objects/a.pdf", title="paper",
         domain_refs=None, note=None, title_source="filename_fallback",
+        primary_section="industry", breadth_source=None,
         mime_type="application/pdf", document_date="2026-09-01", checksum_sha256="a" * 64,
         taxonomy_version=None, primary_category=None, secondary_categories=[],
         classification_confidence=None, classification_source=None, classification_reason=None,

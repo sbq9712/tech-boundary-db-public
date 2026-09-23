@@ -1767,33 +1767,117 @@ window.addEventListener("DOMContentLoaded",async()=>{await loadCurrentUser();ren
 let libRefreshTimer=null,libOffset=0,libTotal=0,libIsAdmin=false,libCanManage=false;
 const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引未完成",embedding_skipped:"索引未完成",embedding_legacy_unindexed:"历史未索引",ready:"可检索"};
 function reviewedEmptyCard(){return `<div class="dashboard-card reviewed-empty"><div class="reviewed-empty-mark">无</div><strong>暂无已审核报告</strong><span>深度调研完成审核后将展示在这里</span></div>`;}
-function libraryView(){return `<section class="flat-content library"><div class="lib-head"><div class="filter-row"><select id="categoryFilter" aria-label="行业图景节点"><option value="">全部节点</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>行业图景节点</th><th>状态</th><th>上传者</th><th>时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">ATSC用户与管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;}
+/* v7 资料库三分区：广度追踪(breadth) / 行业追踪(industry) / ATSC内部报告(atsc)。
+   广度追踪下再分 GitHub广度情报(github) / 其他广度情报(other)。
+   路由约定（hash query）：
+     #library                          一级三选一
+     #library?section=breadth          广度二级二选一
+     #library?section=breadth&sub=github|other   广度子页列表
+     #library?section=industry|atsc    列表
+   无返回按钮、无面包屑；再点已选中的「广度追踪」回到二级二选一。 */
+function libSectionFromParams(params){
+  const s=(params.get("section")||"").toLowerCase();
+  return ["breadth","industry","atsc"].includes(s)?s:"";
+}
+function libSubFromParams(params){
+  const b=(params.get("sub")||"").toLowerCase();
+  return ["github","other"].includes(b)?b:"";
+}
+function libSectionLabel(section){
+  return {breadth:"广度追踪",industry:"行业追踪",atsc:"ATSC内部报告"}[section]||"";
+}
+function libraryView(){
+  const state=parseHash();
+  const section=libSectionFromParams(state.params);
+  const sub=libSubFromParams(state.params);
+  /* 顶部三个一级按钮（无论处于哪层都恒定展示） */
+  const navBtn=`<div class="lib-section-nav" role="tablist" aria-label="资料库分区">
+    <button class="lib-section-btn${section==="breadth"?" active":""}" type="button" data-lib-section="breadth" aria-pressed="${section==="breadth"}">广度追踪</button>
+    <button class="lib-section-btn${section==="industry"?" active":""}" type="button" data-lib-section="industry" aria-pressed="${section==="industry"}">行业追踪</button>
+    <button class="lib-section-btn${section==="atsc"?" active":""}" type="button" data-lib-section="atsc" aria-pressed="${section==="atsc"}">ATSC内部报告</button>
+  </div>`;
+  /* 一级三选一页 */
+  if(!section){
+    return `<section class="flat-content library"><div class="lib-section-chooser">
+      ${navBtn}
+      <div class="lib-chooser-hint">请选择要查看的资料分区</div>
+    </div></section>`;
+  }
+  /* 广度二级二选一页 */
+  if(section==="breadth"&&!sub){
+    return `<section class="flat-content library"><div class="lib-section-chooser">
+      ${navBtn}
+      <div class="lib-breadth-entries">
+        <button class="lib-breadth-entry" type="button" data-lib-sub="github"><span class="lib-breadth-entry-name">GitHub广度情报</span><span class="lib-breadth-entry-desc">来自 GitHub 的广度情报增量包</span></button>
+        <button class="lib-breadth-entry" type="button" data-lib-sub="other"><span class="lib-breadth-entry-name">其他广度情报</span><span class="lib-breadth-entry-desc">人工上传整理的广度情报资料</span></button>
+      </div>
+    </div></section>`;
+  }
+  /* 列表页（广度子页或 industry/atsc）：顶部三分区按钮恒定展示 */
+  return `<section class="flat-content library">${navBtn}<div class="lib-head"><div class="filter-row"><select id="categoryFilter" aria-label="行业图景节点"><option value="">全部节点</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>行业图景节点</th><th>状态</th><th>资料时间</th><th>上传者</th><th>上传时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">ATSC用户与管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;
+}
 function libFmtSize(n){if(!n)return "-";const u=["B","KB","MB","GB"];let i=0,s=n;while(s>=1024&&i<3){s/=1024;i++;}return s.toFixed(s<10?1:0)+" "+u[i];}
 function libFmtTime(iso){if(!iso)return "-";const d=new Date(iso);return isNaN(d)?"-":d.toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});}
 async function initLibrary(){
   libOffset=0;libIsAdmin=false;libCanManage=false;
+  const state=parseHash();
+  const section=libSectionFromParams(state.params);
+  const sub=libSubFromParams(state.params);
+  /* 一级按钮：广度追踪在子页被再点 → 回二级二选一（去掉 sub）；
+     其余按钮 → 进入对应分区；已选中且无子级的按钮不再动作 */
+  document.querySelectorAll("[data-lib-section]").forEach(btn=>{
+    btn.onclick=()=>{
+      const target=btn.dataset.libSection;
+      const cur=parseHash();
+      const curSection=libSectionFromParams(cur.params);
+      const curSub=libSubFromParams(cur.params);
+      if(target==="breadth"){
+        /* 从子页再点「广度追踪」→ 回到二级二选一（去掉 sub）；
+           从一级入口首次点选 → 进入二级二选一 */
+        if(!(curSection==="breadth"&&!curSub)){
+          const p=new URLSearchParams();p.set("section","breadth");setRoute("library",p);
+        }
+        return;
+      }
+      if(curSection===target&&!curSub)return;
+      const p=new URLSearchParams();p.set("section",target);setRoute("library",p);
+    };
+  });
+  /* 广度二级入口 → 子页列表（入口随之隐藏，由重渲染完成） */
+  document.querySelectorAll("[data-lib-sub]").forEach(btn=>{
+    btn.onclick=()=>{
+      const p=new URLSearchParams();p.set("section","breadth");p.set("sub",btn.dataset.libSub);setRoute("library",p);
+    };
+  });
+  /* 二选一页没有列表元素，直接返回 */
+  if(!section||(section==="breadth"&&!sub))return;
   ["categoryFilter","statusFilter"].forEach(id=>{const el=document.getElementById(id);if(el)el.onchange=()=>{libOffset=0;loadLibrary();};});
   const prev=document.getElementById("prevBtn"),next=document.getElementById("nextBtn");
   if(prev)prev.onclick=()=>{libOffset=Math.max(0,libOffset-30);loadLibrary();};
   if(next)next.onclick=()=>{if(libOffset+30<libTotal){libOffset+=30;loadLibrary();}};
-  try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";libCanManage=j.role==="admin"||j.role==="atsc";const link=document.getElementById("uploadLink");if(libCanManage&&link){link.style.display="";link.onclick=openUploadModal;}}}catch(e){}
+  try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";libCanManage=j.role==="admin"||j.role==="atsc";const link=document.getElementById("uploadLink");if(libCanManage&&link){link.style.display="";link.onclick=()=>openUploadModal(section,sub);}}}catch(e){}
   try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];const select=document.getElementById("categoryFilter");if(select){const treePaths=data.all_paths||(data.categories||[]).filter(c=>c.includes("/"));select.innerHTML='<option value="">全部节点</option>'+treePaths.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")+'<option value="不相关">不相关</option><option value="未分类">未分类</option>';}}}catch(e){}
   loadLibrary();
 }
 async function loadLibrary(){
   if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}
   const tb=document.getElementById("rows");if(!tb)return;
+  const state=parseHash();
+  const section=libSectionFromParams(state.params);
+  const sub=libSubFromParams(state.params);
+  if(!section||(section==="breadth"&&!sub))return; /* 二选一页无列表 */
   const category=document.getElementById("categoryFilter")?.value||"";
   const status=document.getElementById("statusFilter")?.value||"";
-  let url="/api/uploads?limit=30&offset="+libOffset;
+  let url="/api/uploads?limit=30&offset="+libOffset+"&section="+encodeURIComponent(section);
+  if(section==="breadth")url+="&breadth_source="+encodeURIComponent(sub);
   if(category)url+="&primary_category="+encodeURIComponent(category);
   if(status)url+="&classification_status="+encodeURIComponent(status);
   let r=null;
-  try{r=await apiFetch(url);}catch(e){tb.innerHTML='<tr><td colspan="6">资料列表加载失败，请稍后重试</td></tr>';return;}
+  try{r=await apiFetch(url);}catch(e){tb.innerHTML='<tr><td colspan="7">资料列表加载失败，请稍后重试</td></tr>';return;}
   if(!r)return;
-  if(!r.ok){tb.innerHTML=`<tr><td colspan="6">资料列表加载失败 ${r.status}</td></tr>`;return;}
+  if(!r.ok){tb.innerHTML=`<tr><td colspan="7">资料列表加载失败 ${r.status}</td></tr>`;return;}
   let data=null;
-  try{data=await r.json();}catch(e){tb.innerHTML='<tr><td colspan="6">资料列表解析失败</td></tr>';return;}
+  try{data=await r.json();}catch(e){tb.innerHTML='<tr><td colspan="7">资料列表解析失败</td></tr>';return;}
   libTotal=data.count;
   if(libOffset>0&&!data.files.length){libOffset=Math.max(0,libOffset-30);return loadLibrary();}
   const emptyMsg=document.getElementById("emptyMsg");
@@ -1812,6 +1896,7 @@ async function loadLibrary(){
     const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
     const statusDetail=f.embedding_error||f.classification_error||f.classification_reason||(status==="document_processing"?"正在执行 Docling 文档理解；首次使用前模型已由启动脚本准备":"");
     const statusSub=(status==="embedding_skipped"||status==="embedding_failed")?"索引未完成，点击「重试构建索引」重新建立":status==="document_processing"?"Docling 解析中":"";
+    const docDate=f.document_date||"—";
     const baseName=f.title||f.original_filename||"资料";
     const assetBtns=libCanManage&&f.document_assets?`<button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|markdown" data-lib-name="${escapeHtml(baseName+"-document.md")}">Markdown</button><button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|chunks" data-lib-name="${escapeHtml(baseName+"-chunks.jsonl")}">Chunk</button>`:"";
     const catActions=(canClassify||canRetry)?`<div class="cat-actions">${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}</div>`:"";
@@ -1819,9 +1904,10 @@ async function loadLibrary(){
       <td class="fname">${escapeHtml(f.title||f.original_filename)}${aiMark}${f.note?`<small>${escapeHtml(f.note)}</small>`:""}</td>
       <td class="category-cell" title="${escapeHtml(categoryTitle||nodeName)}">${escapeHtml(nodeName)}${catActions}</td>
       <td><span class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub?`<div class="status-sub">${escapeHtml(statusSub)}</div>`:""}${canRetryIndex?`<div class="cat-actions"><button class="secondary-btn" data-retry-index="${escapeHtml(f.id)}">重试构建索引</button></div>`:""}</td>
+      <td>${escapeHtml(docDate)}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
-      <td><div class="row-actions">${libCanManage?`<button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
+      <td><div class="row-actions">${libCanManage?`<button class="secondary-btn" data-lib-rename="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">重命名</button><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
     </tr>`;
   }).join("");
   const start=libTotal?libOffset+1:0,end=Math.min(libOffset+data.files.length,libTotal);
@@ -1830,6 +1916,7 @@ async function loadLibrary(){
   const prevBtnEl=document.getElementById("prevBtn"),nextBtnEl=document.getElementById("nextBtn");
   if(prevBtnEl)prevBtnEl.disabled=libOffset===0;
   if(nextBtnEl)nextBtnEl.disabled=libOffset+30>=libTotal;
+  tb.querySelectorAll("button[data-lib-rename]").forEach(b=>b.onclick=()=>libRename(b.dataset.libRename,b.dataset.libName,b));
   tb.querySelectorAll("button[data-download]").forEach(b=>b.onclick=()=>libDownload(b.dataset.download));
   tb.querySelectorAll("button[data-retry]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retry,"classification/retry",b));
   tb.querySelectorAll("button[data-retry-index]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retryIndex,"embedding/retry",b));
@@ -1945,6 +2032,45 @@ function libClassify(id,name,button){
   };
 }
 let libClassifyClose=null;
+async function libRename(id,name,button){
+  if(document.getElementById("libRenameOverlay"))return;
+  const overlay=document.createElement("div");
+  overlay.id="libRenameOverlay";
+  overlay.style.cssText="position:fixed;inset:0;z-index:1001;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px 16px;";
+  overlay.innerHTML=`<div class="lib-rename-dialog" role="dialog" aria-modal="true" aria-label="重命名资料" style="width:min(460px,100%);margin:auto;background:var(--bg-panel,#fff);border-radius:12px;padding:20px 22px;box-shadow:0 24px 64px rgba(15,23,42,.25);">
+    <h2 style="margin:0 0 14px;font-size:16px;">重命名资料</h2>
+    <input id="libRenameInput" class="lib-upload-input" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--border-subtle,#d0d5dd);border-radius:8px;font-size:14px;" maxlength="500" value="${escapeHtml(name||"")}" aria-label="资料标题">
+    <div id="libRenameMsg" style="min-height:18px;font-size:12px;color:#b42318;margin-top:8px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px;">
+      <button class="secondary-btn" id="libRenameCancel" type="button">取消</button>
+      <button class="primary-btn" id="libRenameSave" type="button">保存</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const input=overlay.querySelector("#libRenameInput");
+  const msg=overlay.querySelector("#libRenameMsg");
+  const save=overlay.querySelector("#libRenameSave");
+  const cancel=overlay.querySelector("#libRenameCancel");
+  input.focus();input.select();
+  const close=()=>{overlay.remove();document.removeEventListener("keydown",onKey);};
+  const onKey=(e)=>{if(e.key==="Escape")close();};
+  const submit=async()=>{
+    const title=input.value.trim();
+    if(!title){msg.textContent="标题不能为空";return;}
+    save.disabled=true;msg.style.color="#667085";msg.textContent="保存中…（同时同步问答索引）";
+    try{
+      const r=await apiFetch(`/api/uploads/${encodeURIComponent(id)}/title`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({title})});
+      const j=await r.json().catch(()=>({}));
+      if(r&&r.ok){close();loadLibrary();}
+      else{msg.style.color="#b42318";msg.textContent=j.detail||("保存失败 "+(r?r.status:""));save.disabled=false;}
+    }catch(e){msg.style.color="#b42318";msg.textContent="网络错误："+e.message;save.disabled=false;}
+  };
+  save.onclick=submit;
+  cancel.onclick=close;
+  input.addEventListener("keydown",(e)=>{if(e.key==="Enter")submit();});
+  overlay.addEventListener("click",(e)=>{if(e.target===overlay)close();});
+  document.addEventListener("keydown",onKey);
+}
 async function libDelete(id,name,button){
   if(!window.confirm(`删除「${name||"未命名资料"}」？将同时删除文件与问答索引，不可恢复。`))return;
   button.disabled=true;
@@ -1971,8 +2097,13 @@ function libDownload(id){
 // ── 上传资料：in-app 弹窗，替代 uploads_admin.html 独立页跳转，保留左侧导航 ──
 let upPending=[],upTaxonomy=null,upCloseTimer=null;
 
-function openUploadModal(){
+let upSection="",upSub=""; /* 上传模态框打开时的分区上下文（归属持久化到后端） */
+function openUploadModal(section,sub){
   if(!libCanManage&&!canManageFiles())return;
+  upSection=section||(parseHash().params.get("section")||"");
+  upSub=sub||(parseHash().params.get("sub")||"");
+  if(upSection==="breadth"&&!["github","other"].includes(upSub))upSub="";
+  if(!["breadth","industry","atsc"].includes(upSection))upSection="industry";
   if(document.getElementById("uploadModalOverlay"))return;
   const overlay=document.createElement("div");
   overlay.id="uploadModalOverlay";
@@ -2030,6 +2161,76 @@ function upNormalizeDate(value){
   const pad=n=>String(n).padStart(2,"0");
   return `${y}-${pad(mo)}-${pad(d)}`;
 }
+/* v7 分段式资料日期输入：YYYY/MM/DD 逐段、自动跳段、整串粘贴、日历选择；
+   空值允许（f.upDate=""），只有三段齐全才生成 YYYY-MM-DD 并做日历级校验 */
+function upSegmentsToDate(f){
+  const y=(f.upY||"").trim(),m=(f.upM||"").trim(),d=(f.upD||"").trim();
+  if(!y&&!m&&!d)return "";
+  if(y.length===4&&m.length===2&&d.length===2)return upNormalizeDate(`${y}/${m}/${d}`);
+  return null; /* 残缺：视为未完成 */
+}
+function bindUpDateSegments(tr,f){
+  const box=tr.querySelector("[data-up-datebox]");
+  if(!box)return;
+  const segs={
+    y:box.querySelector(".lib-up-seg-y"),
+    m:box.querySelector(".lib-up-seg-m"),
+    d:box.querySelector(".lib-up-seg-d"),
+  };
+  const native=box.querySelector(".lib-up-native-date");
+  const cal=box.querySelector(".lib-up-cal");
+  const order=["y","m","d"];
+  const syncState=()=>{
+    f.upY=segs.y.value;f.upM=segs.m.value;f.upD=segs.d.value;
+    const v=upSegmentsToDate(f);
+    f.upDate=v===null?"":v; /* 残缺不写入正式值；非法（如13月）也视为空 */
+    box.classList.toggle("invalid",v===null||(f.upDate===""&&(f.upY||f.upM||f.upD)));
+  };
+  const digitsOnly=(el)=>{el.addEventListener("input",()=>{el.value=el.value.replace(/\D/g,"").slice(0,el.maxLength);});};
+  Object.values(segs).forEach(digitsOnly);
+  order.forEach((k,idx)=>{
+    const el=segs[k];
+    el.addEventListener("input",()=>{
+      el.value=el.value.replace(/\D/g,"");
+      if(el.value.length===el.maxLength&&idx<2){segs[order[idx+1]].focus();segs[order[idx+1]].select();}
+      syncState();
+    });
+    el.addEventListener("keydown",(e)=>{
+      if(e.key==="Backspace"&&!el.value&&idx>0){segs[order[idx-1]].focus();segs[order[idx-1]].value=segs[order[idx-1]].value.slice(0,-1);syncState();e.preventDefault();}
+    });
+    el.addEventListener("paste",(e)=>{
+      const text=String(e.clipboardData.getData("text")||"").trim();
+      const norm=upNormalizeDate(text);
+      if(!norm&&!/^\d{1,4}\/\d{1,2}\/\d{1,2}$/.test(text))return; /* 非日期串按默认粘贴 */
+      e.preventDefault();
+      if(norm){
+        const [Y,M,D]=norm.split("-");
+        segs.y.value=Y;segs.m.value=M;segs.d.value=D;syncState();
+      }else{
+        const parts=text.split("/");
+        segs.y.value=parts[0].padStart(4,"0").slice(0,4);
+        segs.m.value=(parts[1]||"").padStart(2,"0").slice(0,2);
+        segs.d.value=(parts[2]||"").padStart(2,"0").slice(0,2);
+        syncState();
+      }
+    });
+    el.addEventListener("blur",()=>{ /* 失焦补齐两位（年份除外） */
+      if(k!=="y"&&el.value){el.value=el.value.padStart(2,"0");syncState();}
+    });
+  });
+  if(cal){cal.addEventListener("click",()=>{
+    if(f.upDate){native.value=f.upDate;}
+    else{native.value="";}
+    try{native.showPicker();}catch(_e){native.click();}
+  });}
+  if(native){native.addEventListener("change",()=>{
+    const v=native.value; /* YYYY-MM-DD */
+    if(!v)return;
+    const [Y,M,D]=v.split("-");
+    segs.y.value=Y;segs.m.value=M;segs.d.value=D;syncState();
+  });}
+  box.classList.add("bound");
+}
 function upAddFiles(fileList){
   const duplicated=[];
   for(const f of fileList){
@@ -2041,7 +2242,7 @@ function upAddFiles(fileList){
   upRenderList();
 }
 function upTaxonomyOptions(){
-  return '<option value="">不指定</option>'+upTaxonomy.filter(c=>c.includes("/")).map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.split("/").join(" › "))}</option>`).join("");
+  return '<option value="">不指定，通过AI自动识别</option>'+upTaxonomy.filter(c=>c.includes("/")).map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c.split("/").join(" › "))}</option>`).join("");
 }
 /* 单行状态以 upPending 条目为唯一事实源（Codex P1：重渲染不得丢失 done/err 状态）：
    f.upState ∈ ""|"uploading"|"done"|"err"；f.upMsg 为状态列文本 */
@@ -2060,8 +2261,12 @@ function upRenderList(){
     return `<tr data-up-row="${i}" class="${meta.cls.trim()}">
       <td class="lib-up-fname" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}<small>${libFmtSize(f.size)}</small></td>
       <td><input class="lib-upload-input lib-up-title" type="text" placeholder="留空则自动识别" aria-label="资料标题" value="${escapeHtml(f.upTitle||"")}"></td>
-      <td><input class="lib-upload-input lib-up-date" type="date" aria-label="资料日期" value="${escapeHtml(f.upDate||"")}"></td>
-      <td><select class="lib-upload-input lib-up-cat" aria-label="行业图景节点">${upTaxonomy?upTaxonomyOptions():'<option value="">不指定</option>'}</select></td>
+      <td><div class="lib-up-datebox" data-up-datebox="${i}">
+        <input class="lib-upload-input lib-up-seg lib-up-seg-y" inputmode="numeric" maxlength="4" placeholder="YYYY" aria-label="资料日期 年" value="${escapeHtml(f.upY||"")}">/<input class="lib-upload-input lib-up-seg lib-up-seg-m" inputmode="numeric" maxlength="2" placeholder="MM" aria-label="资料日期 月" value="${escapeHtml(f.upM||"")}">/<input class="lib-upload-input lib-up-seg lib-up-seg-d" inputmode="numeric" maxlength="2" placeholder="DD" aria-label="资料日期 日" value="${escapeHtml(f.upD||"")}">
+        <input class="lib-up-native-date" type="date" tabindex="-1" aria-hidden="true" value="${escapeHtml(f.upDate||"")}">
+        <button class="lib-up-cal" type="button" aria-label="打开日历选择资料日期" title="日历选择"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
+      </div></td>
+      <td><select class="lib-upload-input lib-up-cat" aria-label="行业图景节点">${upTaxonomy?upTaxonomyOptions():'<option value="">不指定，通过AI自动识别</option>'}</select></td>
       <td><input class="lib-upload-input lib-up-note" type="text" placeholder="选填" aria-label="备注" value="${escapeHtml(f.upNote||"")}"></td>
       <td class="lib-up-op"><span class="lib-up-state">${escapeHtml(meta.text)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
     </tr>`;}).join("");
@@ -2085,7 +2290,7 @@ function upBindRowInputs(){
       el.addEventListener("input",()=>{f[key]=trim?el.value.trim():el.value;});};
     bind(".lib-up-title","upTitle",true);
     bind(".lib-up-note","upNote",true);
-    bind(".lib-up-date","upDate",false);
+    bindUpDateSegments(tr,f);
     const cat=tr.querySelector(".lib-up-cat");
     if(cat)cat.addEventListener("change",()=>{f.upCat=cat.value;});
   });
@@ -2133,6 +2338,9 @@ async function upSubmit(){
     if(f.upTitle)fd.append("title",f.upTitle);
     if(f.upCat)fd.append("primary_category",f.upCat);
     if(f.upNote)fd.append("note",f.upNote);
+    /* 分区归属：由当前入口决定，持久化到后端 */
+    if(upSection)fd.append("primary_section",upSection);
+    if(upSection==="breadth"&&upSub)fd.append("breadth_source",upSub);
     const docDate=upNormalizeDate(f.upDate);
     if(docDate)fd.append("document_date",docDate);
     f.upState="uploading";f.upMsg="";

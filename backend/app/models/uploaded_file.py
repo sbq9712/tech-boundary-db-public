@@ -41,6 +41,11 @@ class UploadedFile(Base):
     # 会以【资料日期：…】前缀写进每个分块文本，并随 chunk 元数据入索引。
     document_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
+    # v7（0024）资料库三分区：广度追踪 / 行业追踪 / ATSC内部报告；
+    # 广度追踪再分 GitHub广度情报(github) 与 其他广度情报(other)。
+    primary_section: Mapped[str] = mapped_column(String(20), nullable=False, default="industry", index=True)
+    breadth_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     # AI 填充状态，便于排查：manual | ai_filled | ai_failed | filename_fallback
     title_source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
 

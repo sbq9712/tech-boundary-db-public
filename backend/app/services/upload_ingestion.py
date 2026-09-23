@@ -597,6 +597,60 @@ def delete_uploaded_file(db: Session, record: UploadedFile) -> dict:
     }
 
 
+def rename_uploaded_file(db: Session, record: UploadedFile, new_title: str) -> dict:
+    """重命名资料标题：DB 行 + 问答索引元数据同步，不做 Docling 重解析。
+
+    - 标题人工改动后 title_source 置为 manual——后续 AI 分类不再覆盖标题；
+    - 索引同步走既有 upsert 路径：分块文本直接读自 chunks.jsonl 派生物，
+      仅标题元数据变化，不触发任何文档转换；
+    - 索引服务未配置时跳过同步（该环境资料本就不在问答索引中）。
+    """
+    title = (new_title or "").strip()
+    if not title:
+        raise UploadValidationError("标题不能为空", 400)
+    if len(title) > 500:
+        raise UploadValidationError("标题过长（最多 500 字）", 400)
+
+    record.title = title
+    record.title_source = "manual"
+    db.commit()
+    db.refresh(record)
+
+    synced = False
+    chunks: list[dict] = []
+    if record.document_assets:
+        try:
+            from app.document_ingestion.storage import document_directory
+            directory = document_directory(upload_root(), str(record.id))
+            bundle = record.document_assets.get("bundle")
+            chunks_file = (upload_root() / bundle / "chunks.jsonl") if bundle else None
+            if not chunks_file or not chunks_file.exists():
+                # 兜底：按 bundle 目录在 documents/<id>/<hash>/ 下查找
+                if directory.exists():
+                    candidates = sorted(directory.glob("*/chunks.jsonl"))
+                    chunks_file = candidates[0] if candidates else None
+            if chunks_file and chunks_file.exists():
+                chunks = [
+                    json.loads(line)
+                    for line in chunks_file.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            logger.warning("rename: failed to load chunks for %s: %s", record.id, exc)
+            chunks = []
+    if chunks:
+        apply_document_date(chunks, record.document_date)
+        try:
+            request_incremental_index(record, chunks)
+            synced = True
+        except RuntimeError as exc:
+            # 索引同步失败不阻断改名：标题已在 DB 生效，可稍后重试索引重建
+            logger.warning("rename: index sync failed for %s: %s", record.id, exc)
+
+    return {"ok": True, "id": str(record.id), "title": record.title,
+            "title_source": record.title_source, "index_synced": synced}
+
+
 def _commit_embedding_result(db, file_id: uuid.UUID, **values) -> bool:
     updated = db.execute(
         update(UploadedFile)
