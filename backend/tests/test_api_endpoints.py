@@ -899,3 +899,23 @@ def test_publish_revision_auto_deletes_original(client):
     # Original item should be deleted
     gone_resp = client.get(f"/api/info-items/{original_id}")
     assert gone_resp.status_code == 404
+
+
+def test_assistant_models_refresh_param_bypasses_cache(monkeypatch):
+    """登录用户（非 admin 也可）可带 refresh=true 强制刷新目录。"""
+    from app.routers import assistant_stream
+
+    calls = []
+
+    def fake_available(refresh=False):
+        calls.append(refresh)
+        return {"models": ["m-a", "m-b"], "default_model": "m-a", "source": "discovered"}
+
+    monkeypatch.setattr(assistant_stream, "get_available_models", fake_available)
+    with TestClient(app) as c:
+        c.headers.update({"Authorization": f"Bearer {create_token('plainuser')}"})
+        r1 = c.get("/api/assistant/models")
+        r2 = c.get("/api/assistant/models?refresh=true")
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert calls == [False, True]
+    assert r2.json()["models"] == ["m-a", "m-b"]

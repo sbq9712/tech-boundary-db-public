@@ -80,3 +80,46 @@ def test_invalid_config_never_connects(monkeypatch, url, key):
         pytest.fail("invalid configuration must not make a request")
     install(monkeypatch, handler)
     assert model_catalog.get_catalog(url, key, "old", [])["models"] == []
+
+
+def test_refresh_bypasses_cache_but_refills(monkeypatch):
+    """「更新模型列表」：refresh=true 绕过 60s 缓存重新拉取；成功后回填缓存。"""
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": [{"id": "model-" + str(len(requests))}]})
+
+    install(monkeypatch, handler)
+    url, key = "https://refresh.test/v1", "synthetic-key"
+    first = model_catalog.get_catalog(url, key, "", [])
+    assert first["models"] == ["model-1"]
+    # 缓存命中（60s 内不重新请求）
+    assert model_catalog.get_catalog(url, key, "", [])["models"] == ["model-1"]
+    assert len(requests) == 1
+    # refresh=True 绕过缓存 → 真正再拉一次，且回填缓存
+    forced = model_catalog.get_catalog(url, key, "", [], refresh=True)
+    assert forced["models"] == ["model-2"]
+    assert len(requests) == 2
+    assert model_catalog.get_catalog(url, key, "", [])["models"] == ["model-2"]
+    assert len(requests) == 2  # 回填后再次命中缓存
+
+
+def test_refresh_on_unsupported_directory_keeps_configured(monkeypatch):
+    """不支持目录的服务：refresh 也只回显显式配置模型，不报错、不泄露。"""
+    install(monkeypatch, lambda request: httpx.Response(404))
+    result = model_catalog.get_catalog(
+        "https://internal.test/v1", "test-key", "internal-a", ["internal-b"], refresh=True)
+    assert result["models"] == ["internal-b", "internal-a"]
+    assert result["source"] == "configured"
+    assert "test-key" not in str(result)
+
+
+def test_refresh_failure_fails_closed(monkeypatch):
+    """refresh 时上游报错：不返回旧缓存内容，也不暴露上游/凭据信息。"""
+    install(monkeypatch, lambda request: httpx.Response(500, text="secret-upstream"))
+    model_catalog.get_catalog("https://fail.test/v1", "private-key", "old", ["old"])
+    result = model_catalog.get_catalog("https://fail.test/v1", "private-key", "old", ["old"], refresh=True)
+    assert result["models"] == []
+    assert "secret-upstream" not in str(result)
+    assert "private-key" not in str(result)

@@ -84,9 +84,13 @@ def _stream_response(
 
 
 @router.get("/assistant/models")
-def assistant_models() -> dict:
-    """Return the model choices available in the portal selector."""
-    return get_available_models()
+def assistant_models(refresh: bool = Query(default=False)) -> dict:
+    """Return the model choices available in the portal selector.
+
+    refresh=true 由「更新模型列表」按钮使用：绕过 60s 按凭据缓存，直接向上游目录取数。
+    所有登录用户可用（非 admin 专属）；响应不含任何凭据信息。
+    """
+    return get_available_models(refresh=refresh)
 
 
 @router.get("/assistant/stream")

@@ -3085,3 +3085,11 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 /* GitHub增量包页：待接入提示条 */
 .lib-github-pending{display:flex;align-items:center;gap:10px;padding:12px 16px;margin-bottom:14px;border:1px dashed var(--border-strong,#c9cfd6);border-radius:10px;background:var(--bg-canvas,#fafafa);color:var(--text-secondary);font-size:13px;line-height:1.5}
 .lib-github-pending-badge{flex:none;padding:2px 10px;border-radius:999px;background:#fff7e6;color:#b25e09;border:1px solid #f3d19e;font-size:12px;font-weight:600}
+
+/* 模型菜单底部：更新模型列表 */
+.model-menu-foot{border-top:1px solid var(--border,#e5e7eb);margin-top:4px;padding:8px 10px 6px;display:flex;flex-direction:column;gap:6px}
+.model-menu-refresh{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:transparent;color:var(--text-secondary);font-size:12.5px;cursor:pointer;transition:background .15s,color .15s}
+.model-menu-refresh:hover:not(:disabled){background:rgba(99,102,241,.08);color:var(--brand)}
+.model-menu-refresh:disabled{opacity:.55;cursor:default}
+.model-menu-refresh-msg{font-size:12px;color:var(--text-tertiary,#6b7280);line-height:1.4}
+.model-menu-refresh-msg.err{color:#b42318}

@@ -58,8 +58,8 @@ def _parse_allowed_models() -> list[str]:
     ))
 
 
-def get_available_models() -> dict:
-    return get_catalog(AI_BASE_URL, AI_API_KEY, AI_MODEL, _parse_allowed_models())
+def get_available_models(refresh: bool = False) -> dict:
+    return get_catalog(AI_BASE_URL, AI_API_KEY, AI_MODEL, _parse_allowed_models(), refresh=refresh)
 
 
 def resolve_model(selected_model: str | None) -> str:

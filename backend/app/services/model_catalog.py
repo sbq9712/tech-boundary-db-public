@@ -13,7 +13,7 @@ _lock = threading.Lock()
 _cache: dict[str, tuple[float, dict]] = {}
 
 
-def get_catalog(base_url: str, api_key: str, default: str, configured: list[str]) -> dict:
+def get_catalog(base_url: str, api_key: str, default: str, configured: list[str], refresh: bool = False) -> dict:
     base_url = base_url.strip().rstrip("/")
     empty = {"models": [], "default_model": None, "source": "unavailable"}
     try:
@@ -23,10 +23,12 @@ def get_catalog(base_url: str, api_key: str, default: str, configured: list[str]
     if not api_key or parts.scheme not in {"http", "https"} or not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
         return {**empty, "message": "请配置当前环境的 API Key 和有效服务 URL。"}
     identity = hashlib.sha256(json.dumps([base_url, api_key, default, configured]).encode()).hexdigest()
-    with _lock:
-        cached = _cache.get(identity)
-        if cached and cached[0] > time.monotonic():
-            return dict(cached[1])
+    if not refresh:
+        # refresh=True（「更新模型列表」按钮）绕过 60s 缓存直接请求上游，成功后回填缓存
+        with _lock:
+            cached = _cache.get(identity)
+            if cached and cached[0] > time.monotonic():
+                return dict(cached[1])
     models = []
     source = "discovered"
     message = "当前 API 返回的模型目录；具体调用权限以服务端响应为准。"
