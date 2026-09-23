@@ -27,16 +27,13 @@ class UploadedFile(Base):
     # 浏览器/客户端给的原始文件名，下载时还原
 
     mime_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     storage_status: Mapped[str] = mapped_column(String(20), nullable=False, default="stored")
 
     # 元数据：管理员可手填，文本类文件可由 AI 填充
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # 公开 | 内部 | 管理员（当前是标签，不单独执行文件下载授权）
-    confidentiality: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    # 论文 | 专利 | 研报 | 网页快照 | 同事材料 | 付费数据库 | 其他
-    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # v7（0023）：密级（confidentiality）与来源类型（source_type）已随迁移移除；
+    # 不再作为资料库业务字段存在。
     # 旧版自由文本领域标签，仅为历史兼容保留；新上传使用版本化分类字段。
     domain_refs: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)

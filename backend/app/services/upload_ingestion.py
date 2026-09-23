@@ -19,10 +19,6 @@ from fastapi import UploadFile
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.core.classification import (
-    AI_CONFIDENTIALITY_LEVELS,
-    normalize_confidentiality,
-)
 from app.db.session import SessionLocal
 from app.models.uploaded_file import UploadedFile
 
@@ -55,7 +51,6 @@ INDEX_MODEL = "bge-m3"
 INDEX_DIM = 1024
 
 
-SOURCE_TYPES = {"论文", "专利", "研报", "网页快照", "同事材料", "付费数据库", "其他"}
 RESULT_LABELS = {"未分类", "不相关"}
 
 
@@ -415,8 +410,7 @@ def request_ai_classification(text: str, taxonomy: Taxonomy) -> dict:
         "且不得包含未分类或不相关。primary_category 禁止输出未分类；"
         "无法确定归入某个具体类别（证据不足或超出目录覆盖范围）时，一律选不相关。\n"
         "JSON 格式："
-        '{"title":"不超过60字的中文标题","confidentiality":"公开|内部",'
-        '"source_type":"论文|专利|研报|网页快照|同事材料|付费数据库|其他",'
+        '{"title":"不超过60字的中文标题",'
         '"primary_category":"候选目录中的精确值","secondary_categories":[],"confidence":0.0,"reason":"简短依据"}\n'
         f"分类目录版本：{taxonomy.version}\n候选目录：{category_json}\n\n"
         f"资料文本（可能为整篇代表性采样）：\n{text[:CLASSIFICATION_BUDGET_CHARS]}"
@@ -487,21 +481,12 @@ def request_ai_classification(text: str, taxonomy: Taxonomy) -> dict:
     except (TypeError, ValueError):
         confidence = None
 
-    try:
-        ai_confidentiality = normalize_confidentiality(result.get("confidentiality"))
-    except ValueError:
-        ai_confidentiality = None
-    if ai_confidentiality not in AI_CONFIDENTIALITY_LEVELS:
-        ai_confidentiality = None
-
     reason = str(result.get("reason") or "").strip()[:2000] or None
     if coerced_irrelevant:
         reason = ((reason + "；") if reason else "") + "模型未给出具体分类，按不相关处理"
 
     return {
         "title": str(result.get("title") or "").strip()[:500] or None,
-        "confidentiality": ai_confidentiality,
-        "source_type": str(result.get("source_type") or "").strip(),
         "primary_category": primary,
         "secondary_categories": secondary,
         "confidence": confidence,
@@ -537,8 +522,6 @@ def request_incremental_index(record: UploadedFile, chunks: list[dict]) -> dict:
         "title": record.title or record.original_filename,
         "primary_category": record.primary_category or "未分类",
         "secondary_categories": record.secondary_categories or [],
-        "confidentiality": record.confidentiality,
-        "source_type": record.source_type,
         "checksum_sha256": record.checksum_sha256,
         "created_at": record.created_at.isoformat() if record.created_at else None,
         "chunks": chunks,
@@ -738,10 +721,6 @@ def _process_uploaded_file_impl(uid: uuid.UUID) -> bool:
                 if record.title_source != "manual" and result["title"]:
                     values["title"] = result["title"]
                     values["title_source"] = "ai_filled"
-                if not record.confidentiality and result["confidentiality"] in AI_CONFIDENTIALITY_LEVELS:
-                    values["confidentiality"] = result["confidentiality"]
-                if not record.source_type and result["source_type"] in SOURCE_TYPES:
-                    values["source_type"] = result["source_type"]
                 if not _commit_processing_result(db, uid, **values):
                     return False
             db.refresh(record)

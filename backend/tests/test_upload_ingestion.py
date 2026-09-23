@@ -224,7 +224,7 @@ def test_manual_classification_accepts_non_leaf_node():
     assert exc_info.value.status_code == 400
 
 
-def test_ai_confidentiality_never_promotes_to_admin(monkeypatch):
+def test_ai_classification_ignores_confidentiality_and_source_type(monkeypatch):
     taxonomy = upload_ingestion.load_taxonomy()
     category = taxonomy.business_categories[0]
 
@@ -263,7 +263,9 @@ def test_ai_confidentiality_never_promotes_to_admin(monkeypatch):
 
     result = upload_ingestion.request_ai_classification("测试资料", taxonomy)
 
-    assert result["confidentiality"] is None
+    # v7（0023）：密级/来源类型已从资料库移除——AI 即便返回这些键也不落库、不透出
+    assert "confidentiality" not in result
+    assert "source_type" not in result
 
 
 
@@ -342,8 +344,6 @@ def test_incremental_index_request_contains_durable_metadata(monkeypatch):
         title="测试资料",
         primary_category="通用技术/材料工程/特种功能材料/催化材料",
         secondary_categories=["通用技术/材料"],
-        confidentiality="内部",
-        source_type="研报",
         checksum_sha256="a" * 64,
         created_at=datetime(2026, 8, 3, tzinfo=timezone.utc),
     )
@@ -361,6 +361,9 @@ def test_incremental_index_request_contains_durable_metadata(monkeypatch):
     assert captured["json"]["primary_category"] == "通用技术/材料工程/特种功能材料/催化材料"
     assert captured["json"]["checksum_sha256"] == "a" * 64
     assert captured["json"]["chunks"] == chunks
+    # v7（0023）：增量索引负载不再携带已移除的密级/来源类型
+    assert "confidentiality" not in captured["json"]
+    assert "source_type" not in captured["json"]
 
 
 def test_representative_sample_returns_small_whole():

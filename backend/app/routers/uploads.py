@@ -22,12 +22,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.classification import normalize_confidentiality
 from app.core.security import get_current_user, require_admin, require_upload
 from app.db.session import get_db
 from app.models.uploaded_file import UploadedFile
 from app.services.upload_ingestion import (
-    SOURCE_TYPES,
     StoredUpload,
     UploadValidationError,
     classification_status_for,
@@ -113,13 +111,12 @@ def _serialize(record: UploadedFile) -> dict:
         "original_filename": record.original_filename,
         "stored_filename": record.stored_filename,
         "title": record.title,
-        "confidentiality": record.confidentiality,
-        "source_type": record.source_type,
         "domain_refs": record.domain_refs or [],
         "note": record.note,
         "title_source": record.title_source,
         "mime_type": record.mime_type,
-        "size_bytes": record.size_bytes,
+        # 资料日期（管理员填写，YYYY-MM-DD 或空）
+        "document_date": record.document_date,
         "checksum_sha256": record.checksum_sha256,
         "storage_status": record.storage_status,
         "taxonomy_version": record.taxonomy_version,
@@ -268,8 +265,6 @@ async def upload_files(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     title: str | None = Form(None),
-    confidentiality: str | None = Form(None),
-    source_type: str | None = Form(None),
     note: str | None = Form(None),
     primary_category: str | None = Form(None),
     document_date: str | None = Form(None),
@@ -280,12 +275,6 @@ async def upload_files(
         raise HTTPException(400, "未提供文件")
     if title and len(files) > 1:
         raise HTTPException(400, "批量上传不能共用标题，请留空让系统逐文件生成")
-    try:
-        confidentiality = normalize_confidentiality(confidentiality)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    if source_type and source_type not in SOURCE_TYPES:
-        raise HTTPException(400, f"来源类型只能是：{', '.join(sorted(SOURCE_TYPES))}")
 
     for upload in files:
         try:
@@ -317,12 +306,9 @@ async def upload_files(
                 stored_filename=stored.stored_filename,
                 original_filename=original_filename,
                 mime_type=upload.content_type,
-                size_bytes=stored.size_bytes,
                 checksum_sha256=stored.checksum_sha256,
                 storage_status="stored",
                 title=manual_title or fallback_title,
-                confidentiality=confidentiality,
-                source_type=source_type,
                 domain_refs=None,
                 note=note,
                 document_date=document_date,
@@ -362,7 +348,6 @@ async def upload_files(
 
 @router.get("/uploads")
 def list_uploads(
-    source_type: str | None = None,
     primary_category: str | None = None,
     classification_status: str | None = None,
     limit: int = 100,
@@ -371,8 +356,6 @@ def list_uploads(
     db: Session = Depends(get_db),
 ) -> dict:
     filters = []
-    if source_type:
-        filters.append(UploadedFile.source_type == source_type)
     if primary_category:
         filters.append(UploadedFile.primary_category == primary_category)
     if classification_status:
@@ -495,12 +478,14 @@ def download_upload(
 
     safe_name = record.original_filename.replace("\r", " ").replace("\n", " ")
     quoted_name = quote(safe_name, safe="")
+    # v7（0023）：size_bytes 业务字段已移除，Content-Length 以实际文件为准
+    content_length = path.stat().st_size
     return StreamingResponse(
         iterfile(),
         media_type=record.mime_type or "application/octet-stream",
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{quoted_name}",
-            "Content-Length": str(record.size_bytes),
+            "Content-Length": str(content_length),
         },
     )
 

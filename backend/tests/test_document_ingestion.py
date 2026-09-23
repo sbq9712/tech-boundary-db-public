@@ -374,9 +374,9 @@ def test_upload_status_exposes_docling_before_classification():
     record = SimpleNamespace(
         storage_status="stored", embedding_status="processing", document_assets=None,
         classification_status="pending", id=uuid.uuid4(), original_filename="paper.pdf",
-        chunk_count=0, stored_filename="objects/a.pdf", title="paper", confidentiality=None,
-        source_type=None, domain_refs=None, note=None, title_source="filename_fallback",
-        mime_type="application/pdf", size_bytes=10, checksum_sha256="a" * 64,
+        chunk_count=0, stored_filename="objects/a.pdf", title="paper",
+        domain_refs=None, note=None, title_source="filename_fallback",
+        mime_type="application/pdf", document_date="2026-09-01", checksum_sha256="a" * 64,
         taxonomy_version=None, primary_category=None, secondary_categories=[],
         classification_confidence=None, classification_source=None, classification_reason=None,
         classification_error=None, classification_attempts=0, classified_at=None,
