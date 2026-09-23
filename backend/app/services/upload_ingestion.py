@@ -507,6 +507,44 @@ def _commit_processing_result(db, file_id: uuid.UUID, **values) -> bool:
     return updated.rowcount == 1
 
 
+def sync_breadth_manual_record(db: Session, record: UploadedFile, text: str | None) -> None:
+    """广度追踪/其他广度情报：一个上传文件持久对应一条广度总表记录。
+
+    - 幂等：upload_id 唯一，重复处理只更新不新插（1 文件 = 1 广度记录）；
+    - 正文取 Docling 提取文本的截断（不重解析，不额外消耗）；
+    - 等级默认 0（不设置人工等级）；删除资料时随 FK 级联删除。
+    """
+    from app.models.breadth_manual_record import BreadthManualRecord
+
+    if record.primary_section != "breadth" or record.breadth_source != "other":
+        return
+    existing = db.scalar(
+        select(BreadthManualRecord).where(BreadthManualRecord.upload_id == record.id)
+    )
+    body = (text or "").strip()[:20000] or None
+    if existing is not None:
+        existing.title = record.title or existing.title
+        existing.document_date = record.document_date
+        if body:
+            existing.body = body
+        return
+    db.add(
+        BreadthManualRecord(
+            upload_id=record.id,
+            user_id=record.submitted_by,
+            title=record.title or record.original_filename,
+            body=body,
+            category=record.primary_category,
+            document_date=record.document_date,
+            level=0,
+            intelligence_type="literature" if (record.mime_type or "").startswith("application/") else "news",
+            source_name=record.original_filename,
+            content_hash=record.checksum_sha256,
+        )
+    )
+    db.commit()
+
+
 def request_incremental_index(record: UploadedFile, chunks: list[dict]) -> dict:
     """Send Docling semantic chunks without re-chunking or losing provenance."""
     if not chunks:
@@ -616,6 +654,15 @@ def rename_uploaded_file(db: Session, record: UploadedFile, new_title: str) -> d
     db.commit()
     db.refresh(record)
 
+    # 其他广度情报：广度总表记录标题同步（读侧合并层数据）
+    from app.models.breadth_manual_record import BreadthManualRecord
+    breadth_record = db.scalar(
+        select(BreadthManualRecord).where(BreadthManualRecord.upload_id == record.id)
+    )
+    if breadth_record is not None:
+        breadth_record.title = record.title
+        db.commit()
+
     synced = False
     chunks: list[dict] = []
     if record.document_assets:
@@ -643,8 +690,9 @@ def rename_uploaded_file(db: Session, record: UploadedFile, new_title: str) -> d
         try:
             request_incremental_index(record, chunks)
             synced = True
-        except RuntimeError as exc:
+        except (RuntimeError, httpx.TransportError) as exc:
             # 索引同步失败不阻断改名：标题已在 DB 生效，可稍后重试索引重建
+            # （TransportError 覆盖检索服务停机/超时等网络层失败）
             logger.warning("rename: index sync failed for %s: %s", record.id, exc)
 
     return {"ok": True, "id": str(record.id), "title": record.title,
@@ -796,6 +844,8 @@ def _process_uploaded_file_impl(uid: uuid.UUID) -> bool:
         if db.get(UploadedFile, uid) is None:
             request_incremental_index_delete(str(uid))
             return False
+        db.refresh(record)
+        sync_breadth_manual_record(db, record, text)
         return _commit_embedding_result(
             db,
             uid,

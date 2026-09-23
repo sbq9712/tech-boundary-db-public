@@ -4,6 +4,8 @@ import logging
 import subprocess
 import tempfile
 import uuid
+
+import httpx
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -510,6 +512,15 @@ def override_upload_classification(
     record.chunk_count = 0
     db.commit()
     db.refresh(record)
+    # 其他广度情报：人工改分类同步到广度总表记录
+    from app.models.breadth_manual_record import BreadthManualRecord
+    breadth_record = db.scalar(
+        select(BreadthManualRecord).where(BreadthManualRecord.upload_id == record.id)
+    )
+    if breadth_record is not None:
+        breadth_record.category = primary
+        breadth_record.document_date = record.document_date
+        db.commit()
     background_tasks.add_task(process_uploaded_file, str(record.id))
     return _serialize(record)
 
@@ -589,7 +600,8 @@ def delete_upload(
         raise HTTPException(409, "资料正在分类或建立索引，请稍后再删除")
     try:
         result = delete_uploaded_file(db, record)
-    except RuntimeError as exc:
+    except (RuntimeError, httpx.TransportError) as exc:
+        # 网络层失败与 RuntimeError 同类处理：保证“记录已删但问答仍可检索”不出现
         raise HTTPException(502, "问答索引删除失败，资料未被删除：" + str(exc)) from exc
     return result
 

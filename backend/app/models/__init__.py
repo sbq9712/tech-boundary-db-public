@@ -7,6 +7,7 @@ from app.models.knowledge_node import TechnologyNode, IndustryNode, TechIndustry
 from app.models.knowledge_artifact import KnowledgeArtifact
 from app.models.conversation import ConversationSession, ConversationMessage, ConversationAgentRun, UserResearchProfile, UserResearchMemory
 from app.models.uploaded_file import UploadedFile
+from app.models.breadth_manual_record import BreadthManualRecord
 
 __all__ = [
     "Domain", "InfoItem", "InfoItemDomain", "User",
@@ -16,4 +17,5 @@ __all__ = [
     "KnowledgeArtifact",
     "ConversationSession", "ConversationMessage", "ConversationAgentRun", "UserResearchProfile", "UserResearchMemory",
     "UploadedFile",
+    "BreadthManualRecord",
 ]

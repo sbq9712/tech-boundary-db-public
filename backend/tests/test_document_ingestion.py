@@ -236,6 +236,8 @@ def test_ingestion_index_failure_preserves_assets_for_retry(monkeypatch, tmp_pat
         embedding_status="pending",
         embedding_error=None,
         chunk_count=0,
+        primary_section="industry",
+        breadth_source=None,
     )
     updates = []
 
@@ -436,6 +438,8 @@ def test_irrelevant_uploads_are_indexed_by_default_and_keep_label(monkeypatch, t
         document_date=None,
         classification_status="irrelevant",
         primary_category="不相关",
+        primary_section="industry",
+        breadth_source=None,
         embedding_status="pending",
         embedding_error=None,
         chunk_count=0,
@@ -503,6 +507,8 @@ def test_document_date_is_stamped_into_indexed_chunks(monkeypatch, tmp_path):
         document_date="2026-09-18",
         classification_status="classified",
         primary_category="通用技术/催化剂",
+        primary_section="industry",
+        breadth_source=None,
         embedding_status="pending",
         embedding_error=None,
         chunk_count=0,

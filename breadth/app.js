@@ -707,6 +707,32 @@ async function load() {
       raw = await getJson('./data/processed/all-records-lite.json');
     }
     const arr = Array.isArray(raw) ? raw : (raw.records || []);
+    // ── 其他广度情报：真实入表的人工记录读侧合并 ──
+    // 拉取持久化的 manual-records（短键与 meta 分片对齐），追加到总表记录流：
+    // 搜索/分类/日期/等级视图/计数自动与上游记录一致，同一记录只出现一次。
+    try {
+      const token = (window.Auth && typeof Auth.getToken === 'function') ? Auth.getToken() : (localStorage.getItem('auth_token') || '');
+      const resp = await fetch('/api/breadth/manual-records?limit=2000', {
+        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+      });
+      if (resp.ok) {
+        const payload = await resp.json();
+        const manual = Array.isArray(payload.records) ? payload.records : [];
+        const keys = new Set(arr.map(r => String(r.t || '') + '|' + String(r.d || '') + '|' + String(r.u || '')));
+        for (const m of manual) {
+          const key = String(m.t || '') + '|' + String(m.d || '') + '|' + String(m.u || '');
+          if (keys.has(key)) continue; // 幂等：同一记录不重复入表
+          keys.add(key);
+          arr.push({
+            t: m.t, d: m.d, c: m.c, lv: m.lv, a: m.a, i: m.i, u: m.u,
+            source: 'manual-import', lv_manual: true, upload_id: m.upload_id,
+            record_id: m.id, kp: m.kp || [], hb: m.hb || 1,
+            b: m.body || '', fb: m.body || '', as: m.ai_summary || '',
+          });
+        }
+        window.__MANUAL_RECORD_COUNT__ = manual.length;
+      }
+    } catch (e) { console.warn('manual-records merge skipped:', e); }
     // Expand short keys to full names — optimized loop
     state.allRecords = new Array(arr.length);
     state._bodyMap = new Map(); // index → body text (populated in Phase 2)

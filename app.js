@@ -1898,6 +1898,8 @@ async function loadLibrary(){
     const statusSub=(status==="embedding_skipped"||status==="embedding_failed")?"索引未完成，点击「重试构建索引」重新建立":status==="document_processing"?"Docling 解析中":"";
     const docDate=f.document_date||"—";
     const baseName=f.title||f.original_filename||"资料";
+    const breadthViewBtn=(section==="breadth"&&sub==="other"&&libCanManage)
+      ?`<button class="secondary-btn" data-lib-breadth-view="${escapeHtml(f.id)}" data-bv-title="${escapeHtml(f.title||f.original_filename||"")}" data-bv-date="${escapeHtml(f.document_date||"")}">在广度总表中查看</button>`:"";
     const assetBtns=libCanManage&&f.document_assets?`<button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|markdown" data-lib-name="${escapeHtml(baseName+"-document.md")}">Markdown</button><button class="secondary-btn" data-lib-asset="${escapeHtml(f.id)}|chunks" data-lib-name="${escapeHtml(baseName+"-chunks.jsonl")}">Chunk</button>`:"";
     const catActions=(canClassify||canRetry)?`<div class="cat-actions">${canClassify?`<button class="secondary-btn" data-lib-classify="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">人工分类</button>`:""}${canRetry?`<button class="secondary-btn" data-retry="${escapeHtml(f.id)}">重试分类</button>`:""}</div>`:"";
     return `<tr>
@@ -1907,7 +1909,7 @@ async function loadLibrary(){
       <td>${escapeHtml(docDate)}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
-      <td><div class="row-actions">${libCanManage?`<button class="secondary-btn" data-lib-rename="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">重命名</button><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
+      <td><div class="row-actions">${breadthViewBtn}${libCanManage?`<button class="secondary-btn" data-lib-rename="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">重命名</button><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
     </tr>`;
   }).join("");
   const start=libTotal?libOffset+1:0,end=Math.min(libOffset+data.files.length,libTotal);
@@ -1916,6 +1918,9 @@ async function loadLibrary(){
   const prevBtnEl=document.getElementById("prevBtn"),nextBtnEl=document.getElementById("nextBtn");
   if(prevBtnEl)prevBtnEl.disabled=libOffset===0;
   if(nextBtnEl)nextBtnEl.disabled=libOffset+30>=libTotal;
+  tb.querySelectorAll("button[data-lib-breadth-view]").forEach(b=>b.onclick=()=>{
+    const p=new URLSearchParams();p.set("alert","all");p.set("focus_title",b.dataset.bvTitle);if(b.dataset.bvDate)p.set("focus_date",b.dataset.bvDate);setRoute("breadth",p);
+  });
   tb.querySelectorAll("button[data-lib-rename]").forEach(b=>b.onclick=()=>libRename(b.dataset.libRename,b.dataset.libName,b));
   tb.querySelectorAll("button[data-download]").forEach(b=>b.onclick=()=>libDownload(b.dataset.download));
   tb.querySelectorAll("button[data-retry]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retry,"classification/retry",b));
