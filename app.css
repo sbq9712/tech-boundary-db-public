@@ -221,17 +221,21 @@ a:hover{color:var(--brand-lighter)}
 .sidebar-nav-item:hover{background:var(--bg-surface);color:var(--text-primary);border-radius:var(--radius-md)}
 .sidebar-nav-item:focus-visible{outline:2px solid var(--brand);outline-offset:-2px;border-radius:var(--radius-md)}
 .sidebar-nav-item.active{background:var(--brand-bg);color:var(--brand);font-weight:600;border-radius:var(--radius-md)}
-/* 收起时：导航项居中，会话中枢隐藏 */
-/* v7 收起态：导航容器左右留 8px——选中背景成为 40px 宽小圆角矩形（不铺满 rail），
-   图标中心仍在 rail 中线 x=28，与展开态完全一致 */
+/* 收起时：导航项与展开态使用完全相同的左侧固定几何（v8 根因修复）。
+   旧实现用 justify-content:center 在 56px rail 内居中，但 .sidebar 有 1px 右边框
+   （内容宽 55px），居中中心落在 27.5px，与展开态 28px 差半像素——这就是反复出现的
+   "展开/收起时图标轻微位移"的根因。现在收起态不再居中：brand/导航/头像全部沿用
+   展开态的左缘 padding（brand 16px、nav 8+8px、account 12px+btn 同款），
+   图标中线两态均落在 x=28，由构造保证零位移；宽度过渡期间图标相对侧边栏左缘不动。 */
 .sidebar.collapsed .sidebar-nav{padding:12px 8px}
-.sidebar.collapsed .sidebar-nav-item{justify-content:center;padding:8px;border-radius:var(--radius-md)}
-.sidebar.collapsed .sidebar-brand{padding-left:0;padding-right:0}
-.sidebar.collapsed .sidebar-brand-btn{justify-content:center;width:100%;padding:0}
+.sidebar.collapsed .sidebar-nav-item{width:40px;justify-content:center;padding:8px;border-radius:var(--radius-md);flex:none}
+.sidebar.collapsed .sidebar-brand{padding-left:16px;padding-right:0}
+.sidebar.collapsed .sidebar-brand-btn{justify-content:flex-start;width:100%;padding:0;gap:10px}
 .sidebar.collapsed .sidebar-collapse-side{display:none}
-.sidebar.collapsed .sidebar-account{padding-left:0;padding-right:0}
-.sidebar.collapsed .sidebar-avatar{margin-left:0}
-.sidebar.collapsed .sidebar-account-btn{justify-content:center;width:100%}
+.sidebar.collapsed .sidebar-account{padding-left:12px;padding-right:0}
+.sidebar.collapsed .sidebar-avatar{margin-left:-3px}
+.sidebar.collapsed .sidebar-account-btn{justify-content:flex-start;padding:4px}
+.sidebar.collapsed .sidebar-account-btn .sidebar-nav-label{display:none}
 /* v7 修复：「历史对话」折叠箭头根因修复——
    旧规则 `.sidebar-toggle .sidebar-toggle-chevron.is-down{display:none}` 让收起态
    的向下箭头永远消失（折叠按钮形同虚设的 CSS 层根因之一）。
@@ -1336,6 +1340,13 @@ a:hover{color:var(--brand-lighter)}
   border-radius:0;
   box-shadow:none;
   background:transparent;
+}
+/* v8：门户初始态抽屉展开时问答区避让抽屉（输入框/发送按钮不再被面板遮挡）；
+   会话态抽屉自动收起后问答区恢复全宽。窄屏(≤900px)抽屉为全屏浮层，不做避让。 */
+@media(min-width:901px){
+  .home-body:not(.drawer-collapsed) .home-knowledge-section{
+    right:calc(var(--drawer-w) + 40px);
+  }
 }
 .knowledge-heading{flex:0 0 auto}
 .knowledge-heading-actions{
@@ -3033,37 +3044,40 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 }
 
 /* ── v7 资料库三分区导航 ── */
+/* v8：资料库三分区按钮与深度调研页"调研报告/行业图景"标签同款卡片样式 */
 .lib-section-nav{display:flex;gap:8px;flex-wrap:wrap}
 .lib-section-btn{
-  flex:1 1 0;min-width:150px;
-  padding:12px 18px;
-  border:1px solid var(--border-standard);
-  border-radius:var(--radius-md);
-  background:var(--bg-canvas);
-  color:var(--text-primary);
-  font-size:14px;font-weight:600;cursor:pointer;
-  transition:border-color .15s ease,background .15s ease,box-shadow .15s ease;
+  flex:1 1 0;min-width:120px;
+  text-align:center;white-space:nowrap;
+  padding:9px 18px;
+  border:1px solid var(--border-subtle);
+  border-radius:999px;
+  background:var(--bg-panel);
+  color:var(--text-secondary);
+  font-size:13px;font-weight:500;cursor:pointer;
+  transition:all .15s ease;
 }
-.lib-section-btn:hover{border-color:var(--border-strong);background:var(--bg-surface)}
+.lib-section-btn:hover{background:var(--bg-surface);color:var(--text-primary)}
 .lib-section-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
-.lib-section-btn.active{background:var(--brand);border-color:var(--brand);color:#fff}
-.lib-section-chooser{padding:32px 8px}
+.lib-section-btn.active{background:var(--brand-bg);border-color:var(--brand-border);color:var(--brand);font-weight:600}
+/* v8：二选一页整体垂直方向更居中；广度两入口卡片放大 */
+.lib-section-chooser{padding:32px 8px;display:flex;flex-direction:column;justify-content:center;min-height:calc(100vh - 140px)}
 .lib-chooser-hint{margin-top:18px;text-align:center;color:var(--text-tertiary);font-size:13px}
-.lib-breadth-entries{display:flex;gap:12px;margin-top:22px}
+.lib-breadth-entries{display:flex;gap:16px;margin-top:26px;max-width:720px;width:100%;margin-left:auto;margin-right:auto}
 .lib-breadth-entry{
-  flex:1 1 0;min-width:200px;
-  display:flex;flex-direction:column;gap:4px;align-items:flex-start;
-  padding:16px 18px;
+  flex:1 1 0;min-width:280px;
+  display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;
+  padding:34px 26px;
   border:1px solid var(--border-standard);
-  border-radius:var(--radius-md);
+  border-radius:var(--radius-lg,14px);
   background:var(--bg-panel);
   cursor:pointer;text-align:left;
   transition:border-color .15s ease,box-shadow .15s ease,transform .1s ease;
 }
 .lib-breadth-entry:hover{border-color:var(--brand);box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .lib-breadth-entry:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
-.lib-breadth-entry-name{font-size:14px;font-weight:600;color:var(--text-primary)}
-.lib-breadth-entry-desc{font-size:12px;color:var(--text-tertiary)}
+.lib-breadth-entry-name{font-size:16px;font-weight:600;color:var(--text-primary)}
+.lib-breadth-entry-desc{font-size:13px;color:var(--text-tertiary);text-align:center}
 
 /* ── v7 分段式资料日期输入 ── */
 .lib-up-datebox{display:flex;align-items:center;gap:2px;position:relative}
