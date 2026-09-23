@@ -1341,13 +1341,6 @@ a:hover{color:var(--brand-lighter)}
   box-shadow:none;
   background:transparent;
 }
-/* v8：门户初始态抽屉展开时问答区避让抽屉（输入框/发送按钮不再被面板遮挡）；
-   会话态抽屉自动收起后问答区恢复全宽。窄屏(≤900px)抽屉为全屏浮层，不做避让。 */
-@media(min-width:901px){
-  .home-body:not(.drawer-collapsed) .home-knowledge-section{
-    right:calc(var(--drawer-w) + 40px);
-  }
-}
 .knowledge-heading{flex:0 0 auto}
 .knowledge-heading-actions{
   display:flex;
@@ -3061,9 +3054,11 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 .lib-section-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .lib-section-btn.active{background:var(--brand-bg);border-color:var(--brand-border);color:var(--brand);font-weight:600}
 /* v8：二选一页整体垂直方向更居中；广度两入口卡片放大 */
-.lib-section-chooser{padding:32px 8px;display:flex;flex-direction:column;justify-content:center;min-height:calc(100vh - 140px)}
+/* v8b：一级三分区按钮恒定置顶（与子页按钮同一位置：.main 内首个元素），不再整页垂直居中；
+   广度二选一入口在剩余空间垂直方向靠近居中 */
+.lib-section-chooser{padding:0;display:flex;flex-direction:column;justify-content:flex-start;min-height:calc(100vh - 140px)}
 .lib-chooser-hint{margin-top:18px;text-align:center;color:var(--text-tertiary);font-size:13px}
-.lib-breadth-entries{display:flex;gap:16px;margin-top:26px;max-width:720px;width:100%;margin-left:auto;margin-right:auto}
+.lib-breadth-entries{display:flex;gap:16px;margin:auto;max-width:720px;width:100%}
 .lib-breadth-entry{
   flex:1 1 0;min-width:280px;
   display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;
