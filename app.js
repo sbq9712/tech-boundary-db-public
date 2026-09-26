@@ -1857,6 +1857,7 @@ function libraryView(){
       <div class="lib-breadth-entries">
         <button class="lib-breadth-entry" type="button" data-lib-sub="github"><span class="lib-breadth-entry-name">GitHub广度情报</span><span class="lib-breadth-entry-desc">来自 GitHub 的广度情报增量包</span></button>
         <button class="lib-breadth-entry" type="button" data-lib-sub="other"><span class="lib-breadth-entry-name">其他广度情报</span><span class="lib-breadth-entry-desc">人工上传整理的广度情报资料</span></button>
+        <button class="lib-breadth-entry" type="button" data-lib-master-view="1"><span class="lib-breadth-entry-name">广度情报总表</span><span class="lib-breadth-entry-desc">全量情报总表：分类树、等级视图与检索</span></button>
       </div>
     </div></section>`;
   }
@@ -1907,6 +1908,10 @@ async function initLibrary(){
     btn.onclick=()=>{
       const p=new URLSearchParams();p.set("section","breadth");p.set("sub",btn.dataset.libSub);setRoute("library",p);
     };
+  });
+  /* 广度情报总表直达入口 → #breadth */
+  document.querySelectorAll("[data-lib-master-view]").forEach(btn=>{
+    btn.onclick=()=>{location.hash="breadth";};
   });
   /* 二选一页没有列表元素，直接返回 */
   if(!section||(section==="breadth"&&!sub))return;
