@@ -10,6 +10,32 @@
   <link rel="stylesheet" href="styles.css?v=226" />
 </head>
 <body>
+  <div id="bootError" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;padding:10px 16px;font:13px/1.6 'Noto Sans SC',sans-serif;white-space:pre-wrap;">
+    <strong>广度数据加载失败：</strong><span id="bootErrorMsg"></span>
+  </div>
+  <script>
+    (function(){
+      function show(msg){
+        try{
+          var b=document.getElementById('bootError'),t=document.getElementById('bootErrorMsg');
+          if(b&&t){t.textContent=String(msg).slice(0,600);b.style.display='block';}
+        }catch(_e){}
+        try{console.error('[breadth-boot]',msg);}catch(_e){}
+      }
+      window.__showBootError=show;
+      window.addEventListener('error',function(e){
+        if(e&&e.target&&(e.target.tagName==='SCRIPT'||e.target.tagName==='LINK')){
+          show('资源加载失败：'+(e.target.src||e.target.href||'(未知)'));
+        }else{
+          show((e&&e.message?e.message:'脚本错误')+(e&&e.filename?(' @ '+e.filename+':'+e.lineno):''));
+        }
+      },true);
+      window.addEventListener('unhandledrejection',function(e){
+        var r=e&&e.reason;
+        show('异步加载失败：'+(r&&r.message?r.message:String(r)));
+      });
+    })();
+  </script>
   <div class="layout">
     <aside class="sidebar" id="sidebar">
       <div class="view-tabs" id="viewTabs">
