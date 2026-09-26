@@ -8,6 +8,7 @@ COPY assets /usr/share/nginx/html/assets
 COPY data/*.json data/*.csv /usr/share/nginx/html/data/
 COPY breadth/index.html breadth/app.js breadth/styles.css /usr/share/nginx/html/breadth/
 COPY breadth/data/category-order-data.js breadth/data/category-order.json /usr/share/nginx/html/breadth/data/
+COPY breadth/version.txt /usr/share/nginx/html/breadth/version.txt
 COPY breadth/data/processed /usr/share/nginx/html/breadth/data/processed
 
 # A rebuilt web image must never silently ship without the pinned breadth runtime.

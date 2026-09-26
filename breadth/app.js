@@ -34,6 +34,7 @@ const state = {
   selectedTags: { news: new Set(), literature: new Set() }, // empty = all
   selectedCategories: null, // null = all selected; Set = specific selection
   categoryQuery: '',
+  categoryOrderSrc: '',
   collapsedGroups: new Set(),
   expandedClusters: new Set(),
   sortBy: 'date',
@@ -695,10 +696,17 @@ async function load() {
   } else {
     state.manifest = await getJson('./data/processed/manifest.json');
   }
-  if (window.__CATEGORY_ORDER__) {
-    state.categoryOrder = window.__CATEGORY_ORDER__.categories || [];
+  // 分类目录解析优先级：外部 data-js（随仓库更新，no-cache 最鲜）→ 页面内嵌兜底 → json 拉取。
+  // 任一来源失败都不会让分类树变成空白（见下方 data-fallback 最后兜底）。
+  if (window.__CATEGORY_ORDER__ && Array.isArray(window.__CATEGORY_ORDER__.categories) && window.__CATEGORY_ORDER__.categories.length) {
+    state.categoryOrder = window.__CATEGORY_ORDER__.categories;
+    state.categoryOrderSrc = 'data-js';
+  } else if (window.__CATEGORY_ORDER_INLINE__ && Array.isArray(window.__CATEGORY_ORDER_INLINE__.categories) && window.__CATEGORY_ORDER_INLINE__.categories.length) {
+    state.categoryOrder = window.__CATEGORY_ORDER_INLINE__.categories;
+    state.categoryOrderSrc = 'inline';
   } else {
     state.categoryOrder = (await getJson('./data/category-order.json').catch(() => ({ categories: [] }))).categories || [];
+    state.categoryOrderSrc = state.categoryOrder.length ? 'fetch' : '';
   }
   state.allRecords = [];
   try {
@@ -796,6 +804,24 @@ async function load() {
     if (!state.categoryLeaves.has(cat)) state.categoryLeaves.set(cat, new Set([cat]));
     else state.categoryLeaves.get(cat).add(cat);
   }
+
+  // ── 分类目录最后兜底：data-js/内嵌/json 全部失败时，按数据中实际出现的完整分类
+  // 路径回退渲染（不发明数据之外的类目），并在分类树顶部给出可见提示。 ──
+  if (!state.categoryOrder.length && state.allRecords.length) {
+    const seen = new Set();
+    for (const r of state.allRecords) {
+      const c = r.category || '未分类';
+      if (c && !seen.has(c)) { seen.add(c); state.categoryOrder.push(c); }
+    }
+    state.categoryOrder.sort((a, b) => a.localeCompare(b, 'zh'));
+    state.categoryOrderSrc = 'data-fallback';
+    console.warn('[breadth] 完整分类目录未能加载，已按数据回退渲染分类树');
+  }
+  window.__BREADTH_DIAG__ = {
+    orderLen: state.categoryOrder.length,
+    orderSrc: state.categoryOrderSrc,
+    records: state.allRecords.length,
+  };
 
   renderHeader();
   bindEvents();
@@ -1139,7 +1165,7 @@ function renderCategoryTree() {
     const ia = groupOrder.indexOf(a), ib = groupOrder.indexOf(b);
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
   });
-  const html = allGroups.map((group) => {
+  const groupHtml = allGroups.map((group) => {
     const node = tree[group];
     if (!node) return '';
     const collapsed = state.collapsedGroups.has(group);
@@ -1157,6 +1183,10 @@ function renderCategoryTree() {
       <div class="tree-children">${childrenHtml}</div>
     </div>`;
   }).join('');
+  const fallbackNote = state.categoryOrderSrc === 'data-fallback'
+    ? '<div class="tree-fallback-note" style="margin:6px 0;padding:6px 8px;border:1px solid #f59e0b;background:#fffbeb;color:#92400e;font-size:12px;line-height:1.6;border-radius:6px;">完整分类目录未能加载，已按数据内容回退渲染；请按 Ctrl+F5 强制刷新恢复完整目录。</div>'
+    : '';
+  const html = fallbackNote + groupHtml;
   $('categoryTree').innerHTML = html;
 }
 
