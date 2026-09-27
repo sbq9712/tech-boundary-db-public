@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # 4h auto-update takeover（spec D9）：tech-db 抓取/清洗 → 发布 → 推送 → boundary 同步。
 # 由 systemd user timer 每 4 小时调用；全部步骤幂等，失败即非零退出并由 journal 记录。
+#
+# 【已停用 2026-09-28】本脚本会在本地重跑上游 pipeline 并 git reset --hard 上游工作区。
+# 现已改为只读跟随上游 GitHub 发布的方案，请使用：
+#   scripts/refresh_breadth_from_techdb.sh
+# （systemd 单元 techdb-auto-update.service 已指向新脚本。）
+echo "[auto_update_takeover] 已停用：请改用 scripts/refresh_breadth_from_techdb.sh" >&2
+exit 1
 set -euo pipefail
 
 TECHDB="${TECHDB_DIR:-/home/rhett/tech-db-fresh}"
