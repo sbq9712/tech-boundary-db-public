@@ -124,9 +124,10 @@ services:
     ports:
       - "${TECHDB_WEB_PORT:-8080}:80"
     volumes:
-      # 广度运行时数据以只读卷挂载：hydrate_breadth_runtime.py 更新工作树后即时生效，
-      # 自动刷新（refresh_breadth_from_techdb.sh）无需重建镜像。
+      # 广度数据以只读卷挂载：独立管线（pipeline/auto_pipeline.py）发布后即时生效，
+      # 无需重建镜像。version.txt 用原 inode 截断写更新（保持单文件挂载有效）。
       - ./breadth/data/processed:/usr/share/nginx/html/breadth/data/processed:ro
+      - ./breadth/data/reports:/usr/share/nginx/html/breadth/data/reports:ro
 
   readonly-agent:
     image: techdb-readonly-agent:${TECHDB_IMAGE_TAG:-0801}

@@ -87,3 +87,17 @@ breadth/data/processed/*
 !breadth/data/processed/.gitkeep
 breadth/data/knowledge/*
 !breadth/data/knowledge/.gitkeep
+
+# 广度报告（独立管线生成，不入 Git）
+breadth/data/reports/
+# 独立广度管线的运行时存储与虚拟环境（配置类 JSON/JS 除外）
+pipeline/data/processed/
+pipeline/data/csv_cache/
+pipeline/data/reports/
+pipeline/data/*.db
+pipeline/models/
+pipeline/.venv/
+pipeline/.pipeline_state.json
+pipeline/.pipeline.lock
+pipeline/.rebuild_checkpoint.json
+pipeline/runtime/

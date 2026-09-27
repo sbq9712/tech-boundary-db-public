@@ -27,6 +27,8 @@
       window.__hideBootError=function(){ try{var b=document.getElementById('bootError'); if(b) b.style.display='none';}catch(_e){} };
       try{var rb=document.getElementById('bootReloadBtn'); if(rb) rb.addEventListener('click', function(){ location.reload(); });}catch(_e){}
       window.__BREADTH_BUILD__='20260927d';
+      window.__DATA_EPOCH__=null;
+      fetch('data/processed/auto-version.txt',{cache:'no-store'}).then(function(r){return r.ok?r.text():''}).then(function(t){var v=(t||'').trim();if(v)window.__DATA_EPOCH__=v;}).catch(function(){});
       try{
         var bd=document.createElement('div');
         bd.style.cssText='position:fixed;left:8px;bottom:6px;z-index:9998;font:10px/1.4 Consolas,monospace;color:#94a3b8;background:rgba(255,255,255,.75);padding:2px 6px;border-radius:4px;pointer-events:none;';
@@ -45,11 +47,22 @@
           var q=Object.keys(st).map(function(k){return k+'='+encodeURIComponent(st[k])}).join('&');
           fetch('version.txt?hb='+q,{cache:'no-store'}).then(function(r){return r.ok?r.text():''}).then(function(txt){
             var cur=(txt||'').trim();
-            if(cur && cur!==window.__BREADTH_BUILD__){
-              var b=document.getElementById('bootError'),s=b?b.querySelector('strong'):null,t=document.getElementById('bootErrorMsg');
-              if(b&&s&&t){s.textContent='版本提示：';t.textContent='系统已发布新版本，当前页面仍是旧版本，部分内容可能缺失。请关闭本页所有旧标签页并按 Ctrl+F5 强制刷新。';b.style.display='block';}
+            var stale=false, why='';
+            if(window.__DATA_EPOCH__){
+              return fetch('data/processed/auto-version.txt',{cache:'no-store'}).then(function(r){return r.ok?r.text():''}).then(function(t2){
+                var latest=(t2||'').trim();
+                if(latest && latest!==window.__DATA_EPOCH__){stale=true;why='系统已发布新数据（'+latest+'），当前页面仍是旧数据。点击「重新加载」或按 F5 刷新即可看到最新情报。';}
+                doBanner(stale,why);
+              });
             }
+            if(cur && cur!==window.__BREADTH_BUILD__){stale=true;why='系统已发布新版本，当前页面仍是旧版本，部分内容可能缺失。请关闭本页所有旧标签页并按 Ctrl+F5 强制刷新。';}
+            doBanner(stale,why);
           }).catch(function(){});
+          function doBanner(stale,why){
+            if(!stale)return;
+            var b=document.getElementById('bootError'),s=b?b.querySelector('strong'):null,t=document.getElementById('bootErrorMsg');
+            if(b&&s&&t){s.textContent='更新提示：';t.textContent=why;b.style.display='block';}
+          }
         }catch(_e){}
       },60000);
       window.addEventListener('error',function(e){

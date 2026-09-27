@@ -12,12 +12,15 @@ COPY breadth/version.txt /usr/share/nginx/html/breadth/version.txt
 COPY breadth/data/processed /usr/share/nginx/html/breadth/data/processed
 
 # A rebuilt web image must never silently ship without the pinned breadth runtime.
+# Shard count is dynamic (data volume decides); the invariant is that all three
+# prefix families agree and are non-zero.
 RUN set -eu; \
     runtime=/usr/share/nginx/html/breadth/data/processed; \
     for file in manifest-data.js manifest.json alert-records.json category-counts.json; do \
       test -s "$runtime/$file" || { echo "Missing breadth runtime file: $file" >&2; exit 1; }; \
     done; \
-    for prefix in lite-part meta-part summary-part; do \
-      count="$(find "$runtime" -type f -name "$prefix-*.js" | wc -l | tr -d ' ')"; \
-      test "$count" -eq 33 || { echo "Expected 33 $prefix shards, found $count" >&2; exit 1; }; \
-    done
+    lite="$(find "$runtime" -type f -name 'lite-part-*.js' | wc -l | tr -d ' ')"; \
+    meta="$(find "$runtime" -type f -name 'meta-part-*.js' | wc -l | tr -d ' ')"; \
+    summary="$(find "$runtime" -type f -name 'summary-part-*.js' | wc -l | tr -d ' ')"; \
+    test "$lite" -gt 0 -a "$lite" -eq "$meta" -a "$meta" -eq "$summary" || \
+      { echo "Shard families disagree: lite=$lite meta=$meta summary=$summary" >&2; exit 1; }
