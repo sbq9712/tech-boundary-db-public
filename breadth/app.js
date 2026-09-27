@@ -822,6 +822,7 @@ async function load() {
     orderSrc: state.categoryOrderSrc,
     records: state.allRecords.length,
   };
+  try { console.log('[breadth] build=%s | 分类目录=%d条(%s) | 记录=%d', window.__BREADTH_BUILD__ || '?', state.categoryOrder.length, state.categoryOrderSrc || 'none', state.allRecords.length); } catch (_e) {}
 
   renderHeader();
   bindEvents();

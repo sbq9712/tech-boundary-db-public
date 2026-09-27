@@ -23,7 +23,13 @@
         try{console.error('[breadth-boot]',msg);}catch(_e){}
       }
       window.__showBootError=show;
-      window.__BREADTH_BUILD__='20260927a';
+      window.__BREADTH_BUILD__='20260927b';
+      try{
+        var bd=document.createElement('div');
+        bd.style.cssText='position:fixed;left:8px;bottom:6px;z-index:9998;font:10px/1.4 Consolas,monospace;color:#94a3b8;background:rgba(255,255,255,.75);padding:2px 6px;border-radius:4px;pointer-events:none;';
+        bd.textContent='广度追踪 build '+window.__BREADTH_BUILD__;
+        document.body.appendChild(bd);
+      }catch(_e){}
       setInterval(function(){
         try{
           fetch('version.txt',{cache:'no-store'}).then(function(r){return r.ok?r.text():''}).then(function(txt){
