@@ -782,8 +782,8 @@ async function load() {
     }
   } catch (e) {
     console.error('Failed to load data:', e);
-    if (loadingHint) loadingHint.textContent = '数据加载失败，请刷新页面重试。';
-    return;
+    if (loadingHint) loadingHint.textContent = '数据加载失败：' + (e && e.message ? e.message : e);
+    throw e; // 交给启动重试逻辑（不再静默失败——静默会让分类树/记录一起消失且不可见）
   }
   state.records = state.allRecords;
   state.filtered = state.records;
@@ -1759,9 +1759,29 @@ function renderSourcePanel() {
   $('sourceBody').innerHTML = html;
 }
 
-load().catch((error) => {
-  document.body.innerHTML = `<main class="content"><div class="empty-hint"><strong>页面载入失败</strong>${esc(error.message)}</div></main>`;
-});
+(async () => {
+  const MAX = 3;
+  const show = window.__showBootError || (() => {});
+  const hide = window.__hideBootError || (() => {});
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await load();
+      hide();
+      return;
+    } catch (error) {
+      const msg = (error && error.message) ? error.message : String(error);
+      console.error('[breadth] 数据加载失败(第' + attempt + '次):', error);
+      if (attempt >= MAX) {
+        show('数据加载失败（已自动重试 ' + (MAX - 1) + ' 次）：' + msg + '。请点击右侧「重新加载」；若反复出现，请检查网络/代理对大文件传输的限制。');
+        return;
+      }
+      show('第 ' + attempt + ' 次数据加载失败（' + msg + '），正在自动重试…');
+      await new Promise(r => setTimeout(r, 1500 * attempt));
+      const hint = document.querySelector('.loading-hint');
+      if (hint) hint.textContent = '正在重新载入情报数据…';
+    }
+  }
+})();
 
 // ═══════════════════════════════════════════════════════════════
 // ── Conference Calendar View ──

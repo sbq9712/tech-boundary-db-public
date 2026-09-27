@@ -12,6 +12,7 @@
 <body>
   <div id="bootError" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;padding:10px 16px;font:13px/1.6 'Noto Sans SC',sans-serif;white-space:pre-wrap;">
     <strong>广度数据加载失败：</strong><span id="bootErrorMsg"></span>
+    <button id="bootReloadBtn" type="button" style="margin-left:12px;background:#fff;color:#b91c1c;border:none;border-radius:4px;padding:2px 10px;font:12px/1.6 sans-serif;cursor:pointer;">重新加载</button>
   </div>
   <script>
     (function(){
@@ -23,7 +24,9 @@
         try{console.error('[breadth-boot]',msg);}catch(_e){}
       }
       window.__showBootError=show;
-      window.__BREADTH_BUILD__='20260927b';
+      window.__hideBootError=function(){ try{var b=document.getElementById('bootError'); if(b) b.style.display='none';}catch(_e){} };
+      try{var rb=document.getElementById('bootReloadBtn'); if(rb) rb.addEventListener('click', function(){ location.reload(); });}catch(_e){}
+      window.__BREADTH_BUILD__='20260927c';
       try{
         var bd=document.createElement('div');
         bd.style.cssText='position:fixed;left:8px;bottom:6px;z-index:9998;font:10px/1.4 Consolas,monospace;color:#94a3b8;background:rgba(255,255,255,.75);padding:2px 6px;border-radius:4px;pointer-events:none;';
@@ -243,6 +246,20 @@
       const hint = document.querySelector('.loading-hint');
       let done = 0;
       const BATCH = Math.min(10, expectedParts);
+      // 单个分片自动重试：瞬时网络/代理故障自愈，避免一颗分片失败就让全页降级。
+      async function fetchRetry(url, attempts) {
+        let lastErr = null;
+        for (let a = 1; a <= attempts; a++) {
+          try {
+            const r = await fetch(url);
+            if (r.ok) return r;
+            lastErr = new Error(`HTTP ${r.status} @ ${url}`);
+            if (r.status === 404) return r; // 404 交给调用方语义处理（如 meta 首片降级）
+          } catch (e) { lastErr = e; }
+          if (a < attempts) await new Promise(res => setTimeout(res, 400 * a));
+        }
+        throw lastErr || new Error('fetch failed: ' + url);
+      }
       window.__BODY_SHARDS__ = {};  // shard index → loaded data (for on-demand body)
 
       // ── Tier 1: Ultra-minimal meta shards (3.9MB gzip) → instant render ──
@@ -250,7 +267,7 @@
       let useMetaShards = true;
 
       async function fetchMetaShard(j) {
-        const response = await fetch(`data/processed/meta-part-${j}.js?v=${encodeURIComponent(dataVersion)}`);
+        const response = await fetchRetry(`data/processed/meta-part-${j}.js?v=${encodeURIComponent(dataVersion)}`, 3);
         if (!response.ok) {
           if (j === 0 && response.status === 404) { useMetaShards = false; return; }
           throw new Error(`meta-part-${j}.js HTTP ${response.status}`);
@@ -282,7 +299,7 @@
           const end = Math.min(s + BATCH, expectedParts);
           await Promise.all(Array.from({ length: end - s }, async (_, k) => {
             const j = s + k;
-            const response = await fetch(`data/processed/lite-part-${j}.js?v=${encodeURIComponent(dataVersion)}`);
+            const response = await fetchRetry(`data/processed/lite-part-${j}.js?v=${encodeURIComponent(dataVersion)}`, 3);
             if (!response.ok) throw new Error(`lite-part-${j}.js HTTP ${response.status}`);
             const text = await response.text();
             const marker = 'window.__LITE_PARTS__.push(';
