@@ -26,7 +26,7 @@
       window.__showBootError=show;
       window.__hideBootError=function(){ try{var b=document.getElementById('bootError'); if(b) b.style.display='none';}catch(_e){} };
       try{var rb=document.getElementById('bootReloadBtn'); if(rb) rb.addEventListener('click', function(){ location.reload(); });}catch(_e){}
-      window.__BREADTH_BUILD__='20260927c';
+      window.__BREADTH_BUILD__='20260927d';
       try{
         var bd=document.createElement('div');
         bd.style.cssText='position:fixed;left:8px;bottom:6px;z-index:9998;font:10px/1.4 Consolas,monospace;color:#94a3b8;background:rgba(255,255,255,.75);padding:2px 6px;border-radius:4px;pointer-events:none;';
@@ -35,7 +35,14 @@
       }catch(_e){}
       setInterval(function(){
         try{
-          fetch('version.txt',{cache:'no-store'}).then(function(r){return r.ok?r.text():''}).then(function(txt){
+          var d=window.__BREADTH_DIAG__||{};
+          var tree=document.getElementById('categoryTree'),groups='-',th='-';
+          if(tree){groups=0;for(var i=0;i<tree.children.length;i++){if((' '+tree.children[i].className+' ').indexOf(' tree-group ')>=0)groups++;}th=tree.clientHeight;}
+          var bn='0';try{var bb=document.getElementById('bootError');bn=(bb&&bb.style.display!=='none')?'1':'0';}catch(_e){}
+          var cards='-';try{cards=document.querySelectorAll('#recordList .record-card').length;}catch(_e){}
+          var st={b:window.__BREADTH_BUILD__||'?',ph:window.__LOAD_PHASE__||'boot',o:(d.orderLen!=null?d.orderLen:'-'),s:(d.orderSrc||'-'),r:(d.records!=null?d.records:'-'),t:groups,th:th,c:cards,bn:bn,vh:window.innerWidth+'x'+window.innerHeight};
+          var q=Object.keys(st).map(function(k){return k+'='+encodeURIComponent(st[k])}).join('&');
+          fetch('version.txt?hb='+q,{cache:'no-store'}).then(function(r){return r.ok?r.text():''}).then(function(txt){
             var cur=(txt||'').trim();
             if(cur && cur!==window.__BREADTH_BUILD__){
               var b=document.getElementById('bootError'),s=b?b.querySelector('strong'):null,t=document.getElementById('bootErrorMsg');
@@ -250,12 +257,17 @@
       async function fetchRetry(url, attempts) {
         let lastErr = null;
         for (let a = 1; a <= attempts; a++) {
+          const ctl = ('AbortController' in window) ? new AbortController() : null;
+          const timer = ctl ? setTimeout(function(){ ctl.abort(); }, 25000) : null;
           try {
-            const r = await fetch(url);
+            const r = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
             if (r.ok) return r;
             lastErr = new Error(`HTTP ${r.status} @ ${url}`);
             if (r.status === 404) return r; // 404 交给调用方语义处理（如 meta 首片降级）
-          } catch (e) { lastErr = e; }
+          } catch (e) {
+            lastErr = (e && e.name === 'AbortError') ? new Error('超时(25s) @ ' + url) : e;
+          }
+          finally { if (timer) clearTimeout(timer); }
           if (a < attempts) await new Promise(res => setTimeout(res, 400 * a));
         }
         throw lastErr || new Error('fetch failed: ' + url);
@@ -280,6 +292,7 @@
         const payload = text.slice(start + marker.length, end2);
         metaParts[j] = JSON.parse(payload);
         done++;
+        window.__LOAD_PHASE__ = 'meta ' + done + '/' + expectedParts;
         if (hint) hint.textContent = `正在载入情报数据… ${Math.round(done / expectedParts * 100)}%`;
       }
 
@@ -309,6 +322,7 @@
             const payload = text.slice(start + marker.length, end2);
             window.__LITE_PARTS__[j] = JSON.parse(payload);
             done++;
+            window.__LOAD_PHASE__ = 'lite ' + done + '/' + expectedParts;
             if (hint) hint.textContent = `正在载入情报数据… ${Math.round(done / expectedParts * 100)}%`;
           }));
         }

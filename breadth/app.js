@@ -817,6 +817,7 @@ async function load() {
     state.categoryOrderSrc = 'data-fallback';
     console.warn('[breadth] 完整分类目录未能加载，已按数据回退渲染分类树');
   }
+  window.__LOAD_PHASE__ = 'mapping';
   window.__BREADTH_DIAG__ = {
     orderLen: state.categoryOrder.length,
     orderSrc: state.categoryOrderSrc,
@@ -824,11 +825,13 @@ async function load() {
   };
   try { console.log('[breadth] build=%s | 分类目录=%d条(%s) | 记录=%d', window.__BREADTH_BUILD__ || '?', state.categoryOrder.length, state.categoryOrderSrc || 'none', state.allRecords.length); } catch (_e) {}
 
+  window.__LOAD_PHASE__ = 'render';
   renderHeader();
   bindEvents();
   // Set initial sort active state
   const w1 = $('sortWord1'); if (w1) w1.classList.add('active');
   applyFilters();
+  window.__LOAD_PHASE__ = 'done';
 
   // Portal deep link: jump straight to the meeting calendar view
   if (state.__portalCalendar) {
