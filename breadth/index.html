@@ -40,7 +40,8 @@
           if(tree){groups=0;for(var i=0;i<tree.children.length;i++){if((' '+tree.children[i].className+' ').indexOf(' tree-group ')>=0)groups++;}th=tree.clientHeight;}
           var bn='0';try{var bb=document.getElementById('bootError');bn=(bb&&bb.style.display!=='none')?'1':'0';}catch(_e){}
           var cards='-';try{cards=document.querySelectorAll('#recordList .record-card').length;}catch(_e){}
-          var st={b:window.__BREADTH_BUILD__||'?',ph:window.__LOAD_PHASE__||'boot',o:(d.orderLen!=null?d.orderLen:'-'),s:(d.orderSrc||'-'),r:(d.records!=null?d.records:'-'),t:groups,th:th,c:cards,bn:bn,vh:window.innerWidth+'x'+window.innerHeight};
+          var sb='-';try{var sbe=document.querySelectorAll('.sidebar > .filter-block').length;var mbe=document.querySelector('.layout > main.content');sb=sbe+(mbe?'M':'m');}catch(_e){}
+          var st={b:window.__BREADTH_BUILD__||'?',ph:window.__LOAD_PHASE__||'boot',o:(d.orderLen!=null?d.orderLen:'-'),s:(d.orderSrc||'-'),r:(d.records!=null?d.records:'-'),t:groups,th:th,c:cards,bn:bn,sb:sb,vh:window.innerWidth+'x'+window.innerHeight};
           var q=Object.keys(st).map(function(k){return k+'='+encodeURIComponent(st[k])}).join('&');
           fetch('version.txt?hb='+q,{cache:'no-store'}).then(function(r){return r.ok?r.text():''}).then(function(txt){
             var cur=(txt||'').trim();
@@ -118,8 +119,6 @@
             <label class="cal-cat-item"><input type="checkbox" value="通用技术" checked><span>通用技术</span></label>
           </div>
         </div>
-      </div>
-
       </div>
 
       <div class="filter-block">
