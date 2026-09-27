@@ -36,6 +36,8 @@ services:
       TECHDB_QA_INCREMENTAL_INDEX_PATH: /app/data/lightrag/incremental/index.pkl
     volumes:
       - qa_incremental_data:/app/data/lightrag/incremental
+      # 知识图谱（门户星空）：独立管线每次发布后重建，只读挂载即时生效
+      - ./services/canonical-qa/graph-live/graph-export.json:/app/data/lightrag/graph-export.json:ro
     ports:
       - "${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8765}:8765"
     healthcheck:

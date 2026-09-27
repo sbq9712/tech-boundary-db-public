@@ -1135,7 +1135,7 @@ def publish_to_boundary():
 
     # 发布的生成产物白名单（镜像范围只限分片 + manifest-data.js + conferences.json）
     mirror_globs = ["lite-part-*.js", "meta-part-*.js", "summary-part-*.js"]
-    copy_files = ["manifest-data.js", "conferences.json"]
+    copy_files = ["manifest-data.js", "conferences.json", "graph-export.json"]
 
     staged = []
     try:
@@ -1192,6 +1192,28 @@ def publish_to_boundary():
                 log(f"  [ERROR] {script} failed: {(result.stderr or result.stdout)[:200]}")
                 return False
         log("  derived snapshots rebuilt (alert-records / category-counts)")
+
+        # 知识图谱（门户星空背景）：基于本管线主存储重建（纯本地正则抽取，秒级）。
+        # 服务路径 services/canonical-qa/graph-live/graph-export.json 是单文件 bind
+        # mount 的稳定 inode——必须原地截断写（r+/truncate），绝不能 os.replace。
+        graph_result = subprocess.run(
+            [sys.executable, os.path.join(REPO, "scripts", "build_graph_export.py")],
+            capture_output=True, text=True, timeout=600)
+        if graph_result.returncode == 0:
+            _gsrc = os.path.join(src_processed, "graph-export.json")
+            _glive = os.path.join(boundary_repo, "services", "canonical-qa",
+                                  "graph-live", "graph-export.json")
+            if os.path.isfile(_gsrc) and os.path.exists(_glive):
+                with open(_gsrc, "rb") as sf:
+                    with open(_glive, "r+b") as lf:
+                        lf.write(sf.read())
+                        lf.truncate()
+                log("  knowledge graph rebuilt & published (portal starfield)")
+            else:
+                log("  [WARN] graph live path missing — skip publish: " + _glive)
+        else:
+            log("  [WARN] graph export failed (non-fatal): "
+                + (graph_result.stderr or graph_result.stdout)[:200])
 
         # 数据纪元标记：前端轮询它提示「有新数据，请刷新」。
         # 放在 processed/ 目录内（目录级挂载，无单文件 inode 问题，不入 Git）。
@@ -1372,6 +1394,21 @@ def main():
         # Step 9: Commit state ONLY after successful publish（本地文件，无需上传）
         log("Step 9: Commit state...")
         commit_state(current, successfully_downloaded)
+
+        # Step 9b: feed 增量包随动（当日切片，幂等；失败不阻塞管线主流程）
+        log("Step 9b: Feed daily package...")
+        try:
+            feed = subprocess.run(
+                [sys.executable, os.path.join(boundary_repo, "scripts", "build_feed_package.py"),
+                 "--today"],
+                capture_output=True, text=True, timeout=600)
+            tail = (feed.stdout or "").strip().splitlines()
+            log("  " + (tail[-1] if tail else "feed package done"))
+            if feed.returncode != 0:
+                log("  [WARN] feed package failed (non-fatal): "
+                    + (feed.stderr or "")[:200])
+        except Exception as feed_err:
+            log(f"  [WARN] feed package error (non-fatal): {feed_err}")
 
         # Step 10: Rebuild search indexes (vector + BM25 + knowledge graph)
         # Skip if caller (e.g. full_rebuild.py) will handle index rebuilding

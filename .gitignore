@@ -101,3 +101,7 @@ pipeline/.pipeline_state.json
 pipeline/.pipeline.lock
 pipeline/.rebuild_checkpoint.json
 pipeline/runtime/
+
+# QA 图谱服务稳定路径（管线运行时截断写，不入 Git）
+services/canonical-qa/graph-live/*
+!services/canonical-qa/graph-live/.gitkeep
