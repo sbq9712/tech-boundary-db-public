@@ -51,7 +51,7 @@ jobs:
           python -m pip check
       - name: Syntax
         run: |
-          python -m py_compile scripts/build_feed_package.py scripts/validate_feed_package.py scripts/test_feed_package_contract.py
+          python -m py_compile scripts/build_feed_package.py scripts/validate_feed_package.py scripts/test_feed_package_contract.py scripts/sync_qa_index.py scripts/compare_qa_old_new.py
       - name: Migration to head (incl. 0027 feed v2 columns/queue)
         working-directory: backend
         run: alembic upgrade head

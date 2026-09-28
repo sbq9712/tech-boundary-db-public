@@ -1328,48 +1328,43 @@ def main():
         commit_state(current, successfully_downloaded)
 
 
-        # Step 10: Rebuild search indexes (vector + BM25 + knowledge graph)
-        # Skip if caller (e.g. full_rebuild.py) will handle index rebuilding
-        if os.environ.get("SKIP_INDEX_BUILD"):
-            log("Step 10: SKIPPED (SKIP_INDEX_BUILD env var set — caller handles index rebuilding)")
+        # Step 10: 问答索引同步（发布视图 → canonical-qa 增量索引）
+        # 旧实现（本仓库 qa-backend/ 下重建 BM25/向量索引）已随 tech-db 迁出
+        # 而失效；现在通过 scripts/sync_qa_index.py 把发布分片差异推送进
+        # canonical-qa 的增量索引（/api/index/upsert 契约，幂等、断点续推）。
+        # 失败非致命：下一轮管线自动补推（水印只在全部批次成功后落盘）。
+        sync_script = os.path.join(REPO, "scripts", "sync_qa_index.py")
+        sync_python = os.path.join(REPO, "pipeline", ".venv", "bin", "python")
+        if not os.path.exists(sync_python):
+            sync_python = sys.executable
+        if os.environ.get("SKIP_QA_INDEX_SYNC"):
+            log("Step 10: SKIPPED (SKIP_QA_INDEX_SYNC env var set)")
+        elif not os.path.exists(sync_script):
+            log("Step 10: SKIPPED (scripts/sync_qa_index.py not found)")
         else:
-            log("Step 10: Rebuilding search indexes...")
+            log("Step 10: Syncing published records into canonical-qa index...")
+            try:
+                sync_result = subprocess.run(
+                    [sync_python, sync_script],
+                    capture_output=True, text=True, cwd=REPO, timeout=28800,
+                    env={**os.environ, "TECHDB_QA_SYNC_URL": os.environ.get("TECHDB_QA_SYNC_URL", "http://127.0.0.1:8767")},
+                )
+                output_tail = [l for l in (sync_result.stdout or "").strip().split("\n") if l.strip()]
+                for line in output_tail[-4:]:
+                    log(f"  {line}")
+                if sync_result.returncode != 0:
+                    log(f"  [WARN] QA index sync failed (non-fatal, retried next run): "
+                        f"{(sync_result.stderr or '')[-200:]}")
+                else:
+                    log("  QA index sync complete.")
+            except subprocess.TimeoutExpired:
+                log("  [WARN] QA index sync timeout (8h) — retried next run")
+            except Exception as sync_exc:
+                log(f"  [WARN] QA index sync error (non-fatal): {sync_exc}")
 
-            venv_python = os.path.join(REPO, ".venv", "bin", "python")
-            qa_backend = os.path.join(REPO, "qa-backend")
-            index_dir = os.path.join(REPO, "runtime", "indexes")  # server's live index dir
-            index_env = {**os.environ, "TECH_DB_INDEX_DIR": index_dir}
-
-            # 10a: BM25 index (fast, ~5 min)
-            log("  10a: Building BM25 index...")
-            bm25_result = subprocess.run(
-                [venv_python, os.path.join(qa_backend, "bm25_index.py")],
-                capture_output=True, text=True, cwd=REPO, timeout=600, env=index_env
-            )
-            if bm25_result.returncode != 0:
-                log(f"  [WARN] BM25 index build failed (non-fatal): {bm25_result.stderr[:200]}")
-            else:
-                log("  BM25 index built successfully.")
-
-            # 10b: Vector index (incremental, only new records embedded)
-            log("  10b: Building vector index...")
-            vec_result = subprocess.run(
-                [venv_python, os.path.join(qa_backend, "vector_index.py")],
-                capture_output=False, cwd=REPO, timeout=14400, env=index_env
-            )
-            if vec_result.returncode != 0:
-                log(f"  [WARN] Vector index build failed (non-fatal)")
-            else:
-                log("  Vector index built successfully.")
-
-            # 10c: Knowledge graph — DISABLED 2026-08-14.
-            # Legacy direct-extraction builder (concurrent_ingest.py) would overwrite
-            # runtime/indexes/graph-export.json, which is now exported from the
-            # LightRAG graph (scripts/ingest.py, resumed on demand). Do NOT re-enable.
-            log("  10c: Knowledge graph SKIPPED (LightRAG pipeline is canonical; "
-                "run scripts/ingest.py to extend the graph)")
-
-            log("Step 10 complete: All indexes rebuilt.")
+        # 10c: Knowledge graph — graph-export.json 由独立图谱管线重建并
+        # 发布到 services/canonical-qa/graph-live/（bind mount 即时生效），
+        # 见 Step 8/发布段；此处不再重复构建。
 
         # Step 11: Reports — 补跑制：每次运行用 --all 补齐所有缺失周期。
         # generate_reports.generate_all 以「完整周期已过」为界枚举日期，

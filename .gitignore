@@ -29,7 +29,9 @@ Thumbs.db
 
 # Runtime state and logs
 pg_data/
+runtime/
 runtime-data/
+pipeline/breadth/
 uploads/*
 !uploads/.gitkeep
 *.log

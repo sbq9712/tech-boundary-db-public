@@ -148,6 +148,10 @@ class IncrementalIndex:
             ]
             new_meta: list[dict[str, Any]] = []
             for index, (chunk, text) in enumerate(zip(chunks, texts)):
+                # chunk 级覆盖（管线快照一条记录一个 chunk 时，引用卡直接
+                # 显示该记录的标题/日期/来源/链接，而非合成文档标题）；
+                # 上传资料不传这些键，行为与原契约完全一致。
+                meta = dict(chunk.get("metadata") or {})
                 new_meta.append(
                     {
                         "kind": "upload",
@@ -155,17 +159,17 @@ class IncrementalIndex:
                         "document_id": document_id,
                         "chunk_id": str(chunk.get("chunk_id") or index),
                         "chunk_index": index,
-                        "chunk_metadata": dict(chunk.get("metadata") or {}),
-                        "t": title or filename,
-                        "d": created_at or "",
-                        "a": source_type or "上传资料",
-                        "s": source_type or "上传资料",
+                        "chunk_metadata": meta,
+                        "t": str(chunk.get("title") or title or filename),
+                        "d": str(chunk.get("record_date") or created_at or ""),
+                        "a": str(chunk.get("source_name") or source_type or "上传资料"),
+                        "s": str(chunk.get("source_name") or source_type or "上传资料"),
                         "b": text,
                         "fb": text,
-                        "as": "",
-                        "c": primary_category,
-                        "tg": secondary_categories,
-                        "u": "",
+                        "as": str(chunk.get("summary") or ""),
+                        "c": str(chunk.get("primary_category") or primary_category),
+                        "tg": chunk.get("tags") or secondary_categories,
+                        "u": str(chunk.get("url") or ""),
                         "filename": filename,
                         "confidentiality": confidentiality,
                         "checksum_sha256": checksum_sha256,
