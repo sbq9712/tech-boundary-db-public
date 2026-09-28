@@ -3102,3 +3102,5 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 .model-menu-refresh:disabled{opacity:.55;cursor:default}
 .model-menu-refresh-msg{font-size:12px;color:var(--text-tertiary,#6b7280);line-height:1.4}
 .model-menu-refresh-msg.err{color:#b42318}
+/* GitHub增量包：协议已接入徽标（feed-pkg/v1） */
+.lib-github-pending-badge.active{background:#e8f7ef;color:#087443;border-color:#a9dfbf}

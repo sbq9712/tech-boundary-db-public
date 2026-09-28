@@ -208,16 +208,14 @@ def test_rename_survives_index_outage(monkeypatch, tmp_path):
     db.close()
 
 
-def test_github_import_rejected_until_protocol_lands():
-    """GitHub增量包导入协议未接入：breadth/github 正式提交后端拒绝（其他来源不受影响）。"""
+def test_github_import_combo_now_accepted():
+    """GitHub增量包导入协议已接入（docs/design/github-incremental-dedup.md）：
+    breadth/github 组合放行；包级校验（zip/manifest/去重计数）由导入通道把关。"""
     from fastapi import HTTPException
 
     from app.routers.uploads import _validate_section_combo
 
-    with pytest.raises(HTTPException) as ei:
-        _validate_section_combo("breadth", "github")
-    assert ei.value.status_code == 400
-    assert "尚未接入" in str(ei.value.detail)
+    assert _validate_section_combo("breadth", "github") == ("breadth", "github")
     # 其他合法组合不受影响
     assert _validate_section_combo("breadth", "other") == ("breadth", "other")
     assert _validate_section_combo("industry", None) == ("industry", None)

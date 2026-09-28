@@ -156,9 +156,24 @@ def _fsync_directory(path: Path) -> None:
         os.close(fd)
 
 
-async def persist_upload(upload: UploadFile) -> StoredUpload:
+async def persist_upload(upload: UploadFile, allowed_suffixes: frozenset[str] | set[str] | None = None) -> StoredUpload:
+    """落盘上传文件并计算校验和。
+
+    allowed_suffixes 为空时按 Docling 格式注册表校验；给定白名单时按白名单校验
+    （GitHub 增量包 .zip 不在 Docling 注册表内，由导入通道单独把关）。
+    """
     filename = upload.filename or "unnamed"
-    ext = validate_filename(filename, upload.content_type)
+    if allowed_suffixes:
+        suffix = (Path(filename).suffix or "").lower()
+        if (not filename or "/" in filename or "\\" in filename or "\x00" in filename
+                or suffix not in allowed_suffixes):
+            raise UploadValidationError(
+                f"不支持的文件类型：{filename}（仅接受 {'/'.join(sorted(allowed_suffixes))}）",
+                status_code=415,
+            )
+        ext = suffix
+    else:
+        ext = validate_filename(filename, upload.content_type)
     root = upload_root()
     incoming = root / ".incoming"
     incoming.mkdir(parents=True, exist_ok=True)

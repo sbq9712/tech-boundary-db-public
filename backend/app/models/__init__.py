@@ -8,6 +8,7 @@ from app.models.knowledge_artifact import KnowledgeArtifact
 from app.models.conversation import ConversationSession, ConversationMessage, ConversationAgentRun, UserResearchProfile, UserResearchMemory
 from app.models.uploaded_file import UploadedFile
 from app.models.breadth_manual_record import BreadthManualRecord
+from app.models.breadth_import_session import BreadthImportSession
 
 __all__ = [
     "Domain", "InfoItem", "InfoItemDomain", "User",
@@ -18,4 +19,5 @@ __all__ = [
     "ConversationSession", "ConversationMessage", "ConversationAgentRun", "UserResearchProfile", "UserResearchMemory",
     "UploadedFile",
     "BreadthManualRecord",
+    "BreadthImportSession",
 ]

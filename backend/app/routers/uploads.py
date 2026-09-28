@@ -21,12 +21,19 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_admin, require_upload
 from app.db.session import get_db
 from app.models.uploaded_file import UploadedFile
+from app.services.github_import import (
+    GitHubPackageError,
+    import_github_package,
+    note_for_counts,
+    validate_github_filename,
+)
 from app.services.upload_ingestion import (
     StoredUpload,
     UploadValidationError,
@@ -56,10 +63,6 @@ def _validate_section_combo(primary_section: str | None, breadth_source: str | N
     if section == "breadth":
         if source not in BREADTH_SOURCES:
             raise HTTPException(400, "广度追踪必须选择二级来源：github（GitHub广度情报）或 other（其他广度情报）")
-        if source == "github":
-            # GitHub 增量包导入协议尚未确定：正式提交通道后端一律拒绝（前端入口同步禁用）。
-            # 协议接入后移除此守卫，并走 docs/design/github-incremental-dedup.md 的去重契约。
-            raise HTTPException(400, "GitHub增量包导入协议尚未接入，暂不支持该来源的资料提交")
     elif source is not None:
         raise HTTPException(400, "仅广度追踪可以选择二级来源")
     return section, source
@@ -114,7 +117,10 @@ class ClassificationOverride(BaseModel):
 
 def _serialize(record: UploadedFile) -> dict:
     terminal = {"classified", "unclassified", "irrelevant", "legacy_unclassified"}
-    if record.storage_status != "stored":
+    if record.primary_section == "breadth" and record.breadth_source == "github":
+        # 增量包不是文档：不走 Docling/索引摄取，状态只表达导入结果
+        ingestion_status = "imported"
+    elif record.storage_status != "stored":
         ingestion_status = record.storage_status
     elif record.embedding_status == "processing" and not record.document_assets:
         ingestion_status = "document_processing"
@@ -305,13 +311,82 @@ async def upload_files(
     if title and len(files) > 1:
         raise HTTPException(400, "批量上传不能共用标题，请留空让系统逐文件生成")
 
+    section, bsource = _validate_section_combo(primary_section, breadth_source)
+
+    # ── GitHub广度情报：daily/YYYY-MM-DD.zip 增量包导入通道 ──
+    # 一个包一次上传（单文件），同步解包导入并返回契约计数；不走 Docling 摄取。
+    if section == "breadth" and bsource == "github":
+        if len(files) != 1:
+            raise HTTPException(400, "GitHub 增量包一次只上传一个 daily/YYYY-MM-DD.zip")
+        upload = files[0]
+        try:
+            validate_github_filename(upload.filename or "")
+        except GitHubPackageError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        try:
+            stored = await persist_upload(upload, allowed_suffixes={".zip"})
+        except UploadValidationError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+        try:
+            record = UploadedFile(
+                stored_filename=stored.stored_filename,
+                original_filename=upload.filename or stored.path.name,
+                mime_type=upload.content_type or "application/zip",
+                checksum_sha256=stored.checksum_sha256,
+                storage_status="stored",
+                title=None,
+                domain_refs=None,
+                note=note,
+                document_date=None,
+                primary_section=section,
+                breadth_source=bsource,
+                title_source="manual",
+                taxonomy_version=None,
+                primary_category=None,
+                secondary_categories=[],
+                classification_status="classified",
+                classification_confidence=1.0,
+                classification_source="manual",
+                classification_reason="GitHub 增量包导入（不做文档分类）",
+                classified_at=datetime.now(timezone.utc),
+                embedding_status="skipped",
+                embedding_error=None,
+                submitted_by=current_user,
+            )
+            db.add(record)
+            db.commit()
+            db.refresh(record)
+            payload = import_github_package(db, record, stored.path)
+            # 包日期回填标题/资料日期与计数摘要（幂等重放也走这里）
+            record.title = f"广度增量包 {payload['package_date']}"
+            record.document_date = payload["package_date"]
+            record.note = note_for_counts(payload)
+            db.commit()
+            db.refresh(record)
+            return {
+                "count": 1,
+                "files": [_serialize(record)],
+                "github_import": payload,
+            }
+        except GitHubPackageError as exc:
+            # 包不合规：已提交的 uploaded_files 行必须一并清掉，避免孤儿记录
+            db.rollback()
+            db.execute(sa_delete(UploadedFile).where(UploadedFile.id == record.id))
+            db.commit()
+            remove_stored_upload(stored)
+            raise HTTPException(400, f"增量包不合规：{exc}") from exc
+        except Exception:
+            db.rollback()
+            db.execute(sa_delete(UploadedFile).where(UploadedFile.id == record.id))
+            db.commit()
+            remove_stored_upload(stored)
+            raise
+
     for upload in files:
         try:
             validate_filename(upload.filename or "", upload.content_type)
         except UploadValidationError as exc:
             raise HTTPException(exc.status_code, str(exc)) from exc
-
-    section, bsource = _validate_section_combo(primary_section, breadth_source)
 
     taxonomy = load_taxonomy()
     manual_category = None

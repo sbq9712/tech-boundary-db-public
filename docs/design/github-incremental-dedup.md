@@ -1,9 +1,10 @@
-# GitHub 广度情报增量包：导入去重契约（设计稿 · 未实现）
+# GitHub 广度情报增量包：导入去重契约（已实现）
 
-状态：**设计阶段**。导入协议尚未确定，本文仅固定去重契约的形状，供协议评审使用。
-任何实现落地前，`POST /api/uploads` 对 `primary_section=breadth&breadth_source=github`
-一律返回 400（见 `backend/app/routers/uploads.py` 的 `_validate_section_combo` 守卫），
-前端 GitHub增量包 页面保持"增量包导入待接入"状态。
+状态：**已接入**（2026-09-28，迁移 0026）。包格式为 tech-boundary-data-feed 的
+`daily/YYYY-MM-DD.zip`（feed-pkg/v1）；上传入口为资料库-广度追踪-GitHub广度情报。
+实现：`backend/app/services/github_import.py`（导入/校验/去重）+
+`backend/app/routers/uploads.py`（上传通道）+ `breadth_import_sessions` 会话表；
+测试：`backend/tests/test_github_incremental_import.py`。
 
 ## 1. 交付物与记录粒度
 

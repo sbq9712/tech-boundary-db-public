@@ -726,12 +726,22 @@ async function load() {
     // 搜索/分类/日期/等级视图/计数自动与上游记录一致，同一记录只出现一次。
     try {
       const token = (window.Auth && typeof Auth.getToken === 'function') ? Auth.getToken() : (localStorage.getItem('auth_token') || '');
-      const resp = await fetch('/api/breadth/manual-records?limit=2000', {
-        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
-      });
-      if (resp.ok) {
+      // GitHub增量包导入后 manual-records 可能超过单页上限：分页拉全（每页 2000，至多 20 页）
+      const manual = [];
+      let total = Infinity;
+      for (let page = 0; page < 20 && manual.length < total; page++) {
+        const resp = await fetch('/api/breadth/manual-records?limit=2000&offset=' + (page * 2000), {
+          headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+        });
+        if (!resp.ok) break;
         const payload = await resp.json();
-        const manual = Array.isArray(payload.records) ? payload.records : [];
+        total = Number(payload.count) || 0;
+        const chunk = Array.isArray(payload.records) ? payload.records : [];
+        if (!chunk.length) break;
+        manual.push(...chunk);
+        if (chunk.length < 2000) break;
+      }
+      {
         const keys = new Set(arr.map(r => String(r.t || '') + '|' + String(r.d || '') + '|' + String(r.u || '')));
         for (const m of manual) {
           const key = String(m.t || '') + '|' + String(m.d || '') + '|' + String(m.u || '');
@@ -739,13 +749,14 @@ async function load() {
           keys.add(key);
           arr.push({
             t: m.t, d: m.d, c: m.c, lv: m.lv, a: m.a, i: m.i, u: m.u,
+            sc: m.sc, scd: (m.scd && typeof m.scd === 'object' && Object.keys(m.scd).length) ? m.scd : null,
             source: 'manual-import', lv_manual: true, upload_id: m.upload_id,
             record_id: m.id, kp: m.kp || [], hb: m.hb || 1,
             b: m.body || '', fb: m.body || '', as: m.ai_summary || '',
           });
         }
-        window.__MANUAL_RECORD_COUNT__ = manual.length;
       }
+      window.__MANUAL_RECORD_COUNT__ = manual.length;
     } catch (e) { console.warn('manual-records merge skipped:', e); }
     // Expand short keys to full names — optimized loop
     state.allRecords = new Array(arr.length);
