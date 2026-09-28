@@ -199,7 +199,41 @@ def load_stamp(processed: Path) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+LOCAL_STAMP_NAME = ".runtime-source.json"
+LOCAL_PIPELINE_SCHEMA = "tech-boundary-breadth-runtime/v2"
+
+
+def load_local_stamp(processed: Path) -> dict:
+    """本地管线发布戳（auto_pipeline.publish_to_boundary 写入）。
+
+    存在即声明该运行时来自本仓库自有管线（而非 tech-db 钉住快照）。
+    合法性仍由 validate_structure + 清单自洽校验把关——这里只认来源。
+    """
+    path = processed / LOCAL_STAMP_NAME
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def validate_installed(processed: Path = PROCESSED_DIR) -> list[str]:
+    # 本地管线产物优先：publish_to_boundary 发布时写 .runtime-source.json。
+    # 只要结构完整 + 与戳自洽，就是「合法的新版本」——绝不能因为与 tech-db
+    # 钉住快照的常量不符而判定损坏（那会让启动 hydration 用旧数据覆盖新数据）。
+    local = load_local_stamp(processed)
+    if local.get("schema") == LOCAL_PIPELINE_SCHEMA and local.get("source") == "local-pipeline":
+        errors = validate_structure(
+            processed,
+            expected_records=int(local.get("records_total") or 0),
+            expected_shards=int(local.get("total_shards") or 0),
+            expected_data_version=str(local.get("data_version") or ""),
+            expected_upstream_files=None,
+        )
+        shards = sum(1 for p in processed.glob("lite-part-*.js") if p.is_file())
+        if shards != int(local.get("total_shards") or 0):
+            errors.append("local-pipeline stamp total_shards disagrees with lite shards on disk")
+        return errors
     errors = validate_structure(processed)
     stamp = load_stamp(processed)
     if stamp.get("repository") != UPSTREAM_REPOSITORY:

@@ -80,6 +80,54 @@ class BreadthRuntimeHydrationTests(unittest.TestCase):
         )
         self.assertEqual(errors, [])
 
+    def test_local_pipeline_stamp_accepts_newer_valid_runtime(self) -> None:
+        """本地管线新产物 ≠ 损坏：带 v2 来源戳且结构自洽时，hydrate 必须放行，
+        不得用 tech-db 钉住常量（旧 records/shards/data_version）判损坏并回写覆盖。"""
+        processed = self.make_fixture()
+        stamp = {
+            "schema": HYDRATE.LOCAL_PIPELINE_SCHEMA,
+            "source": "local-pipeline",
+            "records_total": 3,
+            "data_version": "fixture-v1",
+            "total_shards": 2,
+        }
+        (processed / HYDRATE.LOCAL_STAMP_NAME).write_text(
+            json.dumps(stamp), encoding="utf-8"
+        )
+        self.assertEqual(HYDRATE.validate_installed(processed), [])
+
+    def test_local_pipeline_stamp_with_broken_shards_fails_closed(self) -> None:
+        """完整性检查保留：戳声明 2 片但磁盘缺片/清单不符时必须报错（走兜底下载）。"""
+        processed = self.make_fixture()
+        stamp = {
+            "schema": HYDRATE.LOCAL_PIPELINE_SCHEMA,
+            "source": "local-pipeline",
+            "records_total": 3,
+            "data_version": "fixture-v1",
+            "total_shards": 2,
+        }
+        (processed / HYDRATE.LOCAL_STAMP_NAME).write_text(
+            json.dumps(stamp), encoding="utf-8"
+        )
+        (processed / "lite-part-1.js").unlink()
+        errors = HYDRATE.validate_installed(processed)
+        self.assertTrue(errors)
+
+    def test_local_pipeline_stamp_rejects_manifest_disagreement(self) -> None:
+        processed = self.make_fixture()
+        stamp = {
+            "schema": HYDRATE.LOCAL_PIPELINE_SCHEMA,
+            "source": "local-pipeline",
+            "records_total": 99,
+            "data_version": "fixture-v1",
+            "total_shards": 2,
+        }
+        (processed / HYDRATE.LOCAL_STAMP_NAME).write_text(
+            json.dumps(stamp), encoding="utf-8"
+        )
+        errors = HYDRATE.validate_installed(processed)
+        self.assertTrue(any("records_total" in e for e in errors))
+
     def test_missing_middle_shard_fails_closed(self) -> None:
         processed = self.make_fixture()
         (processed / "meta-part-1.js").unlink()
@@ -127,7 +175,12 @@ class BreadthRuntimeHydrationTests(unittest.TestCase):
             "category-counts.json",
         ):
             self.assertIn(name, source)
-        self.assertIn('test "$count" -eq 30', source)
+        # 分片数量随数据量动态变化，固定断言（历史值 30/35）会在正常重跑后误报。
+        # 真实完整性检查保留：三类前缀分片族必须一致且非空。
+        self.assertIn("lite-part-*.js", source)
+        self.assertIn("meta-part-*.js", source)
+        self.assertIn("summary-part-*.js", source)
+        self.assertIn('test "$lite" -gt 0 -a "$lite" -eq "$meta" -a "$meta" -eq "$summary"', source)
 
 
 if __name__ == "__main__":

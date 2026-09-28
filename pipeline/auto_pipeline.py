@@ -180,9 +180,12 @@ def check_new_files():
     state = load_state()
     current = get_source_files()
 
-    # CI mode: only process files from the last N days to avoid backlog
+    # CI mode: only process files from the last N days to avoid backlog.
+    # 冷启动豁免：state 里没有任何已知文件（新环境/全量重建）时不裁剪——
+    # 从三个源头完整重建必须处理全部历史，不能只处理最近 7 天。
     max_days = os.environ.get("PIPELINE_MAX_DAYS")
-    if max_days:
+    cold_start = not any(state.get("known_files", {}).values())
+    if max_days and not cold_start:
         max_days = int(max_days)
         cutoff = datetime.now(timezone(timedelta(hours=8))) - timedelta(days=max_days)
         cutoff_str = cutoff.strftime("%Y-%m-%d")
@@ -271,23 +274,27 @@ def download_new_csvs(new_per_source):
                 pass
             ok = False
             for _attempt in range(3):
+                rc = None
                 try:
-                    subprocess.run(
-                        ["curl", "-4", "-sSL", "--retry", "3", "--retry-delay", "2",
+                    # --fail：HTTP ≥400（404 文本/限流页等）必须视为失败，
+                    # 绝不能把错误响应体落盘当数据处理（历史缺陷：404 文本被记为处理成功）。
+                    r = subprocess.run(
+                        ["curl", "-4", "-sSL", "--fail", "--retry", "3", "--retry-delay", "2",
                          "--connect-timeout", "15", "--max-time", "90",
                          url, "-o", local_path],
                         capture_output=True, timeout=120
                     )
+                    rc = r.returncode
                 except subprocess.TimeoutExpired:
                     log(f"  [WARN] timeout dl {fname} (attempt {_attempt+1}/3)")
-                if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+                if rc == 0 and os.path.exists(local_path) and os.path.getsize(local_path) > 0:
                     ok = True
                     break
                 # raw.githubusercontent.com may be unreachable; fall back to API raw endpoint
                 api_url = f"https://api.github.com/repos/{info['repo']}/contents/{info['path']}/{fname}"
                 try:
                     r = subprocess.run(
-                        ["curl", "-4", "-sSL", "-H", "Accept: application/vnd.github.v3.raw",
+                        ["curl", "-4", "-sSL", "--fail", "-H", "Accept: application/vnd.github.v3.raw",
                          "--connect-timeout", "15", "--max-time", "90",
                          api_url, "-o", local_path],
                         capture_output=True, timeout=120
@@ -327,6 +334,14 @@ def download_new_csvs(new_per_source):
 
             # Parse CSV
             try:
+                # 内容兜底校验：即便下载"成功"，也必须长得像本源 CSV（表头含 title 列、
+                # 且不是 HTML 错误页），否则视为失败不推进状态。
+                with open(local_path, "r", encoding="utf-8-sig", newline="") as _probe:
+                    _head = _probe.read(4096)
+                if "title" not in _head.lower() or _head.lstrip()[:1] in ("<", "{"):
+                    raise ValueError(
+                        f"downloaded content is not a valid CSV for source '{name}' "
+                        f"(looks like {_head.lstrip()[:1]!r} page)")
                 with open(local_path, "r", encoding="utf-8-sig", newline="") as f:
                     reader = csv_mod.DictReader(f)
                     for row in reader:
@@ -981,6 +996,25 @@ def incremental_cluster(start_index, total_count):
     return len(applied)
 
 # ── 推送 GitHub ──
+def _manifest_data_version(target_processed: str) -> str:
+    """从 manifest-data.js 提取 data_version（hydrate 来源戳用）。"""
+    try:
+        raw = open(os.path.join(target_processed, "manifest-data.js"), encoding="utf-8").read()
+        start, end = raw.find("{"), raw.rfind("}")
+        return str(json.loads(raw[start:end + 1]).get("meta", {}).get("data_version", ""))
+    except Exception:
+        return ""
+
+
+def _manifest_records_total(target_processed: str) -> int:
+    try:
+        raw = open(os.path.join(target_processed, "manifest-data.js"), encoding="utf-8").read()
+        start, end = raw.find("{"), raw.rfind("}")
+        return int(json.loads(raw[start:end + 1]).get("meta", {}).get("records_total", 0))
+    except Exception:
+        return 0
+
+
 def publish_to_boundary():
     """把生成的数据产物安装到本仓库 breadth/data，广度页即时生效。
 
@@ -1092,6 +1126,28 @@ def publish_to_boundary():
         os.replace(tmp, auto_version)
         log(f"  auto-version.txt -> {tag}")
 
+        # 本地管线运行时来源戳：声明 breadth/data/processed 现由本管线自有产物驱动。
+        # hydration（scripts/hydrate_breadth_runtime.py）据此识别「合法的新版本」：
+        # 戳存在且清单/分片自洽 → 直接复用本地数据，绝不回写 tech-db 固定旧快照；
+        # 戳缺失或结构损坏 → 才回退 tech-db 钉住的快照兜底。
+        stamp = {
+            "schema": "tech-boundary-breadth-runtime/v2",
+            "source": "local-pipeline",
+            "records_total": _manifest_records_total(target_processed),
+            "data_version": _manifest_data_version(target_processed),
+            "total_shards": len(_glob.glob(os.path.join(target_processed, "lite-part-*.js"))),
+            "generator": "pipeline/auto_pipeline.publish_to_boundary",
+            "published_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+        }
+        stamp_path = os.path.join(target_processed, ".runtime-source.json")
+        tmp = stamp_path + ".publish-tmp"
+        with open(tmp, "w", encoding="utf-8") as sf:
+            json.dump(stamp, sf, ensure_ascii=False, indent=2)
+        os.replace(tmp, stamp_path)
+        legacy = os.path.join(target_processed, ".techdb-runtime-source.json")
+        if os.path.isfile(legacy):
+            os.remove(legacy)  # 已切换为本地管线来源，旧钉住快照戳不再适用
+
         log("  published to breadth/data")
         return True
     except Exception as pub_err:
@@ -1151,8 +1207,14 @@ def main():
 
         # Step 3: Dedup against existing
         log("Step 3: Dedup check...")
-        with open(LITE_PATH) as f:
-            existing = json.load(f)
+        # 冷启动支持：主存储缺失（新环境/被清理）→ 从空库全量重建，
+        # 不要求事先存在 all-records-lite.json。
+        if os.path.exists(LITE_PATH):
+            with open(LITE_PATH) as f:
+                existing = json.load(f)
+        else:
+            log("  [cold-start] all-records-lite.json 不存在——从空库全量重建")
+            existing = []
         unique, dupes = dedup_check(new_records, existing)
         log(f"  {len(new_records)} → {len(unique)} unique ({dupes} dupes)")
 
@@ -1198,7 +1260,10 @@ def main():
             log("Step 6b: SKIPPED (SKIP_CLUSTER env var set)")
             cluster_count = 0
 
-            # Step 6c: Extract conferences + dedup
+        # Step 6c: Extract conferences + dedup —— 与聚类解耦：
+        # 历史缺陷：本段误嵌在 SKIP_CLUSTER 的 elif 分支内，正常生产（跑聚类）时
+        # 会议提取永不执行。现在只要本批有合并记录就执行。
+        if merged_count > 0:
             log("Step 6c: Extract conferences...")
             try:
                 conf_result = subprocess.run(
@@ -1306,61 +1371,38 @@ def main():
 
             log("Step 10 complete: All indexes rebuilt.")
 
-        # Step 11: Generate reports (daily always, weekly on Monday, monthly on 1st)
-        log("Step 11: Generating reports...")
+        # Step 11: Reports — 补跑制：每次运行用 --all 补齐所有缺失周期。
+        # generate_reports.generate_all 以「完整周期已过」为界枚举日期，
+        # 已存在且非空的报告自动跳过 → 幂等；上次 GLM 失败/超时留下的缺口
+        # 本轮自动补上（失败非致命，缺口下轮继续补）。无新情报的日期按
+        # "no records" 跳过（真实语义：该日无精选/预警级情报可成稿）。
+        log("Step 11: Generating reports (catch-up all)...")
         try:
-            # Defined inside Step 10's else-branch; unbound when
-            # SKIP_INDEX_BUILD=1 (2026-09-20 local-timer mode).
             venv_python = os.path.join(REPO, ".venv", "bin", "python")
-            cst_now = datetime.now(timezone(timedelta(hours=8)))
-            yesterday_cst = (cst_now - timedelta(days=1)).strftime("%Y-%m-%d")
-            weekday = cst_now.weekday()  # 0=Monday
-
-            report_scripts = os.path.join(REPO, "scripts", "generate_reports.py")
-
-            # 11a: Daily report (always)
-            log(f"  11a: Daily report for {yesterday_cst}...")
-            daily_result = subprocess.run(
-                [venv_python, report_scripts, "--type", "daily", "--date", yesterday_cst],
-                capture_output=True, text=True, cwd=REPO, timeout=120
-            )
-            if daily_result.returncode == 0:
-                log("  " + daily_result.stdout.strip().split('\n')[-1])
-            else:
-                log(f"  [WARN] Daily report failed: {daily_result.stderr[:200]}")
-
-            # 11b: Weekly report (Monday only)
-            if weekday == 0:
-                last_monday = (cst_now - timedelta(days=7)).strftime("%Y-%m-%d")
-                log(f"  11b: Weekly report for week of {last_monday}...")
-                weekly_result = subprocess.run(
-                    [venv_python, report_scripts, "--type", "weekly", "--date", last_monday],
-                    capture_output=True, text=True, cwd=REPO, timeout=180
-                )
-                if weekly_result.returncode == 0:
-                    log("  " + weekly_result.stdout.strip().split('\n')[-1])
-                else:
-                    log(f"  [WARN] Weekly report failed: {weekly_result.stderr[:200]}")
-
-            # 11c: Monthly report (1st of month only)
-            if cst_now.day == 1:
-                first_of_prev = (cst_now.replace(day=1) - timedelta(days=1)).replace(day=1).strftime("%Y-%m-%d")
-                log(f"  11c: Monthly report for {first_of_prev}...")
-                monthly_result = subprocess.run(
-                    [venv_python, report_scripts, "--type", "monthly", "--date", first_of_prev],
-                    capture_output=True, text=True, cwd=REPO, timeout=180
-                )
-                if monthly_result.returncode == 0:
-                    log("  " + monthly_result.stdout.strip().split('\n')[-1])
-                else:
-                    log(f"  [WARN] Monthly report failed: {monthly_result.stderr[:200]}")
+            report_scripts = os.path.join(REPO, "pipeline", "scripts", "generate_reports.py")
+            report_failed = False
+            for rtype, timeout_s in (("daily", 300), ("weekly", 600), ("monthly", 600)):
+                log(f"  11/{rtype}: catch-up...")
+                try:
+                    result = subprocess.run(
+                        [venv_python, report_scripts, "--type", rtype, "--all"],
+                        capture_output=True, text=True, cwd=REPO, timeout=timeout_s)
+                    if result.returncode == 0:
+                        tail = [l for l in result.stdout.strip().split("\n") if l.strip()]
+                        log("  " + (tail[-1] if tail else "ok"))
+                    else:
+                        report_failed = True
+                        log(f"  [WARN] {rtype} report failed: {(result.stderr or result.stdout)[:200]}")
+                except subprocess.TimeoutExpired:
+                    report_failed = True
+                    log(f"  [WARN] {rtype} report timeout ({timeout_s}s) — catch-up retries next run")
 
             # 11d: Publish reports to breadth（无 GitHub；本地安装即时生效）
             log("  11d: Publishing reports...")
             if not publish_to_boundary():
                 log("  [WARN] report publish failed — retried next run")
 
-            log("Step 11 complete.")
+            log("Step 11 complete." + (" (with failures — catch-up next run)" if report_failed else ""))
         except Exception as re:
             log(f"  [WARN] Report generation failed (non-fatal): {re}")
 
