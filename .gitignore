@@ -106,3 +106,5 @@ pipeline/runtime/
 services/canonical-qa/graph-live/*
 !services/canonical-qa/graph-live/.gitkeep
 pipeline/triage_engine/.env
+pipeline/.engine_retriage_checkpoint.json
+pipeline/.engine_triage_work/
