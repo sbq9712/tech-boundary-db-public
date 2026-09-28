@@ -81,6 +81,24 @@ def load_published_records() -> list[dict]:
     return merged
 
 
+def stable_record_id(rec: dict) -> str:
+    """确定性稳定 record_id（uuid5）。
+
+    server 消费方（retrieval_pipeline.result_identity / rrf 多轮归并）要求
+    record_id 非空且逐条唯一，否则基线结果会被折叠成单一身份。旧索引的
+    record_id 出自 tech-db record_registry（与 68,239 快照绑定，无法直接
+    映射发布视图）；本重建以 来源身份键 派生 uuid5：URL 稳定则 ID 稳定，
+    重建幂等，且不需要跨仓注册表。
+    """
+    import uuid
+
+    url = str(rec.get("u", "") or "").strip()
+    identity = f"url:{url}" if url else (
+        f"tda:{rec.get('t', '')}|{rec.get('d', '')}|{rec.get('a', '')}"
+    )
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, identity))
+
+
 def evidence_text(rec: dict, cap: int) -> str:
     """证据文本：b 优先，as 兜底（偏差 2），截断 cap。"""
     text = str(rec.get("b") or rec.get("as") or "").strip()
@@ -243,6 +261,7 @@ def cmd_assemble(argv: list[str] | None = None) -> int:
         vec_meta.append({
             "idx": idx,
             "id": "",
+            "record_id": stable_record_id(rec),
             "t": str(rec.get("t", "") or ""),
             "d": str(rec.get("d", "") or ""),
             "s": str(rec.get("a", rec.get("s", "")) or ""),
@@ -274,7 +293,8 @@ def cmd_assemble(argv: list[str] | None = None) -> int:
     for idx, rec in enumerate(records):
         text = format_bm25_text(rec)
         corpus.append([t for t in jieba.cut_for_search(text)])
-        bm_meta.append({"idx": idx, "record_id": "", "t": str(rec.get("t", "") or ""),
+        bm_meta.append({"idx": idx, "record_id": stable_record_id(rec),
+                        "t": str(rec.get("t", "") or ""),
                         "c": str(rec.get("c", "") or ""), "d": str(rec.get("d", "") or "")})
         if (idx + 1) % 10000 == 0:
             print(f"[rebuild] 分词 {idx+1}/{n}（{time.time()-t0:.0f}s）", flush=True)

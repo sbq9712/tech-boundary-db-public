@@ -1,0 +1,18 @@
+# 基础索引离线重建落地镜像：0801-base（依赖+模型已就位）+ 最新 qa-backend 代码
+# + 重建产物（向量/BM25/jieba/lite）+ 资产清单校验。替代逐层 Dockerfile.incremental
+# 的临时镜像（0929），一次构建同时落地代码与数据，check_assets 把关捆绑完整性。
+ARG QA_BASE_IMAGE=techdb-canonical-qa:0801-base
+FROM ${QA_BASE_IMAGE}
+
+USER root
+COPY --chown=qa:qa qa-backend/config.py qa-backend/server.py \
+    qa-backend/incremental_index.py qa-backend/retrieval_pipeline.py /app/qa-backend/
+COPY --chown=qa:qa qa-backend/qa-assets-manifest.json /app/qa-backend/qa-assets-manifest.json
+COPY --chown=qa:qa data/lightrag/vector_index_v2.pkl data/lightrag/bm25_index.pkl \
+    data/lightrag/jieba_custom_dict.txt /app/data/lightrag/
+COPY --chown=qa:qa data/processed/all-records-lite.json /app/data/processed/all-records-lite.json
+RUN mkdir -p /app/data/lightrag/incremental \
+    && chown -R qa:qa /app/data/lightrag/incremental \
+    && python /app/qa-backend/check_assets.py
+
+USER qa
