@@ -2264,7 +2264,7 @@ a:hover{color:var(--brand-lighter)}
 .qa-graph-container{flex:0 0 auto;width:min(100%,720px);height:220px;position:relative;overflow:hidden;border:1px solid var(--border-subtle);background:linear-gradient(180deg,#f8fbff,#fff);border-radius:var(--radius-sm)}
 .qa-graph-container canvas{display:block;width:100%;height:100%;cursor:grab}
 .qa-graph-placeholder{height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-quaternary);font-size:12px}
-.qa-graph-tooltip{position:absolute;display:none;pointer-events:none;padding:5px 8px;border:1px solid var(--border-standard);border-radius:4px;background:#fff;color:var(--text-secondary);font-size:11px;box-shadow:0 3px 12px rgba(15,23,42,.1);white-space:nowrap;z-index:2}
+.qa-graph-tooltip{position:absolute;display:none;pointer-events:none;padding:6px 10px;border:1px solid rgba(99,102,241,.22);border-radius:8px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--text-secondary);font-size:11px;letter-spacing:.01em;box-shadow:0 8px 24px -6px rgba(79,70,229,.18),0 2px 8px rgba(15,23,42,.06);white-space:nowrap;z-index:2}
 .qa-graph-tooltip.visible{display:block}
 .qa-empty-copy{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
 .qa-empty-copy strong{font-size:17px;color:var(--text-primary)}
@@ -3038,7 +3038,7 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 
 /* ── v7 资料库三分区导航 ── */
 /* v8：资料库三分区按钮与深度调研页"调研报告/行业图景"标签同款卡片样式 */
-.lib-section-nav{display:flex;gap:8px;flex-wrap:wrap}
+.lib-section-nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
 .lib-section-btn{
   flex:1 1 0;min-width:120px;
   text-align:center;white-space:nowrap;
@@ -3100,7 +3100,10 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 .model-menu-refresh{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:transparent;color:var(--text-secondary);font-size:12.5px;cursor:pointer;transition:background .15s,color .15s}
 .model-menu-refresh:hover:not(:disabled){background:rgba(99,102,241,.08);color:var(--brand)}
 .model-menu-refresh:disabled{opacity:.55;cursor:default}
-.model-menu-refresh-msg{font-size:12px;color:var(--text-tertiary,#6b7280);line-height:1.4}
+.model-menu-refresh-msg{font-size:12px;color:#087443;line-height:1.4;animation:modelMsgIn .25s ease}
 .model-menu-refresh-msg.err{color:#b42318}
+@keyframes modelMsgIn{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}
+.model-menu-refresh-spin{width:13px;height:13px;flex:none;animation:modelSpin .8s linear infinite}
+@keyframes modelSpin{to{transform:rotate(360deg)}}
 /* GitHub增量包：协议已接入徽标（feed-pkg/v1） */
 .lib-github-pending-badge.active{background:#e8f7ef;color:#087443;border-color:#a9dfbf}
