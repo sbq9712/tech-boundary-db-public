@@ -680,7 +680,7 @@ async function loadKnowledgeGraph(){
   if(!container)return;
   if(knowledgeGraphCleanup){knowledgeGraphCleanup();knowledgeGraphCleanup=null;}
   try{
-    const res=await apiFetch('/api/assistant/graph?limit=200');
+    const res=await apiFetch('/api/assistant/graph?limit=500');
     if(!res.ok)throw new Error(`graph ${res.status}`);
     const data=await res.json();
     if(!Array.isArray(data.nodes)||!data.nodes.length){container.innerHTML='<div class="qa-graph-placeholder">关系图谱资产尚未提供</div>';return;}
@@ -692,14 +692,18 @@ function renderKnowledgeGraphCanvas(container,data){
   const tooltip=document.createElement('div');tooltip.className='qa-graph-tooltip';
   container.innerHTML='';container.append(canvas,tooltip);
   const ctx=canvas.getContext('2d');
-  const colors={'公司':'#6366f1','机构':'#8b5cf6','技术':'#3b82f6','材料':'#10b981','产品':'#f59e0b','人物':'#ef4444','政策':'#ec4899','指标':'#14b8a6','organization':'#6366f1','artifact':'#f59e0b','concept':'#3b82f6','person':'#ef4444','method':'#a855f7','event':'#f97316','data':'#14b8a6','other':'#94a3b8','UNKNOWN':'#94a3b8'};
+  const colors={'公司':'#6366f1','机构':'#8b5cf6','技术':'#3b82f6','材料':'#10b981','产品':'#f59e0b','人物':'#ef4444','政策':'#ec4899','指标':'#14b8a6','分类':'#06b6d4','概念':'#a78bfa','organization':'#6366f1','artifact':'#f59e0b','concept':'#3b82f6','person':'#ef4444','method':'#a855f7','event':'#f97316','data':'#14b8a6','other':'#94a3b8','UNKNOWN':'#94a3b8'};
   /* 星穹配色工具：高光/暗部/透明色，用于珠光球体与光晕 */
   const lighten=hex=>{const n=parseInt(hex.slice(1),16);return `rgb(${Math.round((n>>16&255)*.45+140.25)},${Math.round((n>>8&255)*.45+140.25)},${Math.round((n&255)*.45+140.25)})`;};
   const deepen=hex=>{const n=parseInt(hex.slice(1),16);return `rgb(${Math.round((n>>16&255)*.76)},${Math.round((n>>8&255)*.76)},${Math.round((n&255)*.76)})`;};
   const withAlpha=(hex,a)=>{const n=parseInt(hex.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;};
   let width=0,height=0,raf=0,temperature=1,hover=null,drag=null,panning=false,panStart=null,pinned=null,downInfo=null;
   const transform={x:0,y:0,scale:1};
-  const nodes=(data.nodes||[]).slice(0,200).map((node,index)=>{const angle=index*2.399963;const radius=18*Math.sqrt(index);const c=colors[node.type]||'#94a3b8';return {...node,x:Math.cos(angle)*radius,y:Math.sin(angle)*radius,vx:0,vy:0,radius:Math.max(4,Math.min(14,4+Number(node.degree||0)*.45)),color:c,light:lighten(c),deep:deepen(c),tw:.6+((index*137)%100)/100*.9,phase:(index*97)%628/100};});
+  const _all=(data.nodes||[]);
+  const _cats=_all.filter(n=>n.type==='分类');
+  const _rest=_all.filter(n=>n.type!=='分类');
+  const _picked=[..._cats.slice(0,24),..._rest.slice(0,200-24)];
+  const nodes=_picked.map((node,index)=>{const angle=index*2.399963;const radius=18*Math.sqrt(index);const c=colors[node.type]||'#94a3b8';return {...node,x:Math.cos(angle)*radius,y:Math.sin(angle)*radius,vx:0,vy:0,radius:Math.max(4,Math.min(14,4+Number(node.degree||0)*.45)),color:c,light:lighten(c),deep:deepen(c),tw:.6+((index*137)%100)/100*.9,phase:(index*97)%628/100};});
   const nodeMap=new Map(nodes.map(node=>[node.label,node]));
   const edges=(data.edges||[]).filter(edge=>nodeMap.has(edge.source)&&nodeMap.has(edge.target)).slice(0,500);
   const neighborSet=new Map();edges.forEach(edge=>{if(!neighborSet.has(edge.source))neighborSet.set(edge.source,new Set());neighborSet.get(edge.source).add(edge.target);if(!neighborSet.has(edge.target))neighborSet.set(edge.target,new Set());neighborSet.get(edge.target).add(edge.source);});
@@ -732,7 +736,7 @@ function renderKnowledgeGraphCanvas(container,data){
   function simulate(){
     if(temperature>.025){for(let i=0;i<nodes.length;i++){for(let j=i+1;j<nodes.length;j++){const a=nodes[i],b=nodes[j],dx=b.x-a.x,dy=b.y-a.y,d2=Math.max(36,dx*dx+dy*dy),force=120/d2*temperature;a.vx-=dx*force;a.vy-=dy*force;b.vx+=dx*force;b.vy+=dy*force;}}edges.forEach(edge=>{const a=nodeMap.get(edge.source),b=nodeMap.get(edge.target),dx=b.x-a.x,dy=b.y-a.y,dist=Math.max(1,Math.hypot(dx,dy)),force=(dist-48)*.0025*temperature;a.vx+=dx/dist*force;a.vy+=dy/dist*force;b.vx-=dx/dist*force;b.vy-=dy/dist*force;});nodes.forEach(node=>{if(node===drag)return;node.vx+=-node.x*.0005*temperature;node.vy+=-node.y*.0005*temperature;node.vx*=.86;node.vy*=.86;node.x+=node.vx;node.y+=node.vy;});temperature*=.994;}
   }
-  function draw(){const t=performance.now();const focus=hover||pinned;const nbr=focus?neighborSet.get(focus.label):null;ctx.clearRect(0,0,width,height);drawSky(t);ctx.save();ctx.translate(width/2+transform.x,height/2+transform.y);ctx.scale(transform.scale,transform.scale);edges.forEach((edge,ei)=>{const geo=edgeGeom(ei);const a=geo.a,b=geo.b;const lit=focus&&(a===focus||b===focus);const dim=focus&&!lit;const g=ctx.createLinearGradient(a.x,a.y,b.x,b.y);const al=dim?.06:(lit?.55:.17);g.addColorStop(0,withAlpha(a.color,al));g.addColorStop(1,withAlpha(b.color,al));ctx.strokeStyle=g;ctx.lineWidth=(lit?1.7:1.1)/transform.scale;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(geo.cx,geo.cy,b.x,b.y);ctx.stroke();});if(edges.length){if(pulses.length<24&&Math.random()<.1)pulses.push({ei:(Math.random()*edges.length)|0,t:0,sp:.005+Math.random()*.007});for(let pi=pulses.length-1;pi>=0;pi--){const pu=pulses[pi];pu.t+=pu.sp;if(pu.t>=1){pulses.splice(pi,1);continue;}const geo=edgeGeom(pu.ei);const u=1-pu.t;const px=u*u*geo.a.x+2*u*pu.t*geo.cx+pu.t*pu.t*geo.b.x;const py=u*u*geo.a.y+2*u*pu.t*geo.cy+pu.t*pu.t*geo.b.y;const pg=ctx.createRadialGradient(px,py,0,px,py,5);pg.addColorStop(0,'rgba(129,140,248,.55)');pg.addColorStop(1,'rgba(129,140,248,0)');ctx.fillStyle=pg;ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(px,py,1.7,0,Math.PI*2);ctx.fillStyle='rgba(165,180,252,.95)';ctx.fill();ctx.beginPath();ctx.arc(px,py,.85,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.95)';ctx.fill();}}nodes.forEach(node=>{const tw=.8+.2*Math.sin(t*.0012*node.tw+node.phase);if(node===focus){ctx.beginPath();ctx.arc(node.x,node.y,node.radius+6,0,Math.PI*2);ctx.fillStyle='rgba(99,102,241,.08)';ctx.fill();ctx.beginPath();ctx.arc(node.x,node.y,node.radius+3.5,0,Math.PI*2);ctx.strokeStyle='rgba(99,102,241,.45)';ctx.lineWidth=1.4/transform.scale;ctx.stroke();}if(node.radius>=5.5){const halo=ctx.createRadialGradient(node.x,node.y,node.radius*.4,node.x,node.y,node.radius*2.6);halo.addColorStop(0,withAlpha(node.color,.2*tw));halo.addColorStop(1,withAlpha(node.color,0));ctx.fillStyle=halo;ctx.beginPath();ctx.arc(node.x,node.y,node.radius*2.6,0,Math.PI*2);ctx.fill();}const rr=node.radius*(node===focus?1.14:1);const orb=ctx.createRadialGradient(node.x-rr*.32,node.y-rr*.36,rr*.1,node.x+rr*.08,node.y+rr*.1,rr*1.02);orb.addColorStop(0,node.light);orb.addColorStop(.52,node.color);orb.addColorStop(1,node.deep);ctx.globalAlpha=tw;ctx.beginPath();ctx.arc(node.x,node.y,rr,0,Math.PI*2);ctx.fillStyle=orb;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=1.1/transform.scale;ctx.stroke();if(node===focus||node.radius>9||(nbr&&nbr.has(node.label))){const labelFont=`${10/Math.max(.8,transform.scale)}px -apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif`;ctx.font=labelFont;ctx.textAlign='center';ctx.lineWidth=3/Math.max(.8,transform.scale);ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineJoin='round';ctx.strokeText(String(node.label||'').slice(0,14),node.x,node.y-node.radius-6);ctx.fillStyle='#475569';ctx.fillText(String(node.label||'').slice(0,14),node.x,node.y-node.radius-6);}});ctx.restore();}
+  function draw(){const t=performance.now();const focus=hover||pinned;const nbr=focus?neighborSet.get(focus.label):null;ctx.clearRect(0,0,width,height);drawSky(t);ctx.save();ctx.translate(width/2+transform.x,height/2+transform.y);ctx.scale(transform.scale,transform.scale);edges.forEach((edge,ei)=>{const geo=edgeGeom(ei);const a=geo.a,b=geo.b;const lit=focus&&(a===focus||b===focus);const dim=focus&&!lit;const g=ctx.createLinearGradient(a.x,a.y,b.x,b.y);const al=dim?.06:(lit?.55:.06);g.addColorStop(0,withAlpha(a.color,al));g.addColorStop(1,withAlpha(b.color,al));ctx.strokeStyle=g;ctx.lineWidth=(lit?1.7:1.1)/transform.scale;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(geo.cx,geo.cy,b.x,b.y);ctx.stroke();});if(edges.length){if(pulses.length<24&&Math.random()<.1)pulses.push({ei:(Math.random()*edges.length)|0,t:0,sp:.005+Math.random()*.007});for(let pi=pulses.length-1;pi>=0;pi--){const pu=pulses[pi];pu.t+=pu.sp;if(pu.t>=1){pulses.splice(pi,1);continue;}const geo=edgeGeom(pu.ei);const u=1-pu.t;const px=u*u*geo.a.x+2*u*pu.t*geo.cx+pu.t*pu.t*geo.b.x;const py=u*u*geo.a.y+2*u*pu.t*geo.cy+pu.t*pu.t*geo.b.y;const pg=ctx.createRadialGradient(px,py,0,px,py,5);pg.addColorStop(0,'rgba(129,140,248,.55)');pg.addColorStop(1,'rgba(129,140,248,0)');ctx.fillStyle=pg;ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(px,py,1.7,0,Math.PI*2);ctx.fillStyle='rgba(165,180,252,.95)';ctx.fill();ctx.beginPath();ctx.arc(px,py,.85,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.95)';ctx.fill();}}nodes.forEach(node=>{const tw=.8+.2*Math.sin(t*.0012*node.tw+node.phase);if(node===focus){ctx.beginPath();ctx.arc(node.x,node.y,node.radius+6,0,Math.PI*2);ctx.fillStyle='rgba(99,102,241,.08)';ctx.fill();ctx.beginPath();ctx.arc(node.x,node.y,node.radius+3.5,0,Math.PI*2);ctx.strokeStyle='rgba(99,102,241,.45)';ctx.lineWidth=1.4/transform.scale;ctx.stroke();}if(node.radius>=5.5){const halo=ctx.createRadialGradient(node.x,node.y,node.radius*.4,node.x,node.y,node.radius*2.6);halo.addColorStop(0,withAlpha(node.color,.2*tw));halo.addColorStop(1,withAlpha(node.color,0));ctx.fillStyle=halo;ctx.beginPath();ctx.arc(node.x,node.y,node.radius*2.6,0,Math.PI*2);ctx.fill();}const rr=node.radius*(node===focus?1.14:1);const orb=ctx.createRadialGradient(node.x-rr*.32,node.y-rr*.36,rr*.1,node.x+rr*.08,node.y+rr*.1,rr*1.02);orb.addColorStop(0,node.light);orb.addColorStop(.52,node.color);orb.addColorStop(1,node.deep);ctx.globalAlpha=tw;ctx.beginPath();ctx.arc(node.x,node.y,rr,0,Math.PI*2);ctx.fillStyle=orb;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=1.1/transform.scale;ctx.stroke();if(node===focus||node.radius>9||(nbr&&nbr.has(node.label))){const labelFont=`${10/Math.max(.8,transform.scale)}px -apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif`;ctx.font=labelFont;ctx.textAlign='center';ctx.lineWidth=3/Math.max(.8,transform.scale);ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineJoin='round';ctx.strokeText(String(node.label||'').slice(0,14),node.x,node.y-node.radius-6);ctx.fillStyle='#475569';ctx.fillText(String(node.label||'').slice(0,14),node.x,node.y-node.radius-6);}});ctx.restore();}
   function animate(){simulate();draw();raf=requestAnimationFrame(animate);}
   function pointerDown(event){const p=point(event);const target=hit(p);downInfo={x:event.clientX,y:event.clientY,node:target};drag=target;if(drag){temperature=Math.max(temperature,.25);}else{panning=true;panStart={x:event.clientX-transform.x,y:event.clientY-transform.y};}canvas.setPointerCapture?.(event.pointerId);}
   function pointerMove(event){const p=point(event);if(drag){drag.x=p.x;drag.y=p.y;drag.vx=0;drag.vy=0;}else if(panning){transform.x=event.clientX-panStart.x;transform.y=event.clientY-panStart.y;}else{hover=hit(p);canvas.style.cursor=hover?'pointer':'grab';if(hover){tooltip.textContent=`${hover.label}（${hover.type||'未知'}） · 连接度 ${hover.degree||0}`;tooltip.style.left=`${p.screenX+12}px`;tooltip.style.top=`${p.screenY+12}px`;tooltip.classList.add('visible');}else tooltip.classList.remove('visible');}}
@@ -1813,7 +1817,7 @@ window.addEventListener("DOMContentLoaded",async()=>{await loadCurrentUser();ren
 
 /* ── 资料库（in-app 视图，替代独立页跳转，保留左侧导航） ── */
 let libRefreshTimer=null,libOffset=0,libTotal=0,libIsAdmin=false,libCanManage=false;
-const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引未完成",embedding_skipped:"索引未完成",embedding_legacy_unindexed:"历史未索引",ready:"可检索"};
+const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引未完成",embedding_skipped:"索引未完成",embedding_legacy_unindexed:"历史未索引",ready:"可检索",imported:"已导入"};
 function reviewedEmptyCard(){return `<div class="dashboard-card reviewed-empty"><div class="reviewed-empty-mark">无</div><strong>暂无已审核报告</strong><span>深度调研完成审核后将展示在这里</span></div>`;}
 /* v7 资料库三分区：广度追踪(breadth) / 行业追踪(industry) / ATSC内部报告(atsc)。
    广度追踪下再分 GitHub广度情报(github) / 其他广度情报(other)。
@@ -1862,15 +1866,17 @@ function libraryView(){
     </div></section>`;
   }
   /* GitHub增量包页：列头固定为 资料/状态/上传者/上传时间/原文件；无人工等级控件；
-     导入协议未接入 → 明确展示"待接入"状态，正式提交入口禁用 */
+     导入协议已接入（feed-pkg/v1）：上传 daily/YYYY-MM-DD.zip 按 t|d|u 去重导入 */
   if(section==="breadth"&&sub==="github"){
     return `<section class="flat-content library">${navBtn}
+      <div class="lib-head"><div class="filter-row"><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传增量包</button></div></div>
       <div class="lib-github-pending">
-        <span class="lib-github-pending-badge">待接入</span>
-        <span>增量包导入待接入：导入协议尚未确定，正式提交暂未开放。页面就绪不代表导入已完成。</span>
+        <span class="lib-github-pending-badge active">已接入</span>
+        <span>增量包导入协议 feed-pkg/v1 已接入：上传 daily/YYYY-MM-DD.zip，系统按 t|d|u 去重导入，撞库与包内重复自动跳过并逐项计数。</span>
       </div>
       <div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>状态</th><th>上传者</th><th>上传时间</th><th>原文件</th></tr></thead><tbody id="rows"></tbody></table></div>
-      <div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无增量包</div><div class="lib-empty-hint">GitHub 增量包导入协议接入后，此处将展示导入的增量包及其处理状态</div></div>
+      <div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无增量包</div><div class="lib-empty-hint">点击「上传增量包」导入 tech-boundary-data-feed 的每日 zip，导入结果会展示在这里</div></div>
+      <div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div>
     </section>`;
   }
   /* 列表页（广度子页或 industry/atsc）：顶部三分区按钮恒定展示 */
@@ -1918,7 +1924,7 @@ async function initLibrary(){
   if(next)next.onclick=()=>{if(libOffset+30<libTotal){libOffset+=30;loadLibrary();}};
   try{const me=await apiFetch("/api/auth/me");if(me&&me.ok){const j=await me.json();libIsAdmin=j.role==="admin";libCanManage=j.role==="admin"||j.role==="atsc";
     /* GitHub增量包页：导入协议未接入 → 不提供上传入口 */
-    const link=document.getElementById("uploadLink");if(libCanManage&&link&&!isGithub){link.style.display="";link.onclick=()=>openUploadModal(section,sub);}}}catch(e){}
+    const link=document.getElementById("uploadLink");if(libCanManage&&link){link.style.display="";link.onclick=()=>{if(isGithub)openGithubImportModal();else openUploadModal(section,sub);};}}}catch(e){}
   try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];const select=document.getElementById("categoryFilter");if(select){const treePaths=data.all_paths||(data.categories||[]).filter(c=>c.includes("/"));select.innerHTML='<option value="">全部节点</option>'+treePaths.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")+'<option value="不相关">不相关</option><option value="未分类">未分类</option>';}}}catch(e){}
   loadLibrary();
 }
@@ -1954,7 +1960,7 @@ async function loadLibrary(){
     tb.innerHTML=data.files.map(f=>{
       const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
       return `<tr>
-      <td class="fname">${escapeHtml(f.title||f.original_filename)}</td>
+      <td class="fname">${escapeHtml(f.title||f.original_filename)}${f.note?`<small>${escapeHtml(f.note)}</small>`:""}</td>
       <td><span class="status ${escapeHtml(status)}">${escapeHtml(libStatusLabels[status]||status)}</span></td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
@@ -2179,6 +2185,77 @@ function libDownload(id){
     .catch(e=>alert(e.message));
 }
 // ── 上传资料：in-app 弹窗，替代 uploads_admin.html 独立页跳转，保留左侧导航 ──
+/* ── GitHub广度情报：增量包导入弹窗（单 zip，同步导入，逐项计数透出）── */
+function openGithubImportModal(){
+  if(!libCanManage&&!canManageFiles())return;
+  if(document.getElementById("ghImportOverlay"))return;
+  const overlay=document.createElement("div");
+  overlay.id="ghImportOverlay";
+  overlay.style.cssText="position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px 16px;overflow-y:auto;";
+  overlay.innerHTML=`<div class="lib-upload-dialog" role="dialog" aria-modal="true" aria-label="上传增量包" style="width:min(560px,100%);margin:auto;">
+    <div class="lib-upload-head"><h2>上传 GitHub 广度情报增量包</h2><button class="lib-upload-close" id="ghCloseBtn" type="button" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="lib-upload-body">
+      <div class="lib-upload-drop" id="ghDrop"><input id="ghInput" type="file" accept=".zip" hidden><div class="lib-upload-hint">拖曳 daily/YYYY-MM-DD.zip 至此处，或 <button class="lib-upload-pick" id="ghPick" type="button">点击选择</button></div><div class="lib-upload-types">增量包来自 tech-boundary-data-feed；导入按 t|d|u 去重，重复上传同一包自动幂等重放</div></div>
+      <div id="ghFileRow" style="display:none;margin-top:10px;font-size:13px;color:var(--text-secondary,#475467);word-break:break-all;"></div>
+      <div class="lib-upload-result" id="ghResult" style="display:none;"></div>
+    </div>
+    <div class="lib-upload-actions"><button class="secondary-btn" id="ghCancel" type="button">取消</button><button class="primary-btn" id="ghSubmit" type="button" disabled>导入</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const drop=document.getElementById("ghDrop"),input=document.getElementById("ghInput"),
+        fileRow=document.getElementById("ghFileRow"),submit=document.getElementById("ghSubmit");
+  let picked=null;
+  const close=()=>{overlay.remove();document.removeEventListener("keydown",onEsc);};
+  const onEsc=e=>{if(e.key==="Escape")close();};
+  const showFile=f=>{
+    if(!f)return;
+    if(!/\.zip$/i.test(f.name)){fileRow.style.display="block";fileRow.innerHTML='<span style="color:#b42318;">只接受 .zip 增量包</span>';picked=null;submit.disabled=true;return;}
+    picked=f;fileRow.style.display="block";fileRow.textContent="已选择："+f.name+"（"+libFmtSize(f.size)+"）";submit.disabled=false;
+  };
+  drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("drag");});
+  drop.addEventListener("dragleave",()=>drop.classList.remove("drag"));
+  drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("drag");showFile(e.dataTransfer.files[0]);});
+  document.getElementById("ghPick").onclick=()=>input.click();
+  input.onchange=()=>{showFile(input.files[0]);};
+  document.getElementById("ghCloseBtn").onclick=close;
+  document.getElementById("ghCancel").onclick=close;
+  overlay.addEventListener("click",e=>{if(e.target===overlay)close();});
+  document.addEventListener("keydown",onEsc);
+  submit.onclick=async()=>{
+    if(!picked)return;
+    submit.disabled=true;document.getElementById("ghCancel").disabled=true;
+    const result=document.getElementById("ghResult");
+    result.style.display="none";
+    const fd=new FormData();
+    fd.append("files",picked);
+    fd.append("primary_section","breadth");
+    fd.append("breadth_source","github");
+    try{
+      const r=await apiFetch("/api/uploads",{method:"POST",body:fd});
+      const j=r?await r.json().catch(()=>({})):{};
+      if(r&&r.ok&&j.github_import){
+        const gi=j.github_import;
+        const lines=[`导入 ${gi.imported} 条`];
+        if(gi.skipped_duplicate)lines.push(`包内去重 ${gi.skipped_duplicate}`);
+        if(gi.skipped_upstream_conflict)lines.push(`撞库跳过 ${gi.skipped_upstream_conflict}`);
+        if(gi.failed)lines.push(`失败 ${gi.failed}`);
+        if(gi.replayed)lines.push("（幂等重放：该包此前已导入，未重复入表）");
+        result.textContent="✓ "+lines.join(" · ");
+        result.className="lib-upload-result ok";result.style.display="block";
+        setTimeout(()=>{close();loadLibrary();},1600);
+      }else{
+        result.textContent="✗ "+(j.detail||("导入失败 "+(r?r.status:"")));
+        result.className="lib-upload-result err";result.style.display="block";
+        submit.disabled=false;document.getElementById("ghCancel").disabled=false;
+      }
+    }catch(e){
+      result.textContent="✗ 网络错误："+e.message;
+      result.className="lib-upload-result err";result.style.display="block";
+      submit.disabled=false;document.getElementById("ghCancel").disabled=false;
+    }
+  };
+}
+
 let upPending=[],upTaxonomy=null,upCloseTimer=null;
 
 let upSection="",upSub=""; /* 上传模态框打开时的分区上下文（归属持久化到后端） */

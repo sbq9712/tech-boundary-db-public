@@ -1395,20 +1395,6 @@ def main():
         log("Step 9: Commit state...")
         commit_state(current, successfully_downloaded)
 
-        # Step 9b: feed 增量包随动（当日切片，幂等；失败不阻塞管线主流程）
-        log("Step 9b: Feed daily package...")
-        try:
-            feed = subprocess.run(
-                [sys.executable, os.path.join(boundary_repo, "scripts", "build_feed_package.py"),
-                 "--today"],
-                capture_output=True, text=True, timeout=600)
-            tail = (feed.stdout or "").strip().splitlines()
-            log("  " + (tail[-1] if tail else "feed package done"))
-            if feed.returncode != 0:
-                log("  [WARN] feed package failed (non-fatal): "
-                    + (feed.stderr or "")[:200])
-        except Exception as feed_err:
-            log(f"  [WARN] feed package error (non-fatal): {feed_err}")
 
         # Step 10: Rebuild search indexes (vector + BM25 + knowledge graph)
         # Skip if caller (e.g. full_rebuild.py) will handle index rebuilding

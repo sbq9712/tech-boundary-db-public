@@ -96,6 +96,7 @@ def build_graph():
     
     entity_to_records = defaultdict(list)
     entity_descriptions = defaultdict(list)
+    entity_types = {}  # name -> 类型（首个胜出；抽取顺序机构→公司→指标→技术→分类）
     edges = defaultdict(int)  # (source, target) -> count
     
     print("Extracting entities...", flush=True)
@@ -108,6 +109,7 @@ def build_graph():
         
         for etype, name in entities:
             entity_to_records[name].append(idx)
+            entity_types.setdefault(name, etype)
             # Build description from title
             if len(entity_descriptions[name]) < 3:
                 title = r.get("t", "")[:100]
@@ -127,7 +129,7 @@ def build_graph():
         nodes.append({
             "id": name,
             "label": name,
-            "type": "概念",
+            "type": entity_types.get(name, "概念"),
             "description": "; ".join(descs[:2]),
             "degree": len(record_ids),
         })
