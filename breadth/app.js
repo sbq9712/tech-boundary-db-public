@@ -726,10 +726,12 @@ async function load() {
     // 搜索/分类/日期/等级视图/计数自动与上游记录一致，同一记录只出现一次。
     try {
       const token = (window.Auth && typeof Auth.getToken === 'function') ? Auth.getToken() : (localStorage.getItem('auth_token') || '');
-      // GitHub增量包导入后 manual-records 可能超过单页上限：分页拉全（每页 2000，至多 20 页）
+      // GitHub增量包导入后 manual-records 可能超过单页上限：分页拉全。
+      // 以服务端 count 为唯一停止条件（页数不设上限——固定页数上限会在
+      // 导入记录超过其值时静默漏显；2000×20=4万 即历史缺陷值）。
       const manual = [];
       let total = Infinity;
-      for (let page = 0; page < 20 && manual.length < total; page++) {
+      for (let page = 0; manual.length < total; page++) {
         const resp = await fetch('/api/breadth/manual-records?limit=2000&offset=' + (page * 2000), {
           headers: token ? { 'Authorization': 'Bearer ' + token } : {},
         });
