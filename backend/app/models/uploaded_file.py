@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,6 +45,9 @@ class UploadedFile(Base):
     # 广度追踪再分 GitHub广度情报(github) 与 其他广度情报(other)。
     primary_section: Mapped[str] = mapped_column(String(20), nullable=False, default="industry", index=True)
     breadth_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 行业追踪/ATSC 上传时勾选"同步上传到广度情报"（默认否）：选是后在广度
+    # 追踪保留一条指向本资料的记录并随资料生命周期一致（更新/删除/重试）。
+    sync_breadth: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # AI 填充状态，便于排查：manual | ai_filled | ai_failed | filename_fallback
     title_source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")

@@ -7,6 +7,8 @@ pytest==8.3.4
 httpx==0.28.1
 # Docling is the sole document parser; format dependencies are native Docling extras.
 python-multipart==0.0.20
+# 表格逐行导入（六节）：真实单元格级读取，不用 Docling 冒充行数据
+openpyxl==3.1.5
 docling[asr,rapidocr]==2.127.0
 docling-slim[format-iwork,format-xml-xbrl]==2.127.0
 docling-core[chunking]==2.96.0

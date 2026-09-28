@@ -37,6 +37,9 @@ class BreadthImportSession(Base):
     package_deduplicated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     replayed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     failed_titles: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # v2 变化包扩展计数：{added, updated, deleted, skipped_stale,
+    # skipped_unchanged, deleted_missing, gap_days}（旧字段语义不变）
+    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

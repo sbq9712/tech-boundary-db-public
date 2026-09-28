@@ -27,6 +27,15 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_admin, require_upload
 from app.db.session import get_db
+from app.models.index_task import IndexTask
+from app.services.table_rows import (
+    TableParseError,
+    ALLOWED_SUFFIXES as ROW_MODE_SUFFIXES,
+    import_rows,
+    parse_table,
+    preview as preview_table,
+    validate_mapping,
+)
 from app.models.uploaded_file import UploadedFile
 from app.services.github_import import (
     GitHubPackageError,
@@ -130,6 +139,8 @@ def _serialize(record: UploadedFile) -> dict:
         ingestion_status = "ready"
     elif record.embedding_status == "skipped":
         ingestion_status = "embedding_skipped"
+    elif record.embedding_status == "queued":
+        ingestion_status = "index_queued"
     else:
         ingestion_status = f"embedding_{record.embedding_status}"
     return {
@@ -293,6 +304,25 @@ def get_upload_taxonomy(current_user: str = Depends(get_current_user)) -> dict:
     }
 
 
+@router.post("/uploads/row-preview")
+async def upload_row_preview(
+    file: UploadFile = File(...),
+    sheet: str | None = Form(None),
+    current_user: str = Depends(require_upload),
+) -> dict:
+    """表格逐行模式预览：返回工作表/表头/前 20 行，供前端做列映射。"""
+    suffix = "." + (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+    if suffix not in ROW_MODE_SUFFIXES:
+        raise HTTPException(400, "逐行模式只支持 .xlsx / .csv")
+    data = await file.read()
+    if len(data) > 64 * 1024 * 1024:
+        raise HTTPException(400, "表格文件过大（>64MB），请拆分后上传")
+    try:
+        return preview_table(data, file.filename or "", sheet)
+    except TableParseError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @router.post("/uploads", status_code=201)
 async def upload_files(
     background_tasks: BackgroundTasks,
@@ -303,6 +333,10 @@ async def upload_files(
     breadth_source: str | None = Form(None),
     primary_category: str | None = Form(None),
     document_date: str | None = Form(None),
+    row_mode: bool = Form(False),
+    column_mapping: str | None = Form(None),
+    sheet: str | None = Form(None),
+    sync_upload_to_breadth: bool = Form(False),
     current_user: str = Depends(require_upload),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -312,6 +346,8 @@ async def upload_files(
         raise HTTPException(400, "批量上传不能共用标题，请留空让系统逐文件生成")
 
     section, bsource = _validate_section_combo(primary_section, breadth_source)
+    if sync_upload_to_breadth and section not in ("industry", "atsc"):
+        raise HTTPException(400, "同步上传到广度情报仅适用于行业追踪 / ATSC 内部报告")
 
     # ── GitHub广度情报：daily/YYYY-MM-DD.zip 增量包导入通道 ──
     # 一个包一次上传（单文件），同步解包导入并返回契约计数；不走 Docling 摄取。
@@ -349,7 +385,8 @@ async def upload_files(
                 classification_source="manual",
                 classification_reason="GitHub 增量包导入（不做文档分类）",
                 classified_at=datetime.now(timezone.utc),
-                embedding_status="skipped",
+                # queued：导入产生 breadth_index_tasks，后台 worker 写 canonical-qa
+                embedding_status="queued",
                 embedding_error=None,
                 submitted_by=current_user,
             )
@@ -372,12 +409,97 @@ async def upload_files(
             # 包不合规：已提交的 uploaded_files 行必须一并清掉，避免孤儿记录
             db.rollback()
             db.execute(sa_delete(UploadedFile).where(UploadedFile.id == record.id))
+            db.execute(sa_delete(IndexTask).where(IndexTask.upload_id == record.id))
             db.commit()
             remove_stored_upload(stored)
             raise HTTPException(400, f"增量包不合规：{exc}") from exc
         except Exception:
             db.rollback()
             db.execute(sa_delete(UploadedFile).where(UploadedFile.id == record.id))
+            db.execute(sa_delete(IndexTask).where(IndexTask.upload_id == record.id))
+            db.commit()
+            remove_stored_upload(stored)
+            raise
+
+    # ── 表格逐行模式（六节）：xlsx/csv 每行一个情报，不走 Docling ──
+    if row_mode:
+        if len(files) != 1:
+            raise HTTPException(400, "逐行模式一次上传一个表格文件")
+        if section == "breadth" and bsource == "github":
+            raise HTTPException(400, "逐行模式不适用于 GitHub 增量包通道")
+        suffix = "." + (files[0].filename or "").rsplit(".", 1)[-1].lower() if "." in (files[0].filename or "") else ""
+        if suffix not in ROW_MODE_SUFFIXES:
+            raise HTTPException(400, "逐行模式只支持 .xlsx / .csv")
+        try:
+            mapping = validate_mapping(column_mapping)
+        except TableParseError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        upload = files[0]
+        try:
+            stored = await persist_upload(upload, allowed_suffixes=ROW_MODE_SUFFIXES)
+        except UploadValidationError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+        try:
+            data = stored.path.read_bytes()
+            sheets = parse_table(data, upload.filename or "", sheet)
+            fallback_title = (upload.filename or stored.path.name).rsplit(".", 1)[0]
+            record = UploadedFile(
+                stored_filename=stored.stored_filename,
+                original_filename=upload.filename or stored.path.name,
+                mime_type=upload.content_type,
+                checksum_sha256=stored.checksum_sha256,
+                storage_status="stored",
+                title=title.strip() if title and title.strip() else f"表格情报 {fallback_title}",
+                domain_refs=None,
+                note=note,
+                document_date=document_date,
+                primary_section=section,
+                breadth_source=bsource,
+                title_source="manual" if title and title.strip() else "filename_fallback",
+                taxonomy_version=None,
+                primary_category=manual_category,
+                secondary_categories=[],
+                # 行数据逐条分类来自映射列，文件级 AI 分类/嵌入不适用
+                classification_status="classified",
+                classification_confidence=1.0,
+                classification_source="manual",
+                classification_reason="表格逐行导入（行级分类取自映射列）",
+                classified_at=datetime.now(timezone.utc),
+                # queued：行记录入队持久索引任务，后台写 canonical-qa
+                embedding_status="queued",
+                submitted_by=current_user,
+            )
+            db.add(record)
+            db.commit()
+            db.refresh(record)
+            stats = import_rows(
+                db, record, sheets, mapping,
+                fallback_date=document_date,
+                category_fallback=manual_category,
+            )
+            record.note = (
+                f"逐行导入 {stats['imported']} 条"
+                + (f" · 空标题跳过 {stats['skipped_empty']}" if stats["skipped_empty"] else "")
+                + (f" · 去重跳过 {stats['skipped_duplicate']}" if stats["skipped_duplicate"] else "")
+            )
+            db.commit()
+            db.refresh(record)
+            return {
+                "count": 1,
+                "files": [_serialize(record)],
+                "row_import": stats,
+            }
+        except TableParseError as exc:
+            db.rollback()
+            db.execute(sa_delete(UploadedFile).where(UploadedFile.id == record.id))
+            db.execute(sa_delete(IndexTask).where(IndexTask.upload_id == record.id))
+            db.commit()
+            remove_stored_upload(stored)
+            raise HTTPException(400, f"表格解析失败：{exc}") from exc
+        except Exception:
+            db.rollback()
+            db.execute(sa_delete(UploadedFile).where(UploadedFile.id == record.id))
+            db.execute(sa_delete(IndexTask).where(IndexTask.upload_id == record.id))
             db.commit()
             remove_stored_upload(stored)
             raise
@@ -420,6 +542,8 @@ async def upload_files(
                 document_date=document_date,
                 primary_section=section,
                 breadth_source=bsource,
+                # 行业追踪/ATSC：勾选后广度追踪保留一条指向本资料的记录
+                sync_breadth=sync_upload_to_breadth,
                 title_source="manual" if manual_title else "filename_fallback",
                 taxonomy_version=taxonomy.version if manual_category else None,
                 primary_category=manual_category,
@@ -552,6 +676,32 @@ def retry_upload_embedding(
         raise HTTPException(409, "请先完成文件分类")
     if record.embedding_status in {"pending", "processing"}:
         return {"id": str(record.id), "embedding_status": record.embedding_status}
+    # 增量包/逐行表格导入：索引走持久队列，重试 = 失败任务重新入队；
+    # 旧导入（队列启用前，状态 skipped 且从无任务）首次补建全部行的任务
+    has_tasks = db.scalar(select(IndexTask.id).where(IndexTask.upload_id == record.id)) is not None
+    is_zip_import = record.primary_section == "breadth" and record.breadth_source == "github"
+    if has_tasks or (is_zip_import and record.embedding_status in {"queued", "skipped"}):
+        from app.models.breadth_manual_record import BreadthManualRecord
+        from app.services.breadth_index_queue import enqueue_record_upserts, process_batch
+
+        tasks = db.scalars(select(IndexTask).where(IndexTask.upload_id == record.id)).all()
+        rows = db.scalars(
+            select(BreadthManualRecord).where(BreadthManualRecord.upload_id == record.id)
+        ).all()
+        if rows and not tasks:
+            enqueue_record_upserts(db, rows)
+        else:
+            for task in tasks:
+                if task.status in ("failed", "pending"):
+                    task.status = "pending"
+                    task.attempts = 0
+                    task.not_before = None
+                    task.last_error = None
+        record.embedding_status = "queued"
+        record.embedding_error = None
+        db.commit()
+        background_tasks.add_task(process_batch)
+        return {"id": str(record.id), "embedding_status": "queued"}
     record.embedding_status = "pending"
     record.embedding_error = None
     record.embedded_at = None

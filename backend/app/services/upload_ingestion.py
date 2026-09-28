@@ -528,10 +528,15 @@ def sync_breadth_manual_record(db: Session, record: UploadedFile, text: str | No
     - 幂等：upload_id 唯一，重复处理只更新不新插（1 文件 = 1 广度记录）；
     - 正文取 Docling 提取文本的截断（不重解析，不额外消耗）；
     - 等级默认 0（不设置人工等级）；删除资料时随 FK 级联删除。
+    - 行业追踪/ATSC 上传勾选"同步上传到广度情报"（sync_breadth）时同样
+      在广度追踪保留一条指向本资料的记录：保留原栏目 + 广度追踪可见 +
+      随资料生命周期一致（更新/删除/重试都走同一 upload 链路）。
     """
     from app.models.breadth_manual_record import BreadthManualRecord
 
-    if record.primary_section != "breadth" or record.breadth_source != "other":
+    is_other_breadth = record.primary_section == "breadth" and record.breadth_source == "other"
+    is_synced = bool(getattr(record, "sync_breadth", False)) and record.primary_section in ("industry", "atsc")
+    if not (is_other_breadth or is_synced):
         return
     existing = db.scalar(
         select(BreadthManualRecord).where(BreadthManualRecord.upload_id == record.id)
@@ -624,6 +629,23 @@ def delete_uploaded_file(db: Session, record: UploadedFile) -> dict:
     "记录已删但问答仍可检索"或"索引已删但记录还在且重试无门"的状态。
     """
     index_result = request_incremental_index_delete(str(record.id))
+    # 增量包/逐行表格导入的每条广度记录各自占一个索引文档：
+    # 删除上传前先入队 per-record 索引删除（与级联删除同一事务提交，
+    # 由持久队列收敛到 canonical-qa，删除后索引不再召回）。
+    from app.models.breadth_manual_record import BreadthManualRecord
+
+    try:
+        breadth_rows = db.scalars(
+            select(BreadthManualRecord).where(BreadthManualRecord.upload_id == record.id)
+        ).all()
+    except Exception as exc:  # noqa: BLE001 — 广度行清点失败不阻断删除主链路
+        logger.warning("breadth row queue cleanup skipped for %s: %s", record.id, exc)
+        breadth_rows = []
+    if breadth_rows:
+        from app.services.breadth_index_queue import enqueue_record_delete
+
+        for row in breadth_rows:
+            enqueue_record_delete(db, row.id, record.id)
     try:
         path = safe_upload_path(record.stored_filename)
     except ValueError:
@@ -647,6 +669,7 @@ def delete_uploaded_file(db: Session, record: UploadedFile) -> dict:
         "ok": True,
         "removed_chunks": index_result.get("removed_chunks", 0),
         "index_skipped": bool(index_result.get("skipped")),
+        "queued_record_deletes": len(breadth_rows),
     }
 
 
@@ -669,14 +692,27 @@ def rename_uploaded_file(db: Session, record: UploadedFile, new_title: str) -> d
     db.commit()
     db.refresh(record)
 
-    # 其他广度情报：广度总表记录标题同步（读侧合并层数据）
+    # 其他广度情报：广度总表记录标题同步（读侧合并层数据）；
+    # 逐行/增量包导入的多行记录：标题同步并入队索引更新（问答检索跟随改名）
     from app.models.breadth_manual_record import BreadthManualRecord
-    breadth_record = db.scalar(
+    breadth_rows = db.scalars(
         select(BreadthManualRecord).where(BreadthManualRecord.upload_id == record.id)
-    )
-    if breadth_record is not None:
-        breadth_record.title = record.title
+    ).all()
+    if breadth_rows:
+        for breadth_row in breadth_rows:
+            breadth_row.title = record.title
         db.commit()
+        from sqlalchemy import select as _select
+        from app.models.index_task import IndexTask
+
+        has_tasks = db.scalar(
+            _select(IndexTask.id).where(IndexTask.upload_id == record.id)
+        ) is not None
+        if has_tasks:
+            from app.services.breadth_index_queue import enqueue_record_upserts
+
+            enqueue_record_upserts(db, list(breadth_rows))
+            db.commit()
 
     synced = False
     chunks: list[dict] = []

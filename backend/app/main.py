@@ -42,6 +42,16 @@ async def lifespan(_: FastAPI):
             name="upload-ingestion-recovery",
             daemon=True,
         ).start()
+    # 广度问答索引持久队列：导入记录 → canonical-qa 增量索引的收口。
+    # 独立开关（默认开）；崩溃/重启后遗留 processing 任务自动续跑。
+    if os.getenv("TECHDB_BREADTH_INDEX_WORKER_ENABLED", "true").lower() in {"1", "true", "yes"}:
+        from app.services.breadth_index_queue import run_worker
+
+        threading.Thread(
+            target=run_worker,
+            name="breadth-index-queue",
+            daemon=True,
+        ).start()
     yield
 
 app = FastAPI(title="Tech Intel API", version="0801", lifespan=lifespan)
