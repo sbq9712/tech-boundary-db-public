@@ -141,6 +141,14 @@ MAPPING_SLOTS = ("title", "date", "category", "url", "source", "level", "body", 
 
 
 def validate_mapping(mapping: object) -> dict[str, str]:
+    # HTTP 层 column_mapping 以 multipart Form 字符串到达（前端
+    # JSON.stringify），此处必须先反序列化——直接要求 dict 会让
+    # 全部经 API 的逐行导入 400。
+    if isinstance(mapping, (str, bytes)):
+        try:
+            mapping = json.loads(mapping)
+        except ValueError as exc:
+            raise TableParseError("column_mapping 不是合法 JSON") from exc
     if not isinstance(mapping, dict):
         raise TableParseError("column_mapping 必须是对象")
     cleaned: dict[str, str] = {}

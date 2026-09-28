@@ -423,6 +423,15 @@ async def upload_files(
 
     # ── 表格逐行模式（六节）：xlsx/csv 每行一个情报，不走 Docling ──
     if row_mode:
+        # manual_category 在通用路径（下方 514 行）才赋值；逐行分支
+        # 也引用它（行分类的 fallback），必须先初始化
+        manual_category = None
+        if primary_category:
+            manual_category, _ = _validate_category(primary_category)
+        try:
+            document_date = normalize_document_date(document_date)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         if len(files) != 1:
             raise HTTPException(400, "逐行模式一次上传一个表格文件")
         if section == "breadth" and bsource == "github":
