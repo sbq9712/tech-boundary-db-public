@@ -754,7 +754,12 @@ async function load() {
             sc: m.sc, scd: (m.scd && typeof m.scd === 'object' && Object.keys(m.scd).length) ? m.scd : null,
             source: 'manual-import', lv_manual: true, upload_id: m.upload_id,
             record_id: m.id, kp: m.kp || [], hb: m.hb || 1,
-            b: m.body || '', fb: m.body || '', as: m.ai_summary || '',
+            // tg/tp/aip + wr/dp/cl 等 AI 链路字段：随 record_json 透出，
+            // 不再在合并层丢失（导入丢 AI 精选/标签/主题字段的修复）
+            tg: m.tg || '', tp: m.tp || '', aip: m.aip || 0,
+            wr: m.wr || '', dp: m.dp || 0,
+            cl: m.cl, cp: m.cp, cln: m.cln,
+            b: m.body || '', fb: m.body || '', as: m.ai_summary || m.as || '',
           });
         }
       }
