@@ -11,9 +11,10 @@
 用法：
   .venv/bin/python scripts/rerun_engine_retriage.py [--batch 400] [--limit N] [--reset-checkpoint]
 环境：
-  TRIAGE_LLM_OFF=1     关闭 LLM 语义复核层（仅规则层）
-  TRIAGE_LLM_BATCH=8   LLM 复核批大小
-  TRIAGE_LLM_SLEEP=2   LLM 批间节流秒
+  TRIAGE_LLM_OFF=1            关闭 LLM 语义复核层（仅规则层）
+  TRIAGE_LLM_BATCH=8          LLM 复核批大小
+  TRIAGE_LLM_SLEEP=1          LLM 批间节流秒
+  TRIAGE_RETRIAGE_WORKERS=6   并发引擎子进程数（每批一个独立子进程，线程安全）
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]        # tech-boundary-db/
@@ -72,71 +74,77 @@ def main() -> int:
 
     import engine_triage
 
-    t0 = time.time()
-    PUBLISH_EVERY = 10
-    pending_publish = 0
-    for b0 in range(0, len(todo), args.batch):
-        idxs = todo[b0:b0 + args.batch]
-        # 快照副本：引擎结果先写副本，成功后才覆盖原记录（失败不影响原数据）
-        batch = [dict(lite[i]) for i in idxs]
-        # as/kp/tp 保留（本次不重跑摘要/参数/主题），但引擎可能判不相关 → 届时清空
-        try:
-            stats = engine_triage.engine_triage_records(
-                batch, use_llm=not os.environ.get("TRIAGE_LLM_OFF"),
-                workdir=str(PIPELINE / ".engine_triage_work"),
-                llm_batch=int(os.environ.get("TRIAGE_LLM_BATCH", "8")),
-                llm_sleep=float(os.environ.get("TRIAGE_LLM_SLEEP", "2.0")),
-            )
-        except Exception as exc:
-            cp["stats"]["fail"] += len(idxs)
-            save_checkpoint(cp)
-            print(f"[batch@{idxs[0]}] FAILED ({exc}) — checkpoint saved, abort for retry", flush=True)
-            return 1
+    workers = max(1, int(os.environ.get("TRIAGE_RETRIAGE_WORKERS", "6")))
+    llm_batch = int(os.environ.get("TRIAGE_LLM_BATCH", "8"))
+    llm_sleep = float(os.environ.get("TRIAGE_LLM_SLEEP", "1.0"))
+    use_llm = not os.environ.get("TRIAGE_LLM_OFF")
 
+    def triage_one(idxs):
+        """工作线程：独立子进程跑引擎（线程安全——rows/out 均为调用级临时目录）。
+        快照副本上改写，成功后由主线程按原索引写回（失败不影响原数据）。"""
+        batch = [dict(lite[i]) for i in idxs]
+        stats = engine_triage.engine_triage_records(
+            batch, use_llm=use_llm,
+            workdir=str(PIPELINE / ".engine_triage_work"),
+            llm_batch=llm_batch, llm_sleep=llm_sleep,
+        )
         # 不相关 → 清空 as/kp/tp（终止后续处理）；其余保留既有摘要/参数/主题
         for rec in batch:
             if rec.get("c") == "不相关":
                 for f in ("as", "kp", "tp"):
                     rec.pop(f, None)
+        return idxs, batch, stats
 
-        for i, rec in zip(idxs, batch):
-            old = lite[i]
-            for f in PROTECTED_FIELDS:
-                if f in old:
-                    rec[f] = old[f]
-                else:
-                    rec.pop(f, None)
-            lite[i] = rec
+    batch_index_lists = [todo[b0:b0 + args.batch] for b0 in range(0, len(todo), args.batch)]
 
-        cp["done_idx"] = sorted(done | set(idxs))
-        done = set(cp["done_idx"])
-        cp["stats"]["ok"] += stats["matched"]
-        cp["stats"]["irrelevant"] += stats["irrelevant"]
-        cp["stats"]["scored"] += stats["scored"]
-        cp["stats"]["featured"] += stats["featured"]
-        cp["stats"]["carrier_switched"] += stats["carrier_switched"]
-        save_checkpoint(cp)
+    t0 = time.time()
+    PUBLISH_EVERY = 10
+    pending_publish = 0
+    # 引擎调用（LLM 受限型 I/O）并发执行；写回/断点/发布仍严格按批顺序在主线程执行
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for idxs, batch, stats in ex.map(triage_one, batch_index_lists):
+            for i, rec in zip(idxs, batch):
+                old = lite[i]
+                if rec.get("c") == "不相关":
+                    # 不相关 = 终态：引擎已清空全部 AI 派生字段，保护字段不得回填
+                    lite[i] = rec
+                    continue
+                for f in PROTECTED_FIELDS:
+                    if f in old:
+                        rec[f] = old[f]
+                    else:
+                        rec.pop(f, None)
+                lite[i] = rec
 
-        # 落盘（每批原子写）；发布节流：每 PUBLISH_EVERY 批一次（68k 全量发布约分钟级）
-        tmp = LITE_PATH.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(lite, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, LITE_PATH)
-        pending_publish += 1
-        if pending_publish >= PUBLISH_EVERY or b0 + args.batch >= len(todo):
-            pending_publish = 0
-            try:
-                # publish_to_boundary 依赖 BOUNDARY_REPO 指向仓库根（脚本/派生快照定位）
-                os.environ.setdefault("BOUNDARY_REPO", str(REPO))
-                import auto_pipeline as _ap  # 复用主管线发布逻辑（含派生快照与版本戳）
-                if not _ap.publish_to_boundary():
-                    print("[WARN] publish failed this round (non-fatal, retried next round)", flush=True)
-            except Exception as exc:
-                print(f"[WARN] snapshot/publish failed (non-fatal): {exc}", flush=True)
+            cp["done_idx"] = sorted(done | set(idxs))
+            done = set(cp["done_idx"])
+            cp["stats"]["ok"] += stats["matched"]
+            cp["stats"]["irrelevant"] += stats["irrelevant"]
+            cp["stats"]["scored"] += stats["scored"]
+            cp["stats"]["featured"] += stats["featured"]
+            cp["stats"]["carrier_switched"] += stats["carrier_switched"]
+            save_checkpoint(cp)
 
-        rate = len(done) / max(1e-9, time.time() - t0)
-        print(f"[batch {idxs[0]}..{idxs[-1]}] ok={stats['matched']} 不相关={stats['irrelevant']} "
-              f"scored={stats['scored']} featured={stats['featured']} "
-              f"progress={len(done)}/{len(todo)} rate={rate:.0f}/s", flush=True)
+            # 落盘（每批原子写）；发布节流：每 PUBLISH_EVERY 批一次（68k 全量发布约分钟级）
+            tmp = LITE_PATH.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(lite, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, LITE_PATH)
+            pending_publish += 1
+            if pending_publish >= PUBLISH_EVERY or idxs[-1] == todo[-1]:
+                pending_publish = 0
+                try:
+                    # publish_to_boundary 依赖 BOUNDARY_REPO 指向仓库根（脚本/派生快照定位）
+                    os.environ.setdefault("BOUNDARY_REPO", str(REPO))
+                    import auto_pipeline as _ap  # 复用主管线发布逻辑（含派生快照与版本戳）
+                    if not _ap.publish_to_boundary():
+                        print("[WARN] publish failed this round (non-fatal, retried next round)", flush=True)
+                except Exception as exc:
+                    print(f"[WARN] snapshot/publish failed (non-fatal): {exc}", flush=True)
+
+            rate = len(done) / max(1e-9, time.time() - t0)
+            print(f"[batch {idxs[0]}..{idxs[-1]}] ok={stats['matched']} 不相关={stats['irrelevant']} "
+                  f"scored={stats['scored']} featured={stats['featured']} "
+                  f"progress={len(done)}/{len(todo)} rate={rate:.0f}/s", flush=True)
 
     s = cp["stats"]
     print(f"ALL DONE: ok={s['ok']} fail={s['fail']} 不相关={s['irrelevant']} "

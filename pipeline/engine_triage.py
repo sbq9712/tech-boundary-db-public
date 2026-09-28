@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -276,8 +277,11 @@ def run_engine(rows: list[dict], workdir: str, use_llm: bool = False,
     返回 {"result": <semantic json>, "llm": <decisions|None>, "failed": int}
     """
     os.makedirs(workdir, exist_ok=True)
-    rows_path = os.path.join(workdir, "rows.json")
-    out_dir = os.path.join(workdir, "out")
+    # out 目录每次调用必须全新：引擎 LLM 层按"行下标 i"断点续跑（audit 里 i 会跨批重复），
+    # 共享 out 会让后续批次误跳过 LLM 复核、并把上一批决策错配到本批记录——历史事故点，勿回退。
+    # rows 一并放入该目录：调用间互不可见，支持多线程并发跑引擎（各自独立子进程）。
+    out_dir = tempfile.mkdtemp(prefix="engine_out_", dir=workdir)
+    rows_path = os.path.join(out_dir, "rows.json")
     with open(rows_path, "w", encoding="utf-8") as f:
         json.dump(rows, f, ensure_ascii=False)
 
@@ -289,8 +293,10 @@ def run_engine(rows: list[dict], workdir: str, use_llm: bool = False,
     engine_parent = os.path.dirname(ENGINE_DIR)  # pipeline/ — the package root for -m resolution
     llm_info = None
     if use_llm:
+        # --scoped：与引擎自家管线默认一致（仅域外/T25/AI00+问题记录送复核，
+        # 规则层结果照常产出；全量送审是引擎 cli 的小批量审计口径，68k 全量不可承受）
         cmd = [sys.executable, "-m", "triage_engine.cli", "llm",
-               "--rows", rows_path, "--out", out_dir,
+               "--rows", rows_path, "--out", out_dir, "--scoped",
                "--batch", str(llm_batch), "--sleep", str(llm_sleep)]
         r = subprocess.run(cmd, cwd=engine_parent, env=env, capture_output=True, text=True,
                            encoding="utf-8", timeout=3600 * 4)
@@ -311,6 +317,7 @@ def run_engine(rows: list[dict], workdir: str, use_llm: bool = False,
         raise RuntimeError(f"engine run failed rc={r.returncode}: {r.stdout[-400:]} {r.stderr[-400:]}")
     with open(res_path, encoding="utf-8") as f:
         result = json.load(f)
+    shutil.rmtree(out_dir, ignore_errors=True)  # 结果已读入内存，临时产物即弃
     return {"result": result, "llm": llm_info}
 
 
