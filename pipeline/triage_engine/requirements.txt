@@ -1,0 +1,4 @@
+# triage_engine 依赖说明
+# 规则层与 LLM 层均只使用 Python 标准库（csv/json/os/re/sys/glob/urllib/argparse…），无第三方依赖。
+# 建议 Python >= 3.10（使用海象运算符与 f-string 语法）。
+# 测试可选 pytest，但 tests/test_smoke.py 也支持直接运行：python -m triage_engine.tests.test_smoke

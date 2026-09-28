@@ -1,0 +1,121 @@
+ 根据分类、评分效果，感觉存在以下问题：1.分类效果很差，尤其是文献大多都没分，实际上根据摘要/标题已经能够比较好的对其领域进行划分，
+  并明确其在主域内，都在域外或者若相关的话明显不太行，除非是真的涉及氢、又有CO2利用，这个可以根据主次进行区分，但文献这种终归是有主分类的，请参照"D:\GitHub\Intelligence tehc info system\framework\文献技术分类规则_行
+  业图景版.docx"，重新尝试划分，并找出其与你设置的领域词划分差异，针对文献进行特殊/针对性的补丁。
+2.评分方面，2.1https://news.solarbe.com/202606/16/50024433.html、https://news.solarbe.com/202606/18/50024539.html这两个实际上是硅基TOPCON器件，可能不是当前关注的重点，而且二者感觉还是属于同一个事情，看下如何优化下。2.2高分里面，投融资、市场贸易变化、采购订单与招标（https://mp.weixin.qq.com/s/ool1mz_Zs7MYojBIRyv-Nw、https://mp.weixin.qq.com/s/96o6zxBYz_BCZpvuEno0oQ、https://mp.weixin.qq.com/s/9kaj1jyW-xoyA90kI_PbpQ）没有技术特性的话，意义不大，评分不应该高；还有这个发布（https://mp.weixin.qq.com/s/6Zh41kTmd81WtxTRia3XaQ、https://mp.weixin.qq.com/s/RNggRY5zDs8KGvggozVvgw）明显是个报告，感觉实质技术信息还是比较少，意义不是很大；还有这个项目建设（https://mp.weixin.qq.com/s/RNggRY5zDs8KGvggozVvgw），是首先是将要建设，而非建成，尽管盐穴压缩空气算是新型储能， 而且5GWh也比较大，但感觉不是新技术发布，评分可稍低，不至于达到高，以及这个项目中标（中标 | 辽水新能抚顺100MW/400MWh压缩空气储能+飞轮储能项目建设监理中标结果公告、中国能建中标锡林郭勒压缩空气储能项目；中创新航枣庄基地60GWh电芯及集成项目拟建）同理，而且有些规模也没达到量级突破；工程示范验证（https://mp.weixin.qq.com/s/1w9HWdPClf5Ee5xpS4gtsw）、项目与设施开发（深能锡林郭勒西乌珠穆沁旗电网侧压缩空气储能项目地面电站工程EPC总承包项目成功签约、全球单机储热容量最大的光热电站开工），我不是很理解这里面有啥值得高分的内容？；产品与装备（派瑞氢能首个加拿大氢能项目顺利交付），这个交付的技术很新？规模有突破，还是有啥亮点值得高分呢？
+2.3评分这里，这个新闻（https://mp.weixin.qq.com/s/a6ZcquzesGB87REqOH-FjA），你也感觉评分很高，但因为是域外就没有纳入高分的页面，是展示逻辑问题还是你的域分配有问题？判断一下然后修改。2.4你这高、中、低档的门槛到底是啥？为啥25分也能是中档，而且低档没有内容？重新设置优化一下。
+
+1.https://mp.weixin.qq.com/s/f1vlTvcddFZwG_OerR2OfA，这个我感觉实质内容是说发布了一个报告，怎么能够分到“T09 产品与装备”。
+2.你的关注分“关注分
+A 82 ＝ 0.6×D(75) ＋ 0.4×T(73) ＋ 技术特性 8 → 高（门槛：A≥70 高 / 55–69 中 / <55 低；弱相关与域外不评级）”的计算逻辑到底是啥？感觉完全没按照评分卡来啊？是你没展示还是刚才修改错了？
+
+
+根据“D:\GitHub\Intelligence tehc info system\outputs\github-triage-20260615-23”这里面的筛选结果，发现评分机制方面有一些问题，将下面意见分析归类，并建立多个对话/session逐项进行分析，避免相互修改导致冲突；若是评分机制问题，则修改评分机制；若是运行阶段没能匹配或遗漏，则思考应该如何严格按照机制对新闻进行评分。你负责整体的任务把控，注意对原版机制进行备份，便于回滚：
+1.https://mp.weixin.qq.com/s/gSXdtfKfNVGmJ-b9izQKsg，这个新闻中提及的阳江风电场项目规模大、单机容量也大，确实重要，但该新闻本身并未透露该项目最新的建成、投运、并网/离网供电，或任何的新型技术采用信息，其中列出的最新进展（根据该文发文时间）仅是“6月18日，中广核阳江帆石二（Ⅱ标段，40万千瓦）海上风电项目，由“大桥海风”成功吊装Ⅱ标段首台18兆瓦大容量风机。”这样。该新闻实质是项目动态更新，我认为分数不应很高，请根据这一点对对应评分机制进行校正。
+2.文献评分，当前文献由于正文内容不足，且文献部分结果黑箱、理论知识库也不充足等原因，感觉难以完全客观、真实评分，所以我想对其现有评分机制进行修改，尤其是研究类的，各领域内的研究文章，若明确有关键瓶颈解决的瓶颈性能参数的突破，则高分无疑；若无或涉及理论机制的研究文献，以及综述/分析/观点文献，可根据期刊的影响因子、通讯作者的那个被引量等数据进行一定的权重倾斜，作为初期的过渡方案。例如https://mp.weixin.qq.com/s/hdIb18o2ThaN5-_2nViLLg，https://mp.weixin.qq.com/s/7CREm9xShy3303HWloanEQ，这种明显nature的文章，还被媒体报道，应该高分。
+3.https://mp.weixin.qq.com/s/_xL3UFBj-YNqGc8BVw7kLA、https://mp.weixin.qq.com/s/cx8ny60DrGuGXq81ertl1Q、https://mp.weixin.qq.com/s/v5srCrBu385NvrWMUmHFTg，https://mp.weixin.qq.com/s/Snbzg0Hd1AIdMh2I8XfFZw，https://mp.weixin.qq.com/s/D_nzPGhsEbl5Uf239IoPcw，我都说了这个投融资、产业链没有提及技术突破、头部重大合并，重要度没有那没高，咋还打这么高分；还有这个招标的https://mp.weixin.qq.com/s/tMKwxk2AfOjF1h_Th08ufA。
+4.部分文献会被媒体进行报道，这种其实应该合并，最优解应该是根据DOI、标题号进行匹配；但部分新闻没有或放到图片里，先解决能直接匹配去重的（去掉媒体报道），然后看有啥好方法适配没有办法找到新闻报道中没提及文章原文信息的；另被媒体报道的文章，可适当做一些加分，尤其是新华社、科技日报等权威媒体，赋分可以更高一点。
+5.钙钛矿LED不属于光伏，属于光电器件。
+6.https://news.solarbe.com/202606/16/50024433.html，该文次领域为啥是 D07 核电(含聚变)(22），注意对正文进行预处理和正文域划分，带核电的内容是抓取杂质。
+7.https://mp.weixin.qq.com/s/eF2n4qcSbsrfyix5EAoIrw这个是论文嘛？你是怎么判定的？明显不对，而且这个新闻本身都没啥有价值的内容，你还给了65分，明显不对，请分析原因并进行修改。
+8.https://mp.weixin.qq.com/s/Ql1H9geruDAUpyBXEgD4TA，这明显是个文章啊，你这又咋判定到研究报告和知识成果里面去了，修改。
+9.https://mp.weixin.qq.com/s/bb3vV9qEuK3KeXL6kucIZg，https://mp.weixin.qq.com/s/YniWzrri8yDrBQrlJB8ilA，这明显是政策啊，咋能是报告呢？分析修改。
+10.https://mp.weixin.qq.com/s/Af_ilmsEPW4KqdfIbpQ5lQ，https://mp.weixin.qq.com/s/xguwni2rMraYbtq8DyqN1g，https://mp.weixin.qq.com/s/-2Vsc5FbBDo8cgP6LNIvtA，这种为啥能是论文，分析修改；https://mp.weixin.qq.com/s/6MMlPRJLR-fQ_MMFXQ2uVA，还有这个，明显是招聘启事，怎么分到论文里面的，还打高分，严格按照规则去做啊。
+11.https://mp.weixin.qq.com/s/6ORuiLNmCjA-BWPpUwvhlQ，这种评审会有啥意义啊，为啥高分啊，说不出来原因就修改。
+12.领域判定，我认为https://mp.weixin.qq.com/s/H_Agu-TsVvHncc7Vex6eHw，这种文章，主体是制氢，应该放到氢基能源里面去，关键技术难点也在电解槽应对电流波动性的问题上，并不是风电技术，思考修改。
+13.https://mp.weixin.qq.com/s/7EITBhqvfjFKT2qGWqwYFw，这种，明显高分啊，分析修改。
+14.https://mp.weixin.qq.com/s/Z12ECZ9MoJj85JH4jGICvA，会议与活动，若该会议影响力很大（想办法判断），且文中有明确的技术、会议/展览中内容成果公布，则高分，否则没啥意义
+15.https://mp.weixin.qq.com/s/l3lZ_VxGA_YhidkfdT4w1w，这种有明确技术，且规模比参照大/接近参照的，至少应该中档评分，因为其仅是建设，没有建成投运，所以到不了高档，但也不至于低档，分析原因修改。
+16.https://mp.weixin.qq.com/s/4b2hcZ7ON_bvgznB248I-g，分级标准原先没有，这个是新的规范，意义比较大，至少中档/高档，为啥低档？分析原因修改。
+17.https://mp.weixin.qq.com/s/ocLbttYrrIBhob8A-yK6xQ，这个新闻很重要，为啥能低档呢？分析原因修改。
+18.https://mp.weixin.qq.com/s/yYyW7-Bl1f9jH6nTCTboqQ，这类报告的我感觉没有必要过分分档打分，而且你这分类明显不对，修改。
+19.https://mp.weixin.qq.com/s/BeyUye3nzo0U6zIpZlN6EQ，这个政策也很重要，你的分类也不对，修改。
+20.https://mp.weixin.qq.com/s/Wk7ALN9xB8FrSqX0hEXeiw，此类双周刊类的信息汇总的新闻，里面内容应该提取出来，或暂不参与评分。
+21.https://mp.weixin.qq.com/s/BXdFB2ZRWG54U_VmkoddqQ，这个也很重要啊，为啥低分？分析修改。
+22.https://mp.weixin.qq.com/s/6jFkx8AiSx1yY0E8EqRFkA，这种是论文，不是知识库，分析修改？
+23.https://mp.weixin.qq.com/s/IPeP-577OrBw0TI8rhmnkQ，https://mp.weixin.qq.com/s/4r6u1XoGz-8tlbX3PdYizw这种具有一定话题度的科普、分析感觉可以高分推荐；https://mp.weixin.qq.com/s/XT2Clk6RdUi_8lfIIKiSAg，这类深度分析同理。
+24.https://mp.weixin.qq.com/s/ub50z8yDcE-QFJVzCV4fiw，这个为啥低分呢，感觉高分，分析原因并修改。
+25.https://mp.weixin.qq.com/s/AYUmIQpSr3pBjE17MwsuvQ，还有这个，也是，感觉高分，分析原因并修改。
+26.https://mp.weixin.qq.com/s/Ozn0geP_kPN-8yItYsVstw，https://mp.weixin.qq.com/s/Z72Ijz_4Ypk-xSUTTIoMaw这个新闻很重要，为啥能低档呢？分析原因修改。
+27.https://mp.weixin.qq.com/s/Q4IkNIzKDNrknmqkiP2Qng，这个至少也是个中档，咋能低分。
+28.其余同类问题也一并检查。
+
+
+26.9.12
+1.Nanocrystal-tailored recombination for all-perovskite tandem solar modules 文 重复×3，这个为啥是低置信？给出解释。
+2.域外文章过多，这是啥原因，能否归类解释下呢？
+3.涉及到宁德时代的新闻，主要是宁德时代为主体的新闻，可以忽略。
+4.https://mp.weixin.qq.com/s/7Seb9H60YAsR0vClgHAU_A，像这种项目申报成功，但也没有啥新型技术，纯粹就是市场占比很高的锂离子电池储能，且不是构网型，或时长没突破最高的>24h这种，没必要高分；而且我感觉这是个政策。
+5.https://mp.weixin.qq.com/s/_xL3UFBj-YNqGc8BVw7kLA，这种投融资的分数还是高了，固态已经感觉属于TRL起码>4的技术了，投融资意义没那么大了好像。但我也不是很确定，因为TRL越低好像投资越多，但额度越少，因为成功率更低，属于广撒网多捞鱼。但我认为投融资对技术追踪的目的主要起到风向标的作用，整合起来看趋势比较有意义，单一点没有明确独特/颠覆性技术信息披露的话意义感觉不是很大。
+6.https://mp.weixin.qq.com/s/e4hhLGqu-kVRSmtjSlDb6g，这个感觉还是有一点意义的，尽管新闻没有更多技术信息，但有固态这个在储能市场市占率不是很高的技术、外加非洲新兴市场，还是有一定的那个意义，尽管固态这种高价格产品在非洲销量/市场不一定好，但有一定的反面意义，感觉可以列到中档。
+7.https://mp.weixin.qq.com/s/_AuA_DnAKtbjXdK0C407rA，https://mp.weixin.qq.com/s/4xLF-1vw9jKfoZeUsU6pPQ，不是很理解这个很明显是储能领域，为啥领域分那么低？然后里面有技术详细介绍，为啥卡分还低?不是很理解，分析原因然后修改。https://mp.weixin.qq.com/s/S1aLDzYkuIxcon5ovJvPng，还有这个也是同样问题。
+8.https://mp.weixin.qq.com/s/uZcEUcwakFaK4-QnwrExdA、https://mp.weixin.qq.com/s/wg9tWdViBtDy8Ab6u4s-IQ、https://mp.weixin.qq.com/s/9rp5kEGM5qjSy-wX66Dxwg，https://mp.weixin.qq.com/s/nKytqY8xIx-2SMeFPSrzVQ，https://mp.weixin.qq.com/s/1tkcAVz944ZJl5g1mjUbIg，这个感觉能稍微提一提，能到中。分析原因并修改下。
+9.https://mp.weixin.qq.com/s/soPABkSFvlvwXpL5PbtLLQ，https://mp.weixin.qq.com/s/iAKLaeZQsHFx5tFr-aACnQ，还有这类分析的，感觉有一些不一样的观点，还是热门话题“数据中心”，分数应该较高，分析原因并修改。
+10.https://mp.weixin.qq.com/s/FkG-fh6vpiJf3Qo2UO1e1A，这类各个产业/行业脱碳的，权重可以稍微提一提，分数高一点。
+11.https://mp.weixin.qq.com/s/WqWHCEsJHBjvK-Byl8MqJw，也一样，分析原因，提高分数。
+
+26.09.17
+这个处理结果：“D:\GitHub\Intelligence tehc info system\outputs\github-triage-20260615-23”，有一些问题，
+关于域外及新闻类型、技术领域分类还有一些问题：
+1.严格明确新闻的所属技术领域和类型分类，直接用大语言模型去判断、匹配到先前设定的行业图景技术分类，以及新闻类型分类框架中。然后参考文档作为基准参考，也不是说需要严格遵守，无需“动作、指标和瓶颈不作为域内前置条件”。尽量所有的都有领域/类型划分，除非能给出明确理由，例如这种：“https://mp.weixin.qq.com/s/PLw8gjVZhEh3tOd-zQvYRw”。另外，文献分类行业图景中有技术领域的一定要严格参考，没有的可根据文章内容进行划分、并新增领域，便于后续统一分类管理。
+2.https://mp.weixin.qq.com/s/UBXt-7_0wmeH_Od-1lUVZw，https://mp.weixin.qq.com/s/AYONHqS5WtLUZ7EGHKZ4mA，https://mp.weixin.qq.com/s/apBfVuNpgL4LSa_PYZyz9A，这些个为什么会是论文，请使用语义理解去处理分类。
+3.https://mp.weixin.qq.com/s/zAobVWQvajaRExQjOFA0wA，https://mp.weixin.qq.com/s/s5Hkb-E3r5JowGXMo6rAFA，这种不是明显的电池吗？为啥未命中领域呢？
+4.https://mp.weixin.qq.com/s/RylxStpzvD6JoIo6wMAAHw，这种不是明显石化方面的吗？
+5.https://mp.weixin.qq.com/s/XUqTA43QDNSrqpDvBcK5uQ，这种不属于观点知识类型吗，怎么能使市场变化。
+6.https://mp.weixin.qq.com/s/iwbuwy9g7u29B5iLc_eKUQ，这不明显属于政策类、氢能领域，不是很理解。
+
+关于新闻评分方面也有一些问题：
+1.可以考虑把极高去掉，感觉现在判断的极高都不太好，还是留给人工判断，AI机制判断靠高中低即可。
+2.关于无实质值的定义和评价方法是啥，不记得之前有设立过这个东西。https://mp.weixin.qq.com/s/BXdFB2ZRWG54U_VmkoddqQ，尤其是其中的这条，明显价值比较高，分却很低，很不合理。https://mp.weixin.qq.com/s/JU7xpQIS3o_R8eXEWX3ORQ，这种有点用的，也很低。分析原因并修改机制。https://www.pv-magazine.com/2026/06/19/jinkosolar-achieves-34-82-efficiency-for-perovskite-silicon-tandem-solar-cell/，https://mp.weixin.qq.com/s/yyUBb026Lvsv_fZWYRI0AA，这个也很重要，分很低。感觉这类都是“无实质值”所谓机制的原因。要不删掉；要不你得优化好，我偏向于删掉在现阶段。
+3.待补评分机制的，补充完全，直接补充，不用人工审核，全部补充完全。
+4.跨域待复核，整体框架文件不都说了，按照事件最主题因素评分；附加因素的分可以附在后面作为参考？重新改，不存在待复核。
+5.https://mp.weixin.qq.com/s/xLjGKrPe4GgmV5KgcYQJ1Q，https://mp.weixin.qq.com/s/l0mcfxslX60LTji6eDScpw，这种有啥用啊评分那么高，都说了除了技术相关新闻是重点，感觉没按先前的经验总结啊？先前的经验整改都存档在哪里了？没有的话重新弄，根据先前我提供的示例问题汇总、归类建一个便于后续评分校准。
+6.这一版完全不行，评分机制还不如上两版。
+
+26.09.18
+1.这个我感觉很明确啊：https://www.sciencedirect.com/science/article/pii/S0306261926008524?dgcid=rss_sd_all，为啥判断不了？
+2.https://www.sciencedirect.com/science/article/pii/S0306261926008020?dgcid=rss_sd_all，https://www.sciencedirect.com/science/article/pii/S030626192600855X?dgcid=rss_sd_all，这个不属于电网技术吗？没有这个领域吗，没有的话帮忙新增一下。
+3.https://www.sciencedirect.com/science/article/pii/S0301421526003691?dgcid=rss_sd_all，这种不属于温室气体和碳排放啥的吗，没有也可以考虑新增一下，类似碳市场及温室气体监测这种。
+4.https://www.sciencedirect.com/science/article/pii/S030626192600797XOvercoming Salt Precipitation in CO2 Reduction Membrane Electrode Assembly Electrolyzer Enables Over 4200 Hours Stable Operation?dgcid=rss_sd_all，这种明显属于脱碳技术，电网脱碳技术，也还是在域外。
+5.https://mp.weixin.qq.com/s/zJQkeClNGJrgfoOs4NkuAg，这种不属于钢铁行业脱碳吗？类型也属于论文，链接被删了，但已经抓取到的原文应该有体现。
+6.论文对象为落入当前行业图景的，可以根据文章内容自行帮忙判断，进行划分、并新增领域，便于后续统一分类管理，之前都有说。
+7.https://www.ess-news.com/2026/06/16/statkraft-begins-54-gwh-expansion-for-norways-largest-hydropower-reservoir/，这个分类能是深度分析吗？而且明显储能领域为啥会判断不出来。是语义理解吗？
+8.评分都说了，按照那个技术新闻优先、电池、能源、零碳（各个产业脱碳技术）、AI、半导体、芯片技术领域优先，投融资、会议、高TRL产业优先级往后，怎么还能有这些https://mp.weixin.qq.com/s/fQE2mt9p9k_fG0c7pUONvQ，重点分析原因，然后修改，并在评分机制文件中重点突出。
+9.https://mp.weixin.qq.com/s/bFtpO3gkProT8r15TPtG1g，https://mp.weixin.qq.com/s/bb3vV9qEuK3KeXL6kucIZg，这类明显是政策新闻，注意分类
+10.https://mp.weixin.qq.com/s/zTLCn5UammHH7A_MgweZVA，https://mp.weixin.qq.com/s/3qtvmTfv2tz4lCZvSbaT7Q，https://mp.weixin.qq.com/s/a6ZcquzesGB87REqOH-FjA，这个分为啥会低啊，明显不对，感觉是原文杂质的原因，分析原因修改。
+
+26.09.19
+帮忙根据下方问题，分析原因并修改评分机制，注意原版文件备份。
+1：https://www.ithome.com/0/967/229.htm，这种明显广告，汽车广告为啥高分，以后这种除了固态、钠电、新型电池、光伏器件装车、直接CCUS降碳、电网车网结合、智能驾驶升阶，其他的基本上都没啥用，分析原因，并将其写入对应领域的机制文档。还要下面的也是一样：https://www.ithome.com/0/965/673.htm
+2.https://www.ithome.com/0/966/280.htm，这种有啥用啊，和我说的“电池、能源、零碳（各个产业脱碳技术）、AI、半导体、芯片技术领域优先”不相关啊？
+3.https://mp.weixin.qq.com/s/qywkcUbhrOE5IsryANd3Qg，生物医药的优先级也可以往后推，除非爆点克隆、脑机接口、复活等。
+4.https://mp.weixin.qq.com/s/BeyUye3nzo0U6zIpZlN6EQ，https://mp.weixin.qq.com/s/yKE6EV9ojJDoFtZVT_padA，这种政策的优先级可以拉高，尤其是十五五等国家重点规划，另外技术领域和我重点关注的领域内容也一致。此外，这个https://mp.weixin.qq.com/s/SXT_ToZpXDWkBkcek2srFA是碳排放啊，咋是AI呢？
+5.https://mp.weixin.qq.com/s/ls0wxhdRh9yISpePn1NPDg，https://mp.weixin.qq.com/s/E3EWJKtIYUz5LAF6A3fHsA，优先级拉高，技术类的
+6.https://mp.weixin.qq.com/s/PVVilg1WcXsCsQ_KLiuoug，https://mp.weixin.qq.com/s/0dYRqpfU8foBm3lQ989NfQ，https://mp.weixin.qq.com/s/Gdz8LxnDSsOLd3P2W5YmDA，这类转载论文，优先级拉高，领域也相关。
+7.https://mp.weixin.qq.com/s/XkNbPkd6B6p__sGv6HUVgQ，这种明显应该拉高，和AI供能强相关。
+8.https://mp.weixin.qq.com/s/AYUmIQpSr3pBjE17MwsuvQ，https://mp.weixin.qq.com/s/Q_EyqICDj-rxqyheYIvL_Amhttps://mp.weixin.qq.com/s/mJSlmmWsJIGLbxdAX4UBjg，https://mp.weixin.qq.com/s/CSNvj6MBQJjI-BdQHRfkXQ，这种明显应该高啊，太低了？适当也可根据信息来源进行提示分数，例如这个REAI Lab，国际能源小数据等。
+9.感觉你还是没理解，重点瓶颈的分到高；一般的分到中；剩下的投融资、不相干领域、高TRL产业（建厂啥的）动态、会议、宣传文案、没有明确技术细节的建厂、招标、立项等等，之前说过很多次的东西是低。
+
+26.09.20
+还有一些问题，分析原因并修改评分机制，原因也要依次呈现成文档。注意原版文件备份。且要注意，不要忘记前面几个版本修改的要求"D:\GitHub\Intelligence tehc info system\问题.txt"
+1.https://mp.weixin.qq.com/s/o1KU_JXz8PgM8SJj-xpTjw，不都说了这种预中标的没啥用吗，低分。
+2.https://mp.weixin.qq.com/s/ghlm-dbRe96agt-rz9DXwA，这种非国家重要基金，企业的宣传基金啥的，放中里面，而且没说金额啥的
+3.https://mp.weixin.qq.com/s/qcQGfUjruSiwhwUliCPPkQ，https://mp.weixin.qq.com/s/gGZ70ut4kWH7KCTQKZuXFg，https://mp.weixin.qq.com/s/XSUiALrxwqRAR3sJLzWZDw，https://mp.weixin.qq.com/s/FITEAsZxa2p0PZv7MM7Haw，https://mp.weixin.qq.com/s/CjgCKLiDIxI_imrs5HdB2g，这种也没啥用啊？没有实质产品发布，没有独特观点呈现，光打嘴炮，放中或者低里面，分析原因记得。
+4.https://mp.weixin.qq.com/s/8dPvOmWuziLViisWefbSSQ，这个和锂电池有啥关系，不能硬分类啊？
+5.https://mp.weixin.qq.com/s/e-0vHl4RtcoHdaKJJytAqQ，这种有啥用啊，妥妥垃圾，低分。
+6.https://mp.weixin.qq.com/s/wPBdurSVXb0Js1ImNmL5vQ，https://mp.weixin.qq.com/s/gPs-zdQaQQ8nud39CsmIPg，不都说了这种为啥还是低啊，要高一些啊，有实质技术进展的。
+7.https://mp.weixin.qq.com/s/qDuaoJj_xYmRKFBa5pX6Kg，这种也属于我说的相关领域里面啊，为啥会低呢？
+8.https://mp.weixin.qq.com/s/MtKzGgOIac4AqdVayEVORw，这种科研文献转载的，都是中，不要放低。
+9.https://mp.weixin.qq.com/s/NPaW4plKylh0SbJqx4Zhpg，中低TRL技术标准发布，高一点分数。
+10.https://mp.weixin.qq.com/s/oRi0H8kTFmSL8t4idcrCMQ，这种蛮重要的，放到中，分析下原因。
+11.https://mp.weixin.qq.com/s/vCNFqn-0KY6n4csutu8omw，这种蛮重要的，高，记得说了好几遍了。
+12.https://news.solarbe.com/202606/16/50024443.html，这个虽然有十五五，但是是啥项目申报，实际没啥用啊，还是地方的，低分。
+
+26.09.22
+还有一些问题，分析原因并修改评分机制，原因也要依次呈现成文档。注意原版文件备份。且要注意，不要忘记前面几个版本修改的要求"D:\GitHub\Intelligence tehc info system\问题.txt"。修改完成后再帮忙试下6月26日的。
+1.这个其实也蛮重要的：“https://mp.weixin.qq.com/s/5kGd-zsOCq_OahJhW88n3w，https://mp.weixin.qq.com/s/oHEw3YdIhl5L2jAKjfkohA”这些其实评分可稍高些，跨到中档层级，注意分析原因，修改对应领域/类型的机制，注意备份。2.感觉这种https://mp.weixin.qq.com/s/V0pc4IWnSMYaHbp2mrqc-A，论文以及中文转载论文，非关键瓶颈、非nature、science以及高等级公众号（例如REAI LAB）转载的，统一放到中档分区就可以。3.https://mp.weixin.qq.com/s/RqKEAVswNsQ4W966uhATzQ，https://mp.weixin.qq.com/s/lma00lbS9Em6t057HYldPw，这两个看标题就是同一类，为啥还没合并为重复，修改且分析原因、修订对应去重/合并机制。
+
+26.09.23
+还有一些问题，分析原因并修改评分机制，原因也要依次呈现成文档。注意原版文件备份。且要注意，不要忘记前面几个版本修改的要求"D:\GitHub\Intelligence tehc info system\问题.txt"。
+修改完下述问题后，将该机制整体打包成一个类似function的包，便于放到服务器或其他设备、GitHub上进行调用，并给出说明/流程文档，便于其他AI程序理解；注意结构条例要清楚，且不要删除、缩减评价机制和表格等核心内容。
+1.https://mp.weixin.qq.com/s/BCdzR3d0_q06GWWoFWjxVw，能耗降低是比较敏感的话题，帮忙分析修改一下。
+2.深度分析与评论、IEA、DOE等研究报告，这类感觉可以单独拎出来，不用和常规新闻、文献、政策/法案/标准等在一起展示。评分也仅作参考，不分高中低档。

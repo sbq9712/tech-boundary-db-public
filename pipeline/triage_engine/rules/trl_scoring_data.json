@@ -1,0 +1,4741 @@
+{
+ "built": "2026-09-08",
+ "round": 117,
+ "doc": "TRL 加权评分与分类标准（规则草案 v0.9 + 现状实测层）",
+ "layer_split": {
+  "draft": "TRL权重 / 契合度 / 12族卡 / 12域规则卡 / 算例 —— 本版新增提案数值，待回测",
+  "as_is": "W30八维 / 复审门 / 域门族关键词 / TECH五档门 / 流水线 / 领域基线 / 族资格 —— Round 116 实测，一字未改"
+ },
+ "sources": {
+  "draft_basis": "domain-profiles.yaml 真实基线（指标三档=基线×1.10/1.20）+ 用户 TRL 优先级要求 + 评分框架 §8/§15 方法",
+  "as_is_basis": {
+   "w30_engine": "scripts/process_w30_with_llm.py (w30-analysis-2.0)",
+   "triage_engine": "scripts/run_triage_20260615_23.py (Round 115, v3.0)",
+   "domain_profiles": "runtime/registries/domain-profiles.yaml (Round 102/112)",
+   "master_table": "D:\\ADV knowledge database\\tech-knowledgebase-builder\\data\\processed\\intelligence_master_table_final.csv",
+   "db": "D:\\GitHub\\Intelligence tehc info system\\data\\intelligence.db"
+  }
+ },
+ "trl_framework": {
+  "bands": [
+   {
+    "band": "TRL 1-3",
+    "name": "理念期",
+    "base": "基础赋分权重最高（1.00）",
+    "rule": "可忽略性能、参数方面缺陷（缺失记 NA 不扣分，数值平庸不降档）；更关注理念，理念新即可高分",
+    "why": "低成熟度阶段的性能数据本身噪声大，理念/机理是此时的真实信息量所在"
+   },
+   {
+    "band": "TRL 4-7",
+    "name": "工程化期",
+    "base": "基础赋分稍低（0.94-0.97，降幅不必大）",
+    "rule": "除机制/理论亮点、独特性外，产品性能、规模化水平是重中之重",
+    "why": "此阶段死伤率最高，性能与规模是淘汰筛选的主变量；机理亮点与独特性防漏杀"
+   },
+   {
+    "band": "TRL 8-9",
+    "name": "产业化期",
+    "base": "基础赋分最低，TRL 越高越低（8→0.90，9→0.85）",
+    "rule": "重点关注项目运营状况突变、产业链动态、以及性能/规模极大突破；突破幅度要求比低 TRL 更高（≥20% 或跨数量级）",
+    "why": "成熟技术的常规进展信息量低；只有突变（正向极大突破/负向运营事故）才值得优先阅读"
+   }
+  ],
+  "weights": [
+   {
+    "trl": 1,
+    "weight": 1.0,
+    "stage": "概念",
+    "detect": "机理研究|理论建模|概念提出|分子/体系设计",
+    "focus": "理念新颖性：新机理、新路线、新问题定义",
+    "ignorable": "全部性能数值/规模/成本缺失均记 NA，不扣分",
+    "breakthrough": "无需量化：新机理/新路线成立即认定突破"
+   },
+   {
+    "trl": 2,
+    "weight": 1.0,
+    "stage": "原理验证",
+    "detect": "原理实验|关键效应首次验证|概念验证(POC)",
+    "focus": "关键效应是否成立、可重复",
+    "ignorable": "性能数值平庸不降档；无规模/成本要求",
+    "breakthrough": "相对基线 ≥5%，或机理本身为新"
+   },
+   {
+    "trl": 3,
+    "weight": 1.0,
+    "stage": "关键功能验证",
+    "detect": "实验室组件功能|小样品验证",
+    "focus": "功能闭环成立；理念仍主导",
+    "ignorable": "性能参数缺失可 NA；但需原理证据链",
+    "breakthrough": "相对基线 ≥5%"
+   },
+   {
+    "trl": 4,
+    "weight": 0.97,
+    "stage": "实验室集成验证",
+    "detect": "实验室集成|台架测试|放大首次",
+    "focus": "机理亮点 + 性能初步证据并重",
+    "ignorable": "单项性能可缺(NA)，全缺则封顶",
+    "breakthrough": "相对基线 ≥10%"
+   },
+   {
+    "trl": 5,
+    "weight": 0.96,
+    "stage": "相关环境验证",
+    "detect": "模拟环境|真实工况台架|中试前置",
+    "focus": "环境真实性 + 机理亮点 + 独特性",
+    "ignorable": "—",
+    "breakthrough": "相对基线 ≥10%"
+   },
+   {
+    "trl": 6,
+    "weight": 0.95,
+    "stage": "中试/示范",
+    "detect": "中试线|示范项目|实证项目|验证线",
+    "focus": "性能 + 规模化水平并重（重中之重）；机制/理论亮点、独特性加分",
+    "ignorable": "—",
+    "breakthrough": "相对基线 ≥10%"
+   },
+   {
+    "trl": 7,
+    "weight": 0.94,
+    "stage": "工程样机/运行环境",
+    "detect": "样机|小批量|运行环境验证|路试前置",
+    "focus": "同 TRL6，且看工程一致性",
+    "ignorable": "—",
+    "breakthrough": "相对基线 ≥10%"
+   },
+   {
+    "trl": 8,
+    "weight": 0.9,
+    "stage": "系统定型/量产",
+    "detect": "量产线|投产|下线|定型|认证批量|交付",
+    "focus": "运营状况突变、产业链动态、性能/规模极大突破",
+    "ignorable": "—",
+    "breakthrough": "相对基线 ≥20% 或跨数量级，方计突破档"
+   },
+   {
+    "trl": 9,
+    "weight": 0.85,
+    "stage": "实际应用/商业运行",
+    "detect": "满产|装车|商业运行|规模化运行|批产交付",
+    "focus": "同 TRL8，幅度门槛最高",
+    "ignorable": "—",
+    "breakthrough": "相对基线 ≥20% 或跨数量级；常规运行/常规发布不进高分段"
+   }
+  ],
+  "applies": {
+   "group_A": {
+    "name": "技术知识类",
+    "families": [
+     "technical_knowledge_change",
+     "patent_like_right_state",
+     "evidence_asset_state",
+     "evidence_structure_change",
+     "copyright_right_state"
+    ],
+    "weight_rule": "乘 TRL 权重"
+   },
+   "group_B": {
+    "name": "产品工程类",
+    "families": [
+     "product_model_state",
+     "equipment_asset_state",
+     "engineering_validation_state",
+     "project_facility_state",
+     "production_operation_state"
+    ],
+    "weight_rule": "乘 TRL 权重"
+   },
+   "group_C": {
+    "name": "产业资本制度类",
+    "families": [
+     "financing_capital_state",
+     "ownership_control_state",
+     "actor_commitment_plan_state",
+     "market_industry_state",
+     "supply_network_state",
+     "procurement_commitment_state",
+     "enterprise_operating_state",
+     "organization_capability_state",
+     "resource_asset_state",
+     "institutional_access_state"
+    ],
+    "weight_rule": "不乘 TRL 权重：其价值由突变幅度/相对域基线异常度在卡内直接定价（如 TRL8-9 域的断供/停产突变在供应链卡、生产运行卡内即得高分）"
+   }
+  },
+  "detect": [
+   {
+    "to": "TRL 1-3",
+    "words": "理论|机理|机制|概念验证|原理|首次证明|计算模拟|DFT|分子设计|高通量筛选"
+   },
+   {
+    "to": "TRL 4-7",
+    "words": "中试|示范项目|实证|样机|台架|小批量|放大|pilot|验证线|路试|吊装|安装调试"
+   },
+   {
+    "to": "TRL 8-9",
+    "words": "量产|投产|下线|满产|交付|装车|商业运行|定型|批产|并网发电|正式商运"
+   },
+   {
+    "rule": "事件词优先于领域默认；无事件词时取领域/路线默认 TRL 带的中位数；跨档冲突（如『实验室样品』却宣称『量产计划』）按已发生事实定 TRL，计划词只影响阶段阶梯维度"
+   }
+  ],
+  "domain_defaults": [
+   {
+    "domain_id": "pv_photovoltaic",
+    "domain": "光伏",
+    "routes": [
+     {
+      "route": "晶硅主链(TOPCon/HJT/BC)",
+      "trl": "8-9",
+      "basis": "MANUFACTURING/COMMERCIAL=ESTABLISHED"
+     },
+     {
+      "route": "钙钛矿单结/叠层",
+      "trl": "4-6",
+      "basis": "scope 备注: perovskite manufacturing=VALIDATING"
+     },
+     {
+      "route": "OPV/CIGS/CdTe",
+      "trl": "5-7",
+      "basis": "工程验证段"
+     }
+    ]
+   },
+   {
+    "domain_id": "li_battery",
+    "domain": "锂电池",
+    "routes": [
+     {
+      "route": "液态高镍/硅碳量产体系",
+      "trl": "8-9",
+      "basis": "MANUFACTURING/COMMERCIAL=ESTABLISHED"
+     },
+     {
+      "route": "硫化物/氧化物固态电池",
+      "trl": "4-6",
+      "basis": "cell_sample 厂商样品点，放大衰减为 CORE 瓶颈"
+     },
+     {
+      "route": "锂金属/锂硫",
+      "trl": "3-5",
+      "basis": "高比能循环稳定性=CORE，工程验证早期"
+     }
+    ]
+   },
+   {
+    "domain_id": "storage_system",
+    "domain": "储能系统",
+    "routes": [
+     {
+      "route": "锂电储能系统",
+      "trl": "8-9",
+      "basis": "COMMERCIAL=ESTABLISHED"
+     },
+     {
+      "route": "液流电池",
+      "trl": "6-8",
+      "basis": "示范-商业早期"
+     },
+     {
+      "route": "储热/新构型长时",
+      "trl": "4-6",
+      "basis": "长时成本=CORE 瓶颈"
+     }
+    ]
+   },
+   {
+    "domain_id": "na_battery",
+    "domain": "钠离子电池",
+    "routes": [
+     {
+      "route": "聚阴离子/层状氧化物量产",
+      "trl": "6-8",
+      "basis": "ENGINEERING=VALIDATING+MANUFACTURING=SCALING"
+     }
+    ]
+   },
+   {
+    "domain_id": "hydrogen_based_energy",
+    "domain": "氢基能源",
+    "routes": [
+     {
+      "route": "碱性电解(AWE)",
+      "trl": "8-9",
+      "basis": "商业化成熟"
+     },
+     {
+      "route": "PEM 电解",
+      "trl": "7-8",
+      "basis": "效率耐久=CORE 瓶颈"
+     },
+     {
+      "route": "SOEC",
+      "trl": "5-7",
+      "basis": "工程验证段"
+     },
+     {
+      "route": "绿氨/绿甲醇项目",
+      "trl": "4-6",
+      "basis": "COMMERCIAL=NASCENT，项目状态锚 planning_or_construction"
+     }
+    ]
+   },
+   {
+    "domain_id": "wind_power",
+    "domain": "风电",
+    "routes": [
+     {
+      "route": "陆上/近海主力机型",
+      "trl": "8-9",
+      "basis": "全线 ESTABLISHED"
+     },
+     {
+      "route": "深远海/漂浮式/15MW+",
+      "trl": "6-8",
+      "basis": "深远海安装=CORE 瓶颈"
+     }
+    ]
+   },
+   {
+    "domain_id": "nuclear_power",
+    "domain": "核电(含聚变)",
+    "routes": [
+     {
+      "route": "三代+（华龙一号等）",
+      "trl": "8-9",
+      "basis": "商用成熟"
+     },
+     {
+      "route": "SMR/小堆",
+      "trl": "6-8",
+      "basis": "工程验证-示范"
+     },
+     {
+      "route": "聚变(托卡马克/EAST 等)",
+      "trl": "1-3",
+      "basis": "聚变商业化周期=CORE 瓶颈"
+     }
+    ]
+   },
+   {
+    "domain_id": "caes",
+    "domain": "压缩空气储能",
+    "routes": [
+     {
+      "route": "传统 CAES(补燃)",
+      "trl": "7-8",
+      "basis": "效率 47.5% 基线为传统路线实测"
+     },
+     {
+      "route": "AA-CAES(先进绝热)",
+      "trl": "5-7",
+      "basis": "ENGINEERING=VALIDATING，目标效率无实测值"
+     }
+    ]
+   },
+   {
+    "domain_id": "steel_decarbonization",
+    "domain": "钢铁脱碳",
+    "routes": [
+     {
+      "route": "废钢 EAF",
+      "trl": "8-9",
+      "basis": "成熟工艺"
+     },
+     {
+      "route": "氢冶金 H2-DRI-EAF",
+      "trl": "6-8",
+      "basis": "绿钢溢价 30%=CORE，示范段"
+     },
+     {
+      "route": "高炉富氢改造",
+      "trl": "7-8",
+      "basis": "改造工程成熟"
+     }
+    ]
+   },
+   {
+    "domain_id": "cement_decarbonization",
+    "domain": "水泥脱碳",
+    "routes": [
+     {
+      "route": "替代燃料/熟料替代",
+      "trl": "7-9",
+      "basis": "MANUFACTURING/COMMERCIAL=ESTABLISHED"
+     },
+     {
+      "route": "水泥窑 CCUS",
+      "trl": "4-6",
+      "basis": "RESEARCH/ENGINEERING=UNKNOWN，按事件词定"
+     }
+    ]
+   },
+   {
+    "domain_id": "thermal_power_cofiring",
+    "domain": "火电掺氨掺氢",
+    "routes": [
+     {
+      "route": "掺氨 20-60%",
+      "trl": "5-7",
+      "basis": "示范段（45% 为 660MW 机组单点警示值）"
+     },
+     {
+      "route": "掺氢/富氢燃烧",
+      "trl": "6-8",
+      "basis": "工程验证-示范"
+     },
+     {
+      "route": "灵活性改造",
+      "trl": "8-9",
+      "basis": "成熟改造"
+     }
+    ]
+   },
+   {
+    "domain_id": "ccus",
+    "domain": "CCUS",
+    "routes": [
+     {
+      "route": "胺法点源捕集",
+      "trl": "7-8",
+      "basis": "工程成熟（再生能耗=CORE）"
+     },
+     {
+      "route": "DAC",
+      "trl": "4-6",
+      "basis": "成本 100-1000 美元区间过宽=CORE，MANUFACTURING=NASCENT"
+     },
+     {
+      "route": "CO2RR/电催化",
+      "trl": "3-5",
+      "basis": "实验室阶段=SECONDARY 瓶颈"
+     },
+     {
+      "route": "MOF 新吸附材料",
+      "trl": "2-4",
+      "basis": "材料研究段"
+     },
+     {
+      "route": "矿化/BECCS",
+      "trl": "5-7",
+      "basis": "示范段"
+     }
+    ]
+   }
+  ]
+ },
+ "match_scoring": {
+  "domain": {
+   "name": "领域契合度 D(0-100)",
+   "dims": [
+    {
+     "dim": "标题命中",
+     "max": 40,
+     "rule": "核心词命中 1 个=28，≥2 个=40；扩展词 1 个=10，≥2 个=18；核心与扩展并存取 max(核心档, 扩展档)，上限 40"
+    },
+    {
+     "dim": "正文命中",
+     "max": 30,
+     "rule": "核心词每出现 1 次 +3（上限 18）；扩展词每出现 1 次 +1（上限 12）"
+    },
+    {
+     "dim": "主体契合",
+     "max": 15,
+     "rule": "报道主体属该域活跃主体清单=15；属关联主体（供应链/客户/参股）=8；未知/无关=0"
+    },
+    {
+     "dim": "指标契合",
+     "max": 15,
+     "rule": "出现该域规范指标+单位+数值（如 Wh/kg、%效率、tCO2/t、USD/tCO2）=15；只有单位或只有无量纲数字=7"
+    }
+   ],
+   "thresholds": [
+    {
+     "range": "D ≥ 70",
+     "verdict": "主域",
+     "action": "参与该域评分（注入域参数卡）"
+    },
+    {
+     "range": "40 ≤ D < 70",
+     "verdict": "次域",
+     "action": "打次要标签，进入该域专项视图，不重复计分（同族去重）"
+    },
+    {
+     "range": "20 ≤ D < 40",
+     "verdict": "弱关联",
+     "action": "仅作检索标签，不参与评分"
+    },
+    {
+     "range": "D < 20（全部域）",
+     "verdict": "域外",
+     "action": "NO_TARGET / OUT_OF_DOMAIN_SCOPE（与现行 S2 域门一致）"
+    }
+   ],
+   "multi_rules": [
+    "多个域 D≥70：最高者为主域；次高者差距 ≤10 且自身 ≥70 → 双主域标签（各注入各域参数，Event 分取两域中较高者，不叠加）",
+    "20≤D<40 的邻接域（SAF/生物燃料/氨等）按现行 grill 裁决归 CCUS 或储能，不自动进次域",
+    "契合度不改变去重协议：同组 syndication 仍按 sha256(title[:48]) 折叠"
+   ],
+   "compat": "与现行 S2 向下兼容：现行『取最大命中域』≈ D≥70 的主域判定；本层把命中计数升级为带阈值的连续契合度，并显式给出次域/弱关联的处置"
+  },
+  "type": {
+   "name": "类型契合度 T(0-100)",
+   "dims": [
+    {
+     "dim": "载体先验",
+     "max": 30,
+     "rule": "RSS 文献源→期刊文献 30；新闻源→产业新闻 30；微信公众号→微信公众号 30；手工录入→手工整理 30（与现行 S3 载体判定一致）"
+    },
+    {
+     "dim": "族关键词命中",
+     "max": 40,
+     "rule": "标题命中族词=40；仅正文命中=25；多族并存取最高族，其余族按独立 Event Unit 拆分计分（对齐评分框架 §9）"
+    },
+    {
+     "dim": "事件语义特征",
+     "max": 30,
+     "rule": "阶段动词模式（投产/下线/交付/装车/发布/融资轮次/中标/开工…）命中=15；数值载荷（金额/规模/性能参数任一）=15"
+    }
+   ],
+   "thresholds": [
+    {
+     "range": "T ≥ 65",
+     "verdict": "主类型",
+     "action": "按该类型（叶子类→评价族）选卡评分"
+    },
+    {
+     "range": "35 ≤ T < 65",
+     "verdict": "次类型",
+     "action": "次要标签；若正文含独立强事件则拆 Event Unit 另计"
+    },
+    {
+     "range": "T < 35",
+     "verdict": "不可归类",
+     "action": "unknown_insufficient → 手工整理"
+    }
+   ],
+   "carrier_rules": [
+    "RESEARCH_ARTICLE 载体默认主类型=期刊文献/technical_knowledge_change（与现行 S4 一致）",
+    "族命中 ≥2 时允许非默认族成为主类型（现行 S3b 同款规则）",
+    "摘要型载体（日报/周报/速递）命中且含事件：类型=载体类型，标记 NEEDS_SPLIT，按事件拆分后再逐 Event 计分"
+   ]
+  }
+ },
+ "stage_ladder": [
+  {
+   "tier": "装车/示范运行",
+   "score": 30,
+   "note": "域内最高实证档：装车路试、并网商运、全场投运"
+  },
+  {
+   "tier": "交付/客户验证",
+   "score": 26,
+   "note": "定点、交付主机厂/业主、第三方验收"
+  },
+  {
+   "tier": "量产/定型",
+   "score": 22,
+   "note": "量产线投产、定型、批产"
+  },
+  {
+   "tier": "中试/示范",
+   "score": 16,
+   "note": "中试线、示范项目、实证平台"
+  },
+  {
+   "tier": "实验室样品/样机",
+   "score": 10,
+   "note": "样品、小试、台架"
+  },
+  {
+   "tier": "仅宣布(无阶段证据)",
+   "score": 6,
+   "note": "只有说法，无阶段事实"
+  },
+  {
+   "tier": "未说明",
+   "score": 4,
+   "note": "NA≠0：记 4 并触发卡级 Gate"
+  }
+ ],
+ "family_cards": [
+  {
+   "card_id": "card_product",
+   "name": "产品与装备发布",
+   "family_ids": [
+    "product_model_state",
+    "equipment_asset_state"
+   ],
+   "info_examples": "产业新闻·产品发布/新装备/新型号（用户示例：产品发布 × 固态电池 即用本卡 + 锂电池域参数）",
+   "trl_weighted": "是（B 组）",
+   "dims": [
+    {
+     "dim": "阶段阶梯",
+     "max": 30,
+     "bands": [
+      {
+       "cond": "装车/示范运行/并网示范",
+       "score": 30
+      },
+      {
+       "cond": "交付/客户验证/小批量交付",
+       "score": 26
+      },
+      {
+       "cond": "量产/定型/批产",
+       "score": 22
+      },
+      {
+       "cond": "中试线/验证线产出",
+       "score": 16
+      },
+      {
+       "cond": "实验室样品/样机",
+       "score": 10
+      },
+      {
+       "cond": "仅宣布无阶段证据",
+       "score": 6
+      },
+      {
+       "cond": "未说明",
+       "score": 4
+      }
+     ],
+     "na": "未说明≠0，记 4；且触发本卡 Gate（见下）"
+    },
+    {
+     "dim": "性能×域阈值",
+     "max": 30,
+     "bands": [
+      {
+       "cond": "达域极大突破档（≥基线×1.20，走低指标 ≤×0.80）",
+       "score": 30
+      },
+      {
+       "cond": "达域突破档（≥基线×1.10 / ≤×0.90）",
+       "score": 25
+      },
+      {
+       "cond": "达到域基线",
+       "score": 15
+      },
+      {
+       "cond": "有数值但未达基线（同口径同路线）",
+       "score": 8
+      },
+      {
+       "cond": "口径/路线不可比，或域无基线",
+       "score": "按披露完整性 0-10"
+      }
+     ],
+     "na": "无任何性能数值：TRL1-3 → NA=12（不扣）；TRL4-7 → NA=6；TRL8-9 → NA=0 且触发 Gate"
+    },
+    {
+     "dim": "规格/容量披露",
+     "max": 15,
+     "bands": [
+      {
+       "cond": "完整：容量/规模 + ≥2 项规格（电压/尺寸/质量/功率…）",
+       "score": 15
+      },
+      {
+       "cond": "部分：仅 1 项规格或仅容量",
+       "score": 8
+      },
+      {
+       "cond": "仅型号名",
+       "score": 3
+      },
+      {
+       "cond": "未说明",
+       "score": 0
+      }
+     ],
+     "na": "用户示例中的『电芯容量说明，有的话加分』即此维度"
+    },
+    {
+     "dim": "主体层级",
+     "max": 15,
+     "bands": [
+      {
+       "cond": "域内头部/一线主体",
+       "score": 15
+      },
+      {
+       "cond": "二线/细分龙头",
+       "score": 10
+      },
+      {
+       "cond": "初创/未知主体",
+       "score": 6
+      }
+     ]
+    },
+    {
+     "dim": "指标完整性与口径",
+     "max": 10,
+     "bands": [
+      {
+       "cond": "测试条件/口径/路线齐全可复核",
+       "score": 10
+      },
+      {
+       "cond": "部分口径",
+       "score": 5
+      },
+      {
+       "cond": "无口径",
+       "score": 0
+      }
+     ]
+    }
+   ],
+   "gate": "无任何性能数值 且 无阶段证据 → 本卡封顶 40（宣传性发布）；TRL8-9 且无性能数值 → 性能维度 0 分且封顶 60",
+   "record_note": "例：『发布硫化物固态电芯 500Wh/kg(cell 样品)、20Ah、中试小批量交付』= 阶段26 + 性能25 + 规格15 + 主体10 + 口径10 = 86 × TRL6 权重 0.95 ≈ 82"
+  },
+  {
+   "card_id": "card_tech",
+   "name": "技术知识与论文/专利",
+   "family_ids": [
+    "technical_knowledge_change",
+    "patent_like_right_state",
+    "evidence_asset_state",
+    "evidence_structure_change",
+    "copyright_right_state"
+   ],
+   "info_examples": "期刊文献·研究/综述/建模论文、专利、数据集、基准测试",
+   "trl_weighted": "是（A 组）",
+   "dims": [
+    {
+     "dim": "瓶颈相关性",
+     "max": 30,
+     "bands": [
+      {
+       "cond": "命中域 CORE 瓶颈",
+       "score": 30
+      },
+      {
+       "cond": "命中 SECONDARY 瓶颈",
+       "score": 20
+      },
+      {
+       "cond": "命中 EMERGING 瓶颈",
+       "score": 15
+      },
+      {
+       "cond": "与已登记瓶颈无关",
+       "score": 5
+      }
+     ]
+    },
+    {
+     "dim": "指标表现×域基线",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "超域基线 ≥20%",
+       "score": 25
+      },
+      {
+       "cond": "超基线 ≥10%",
+       "score": 22
+      },
+      {
+       "cond": "超基线 ≥5%",
+       "score": 18
+      },
+      {
+       "cond": "达到基线",
+       "score": 14
+      },
+      {
+       "cond": "有数值未达标",
+       "score": 8
+      }
+     ],
+     "na": "无性能数值：TRL1-3 → NA=12（理念期不因缺数值降档）；TRL4-7 → NA=6；TRL8-9 → NA=0"
+    },
+    {
+     "dim": "新颖性/机理",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "新机理/新路线/新问题定义",
+       "score": 25
+      },
+      {
+       "cond": "已知路线的显著改进(机制层面可解释)",
+       "score": 15
+      },
+      {
+       "cond": "增量改进/常规表征",
+       "score": 8
+      }
+     ],
+     "na": "TRL1-3 时本维度是主导定档维度（理念新即可高分）"
+    },
+    {
+     "dim": "证据质量",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "顶刊/权威载体或第三方复现/认证",
+       "score": 20
+      },
+      {
+       "cond": "普通同行评审/正式专利授权",
+       "score": 12
+      },
+      {
+       "cond": "预印本/单方宣称",
+       "score": 6
+      }
+     ]
+    }
+   ],
+   "gate": "『首次/世界纪录』措辞本身不加分（框架 §12），只抽取并高亮；须有可比口径才允许进性能维度计分",
+   "record_note": "例：聚变新约束机理（无性能数值，Nature）= 瓶颈30 + 指标NA12 + 新机理25 + 顶刊20 = 87 × TRL2 权重 1.00 = 87"
+  },
+  {
+   "card_id": "card_validation",
+   "name": "工程验证",
+   "family_ids": [
+    "engineering_validation_state"
+   ],
+   "info_examples": "产业新闻·工程验证/第三方测试/实证项目",
+   "trl_weighted": "是（B 组）",
+   "dims": [
+    {
+     "dim": "验证尺度",
+     "max": 30,
+     "bands": [
+      {
+       "cond": "真实工况/示范级/全尺寸系统",
+       "score": 30
+      },
+      {
+       "cond": "中试级/缩放系统",
+       "score": 20
+      },
+      {
+       "cond": "实验室台架/小样",
+       "score": 12
+      }
+     ]
+    },
+    {
+     "dim": "结果量化×域基线",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "超基线 ≥20%",
+       "score": 25
+      },
+      {
+       "cond": "超基线 ≥10%",
+       "score": 20
+      },
+      {
+       "cond": "达到基线",
+       "score": 14
+      },
+      {
+       "cond": "有数值未达标",
+       "score": 8
+      }
+     ],
+     "na": "无数值但有明确定性通过结论：TRL4-7 → 8；TRL1-3 → 12；TRL8-9 → 4"
+    },
+    {
+     "dim": "条件真实性",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "第三方检测/认证/型式试验",
+       "score": 20
+      },
+      {
+       "cond": "业主/客户联合验证",
+       "score": 14
+      },
+      {
+       "cond": "自证/自测",
+       "score": 6
+      }
+     ]
+    },
+    {
+     "dim": "与域瓶颈匹配",
+     "max": 15,
+     "bands": [
+      {
+       "cond": "直接命中 CORE 瓶颈",
+       "score": 15
+      },
+      {
+       "cond": "SECONDARY",
+       "score": 9
+      },
+      {
+       "cond": "无关",
+       "score": 3
+      }
+     ]
+    },
+    {
+     "dim": "持续性证据",
+     "max": 10,
+     "bands": [
+      {
+       "cond": "≥1000h/≥1000 次循环/跨季节运行",
+       "score": 10
+      },
+      {
+       "cond": "有持续时间但较短",
+       "score": 5
+      },
+      {
+       "cond": "单点瞬时结果",
+       "score": 0
+      }
+     ]
+    }
+   ],
+   "gate": "自证 + 无量化结果 → 封顶 45"
+  },
+  {
+   "card_id": "card_production",
+   "name": "生产与运行",
+   "family_ids": [
+    "production_operation_state"
+   ],
+   "info_examples": "产业新闻·投产/量产/满产/停产/良率/产能爬坡",
+   "trl_weighted": "是（B 组；TRL8-9 域的运营突变在本卡直接给高档）",
+   "dims": [
+    {
+     "dim": "状态跃迁/突变幅度",
+     "max": 35,
+     "bands": [
+      {
+       "cond": "投产/满产/并网（正向跃迁）或 停产/骤降/事故（负向突变，同为高情报价值）",
+       "score": 35
+      },
+      {
+       "cond": "产能爬坡/扩产/技改",
+       "score": 25
+      },
+      {
+       "cond": "常规运行通报（无跃迁）",
+       "score": 10
+      },
+      {
+       "cond": "计划/预告（未发生）",
+       "score": 5
+      }
+     ]
+    },
+    {
+     "dim": "规模×域量级",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "达到/超过域典型规模量级（如 CAES≥4200MWh 锚、GWh 级产线、GW 级项目）",
+       "score": 25
+      },
+      {
+       "cond": "域量级 30%-1 倍",
+       "score": 15
+      },
+      {
+       "cond": "低于域量级 30%",
+       "score": 8
+      }
+     ],
+     "na": "未披露规模 → 0，且跃迁维度封顶 25"
+    },
+    {
+     "dim": "良率/利用率/可靠性披露",
+     "max": 15,
+     "bands": [
+      {
+       "cond": "披露具体数值",
+       "score": 15
+      },
+      {
+       "cond": "定性描述",
+       "score": 7
+      },
+      {
+       "cond": "未披露",
+       "score": 0
+      }
+     ]
+    },
+    {
+     "dim": "运行时长/出货证据",
+     "max": 15,
+     "bands": [
+      {
+       "cond": "有累计运行/出货数据",
+       "score": 15
+      },
+      {
+       "cond": "单点时点数据",
+       "score": 7
+      },
+      {
+       "cond": "无",
+       "score": 0
+      }
+     ]
+    },
+    {
+     "dim": "主体产线地位",
+     "max": 10,
+     "bands": [
+      {
+       "cond": "域内头部产能",
+       "score": 10
+      },
+      {
+       "cond": "二线",
+       "score": 6
+      },
+      {
+       "cond": "未知",
+       "score": 3
+      }
+     ]
+    }
+   ],
+   "gate": "TRL8-9 且『常规运行通报』→ 本卡封顶 30×TRL权重（约 26，确保成熟域常规运行不进高分段）"
+  },
+  {
+   "card_id": "card_project",
+   "name": "项目与设施",
+   "family_ids": [
+    "project_facility_state",
+    "actor_commitment_plan_state"
+   ],
+   "info_examples": "产业新闻·开工/封顶/投产/签约/规划产能（含主体承诺计划）",
+   "trl_weighted": "是（B 组）",
+   "dims": [
+    {
+     "dim": "阶段跃迁",
+     "max": 35,
+     "bands": [
+      {
+       "cond": "投产/并网/交付运行",
+       "score": 35
+      },
+      {
+       "cond": "开工/封顶/主设备吊装",
+       "score": 25
+      },
+      {
+       "cond": "备案/规划/签约（未开工）",
+       "score": 12
+      },
+      {
+       "cond": "意向/传闻",
+       "score": 5
+      }
+     ]
+    },
+    {
+     "dim": "规模×域量级",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "≥域典型量级",
+       "score": 25
+      },
+      {
+       "cond": "30%-1 倍",
+       "score": 15
+      },
+      {
+       "cond": "<30%",
+       "score": 8
+      }
+     ],
+     "na": "未披露 → 0 且跃迁维度封顶 22"
+    },
+    {
+     "dim": "工程确定性",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "已融资/已审批/已签 EPC",
+       "score": 20
+      },
+      {
+       "cond": "部分落实",
+       "score": 10
+      },
+      {
+       "cond": "仅宣布",
+       "score": 4
+      }
+     ]
+    },
+    {
+     "dim": "领域意义",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "命中 CORE 瓶颈路线的产能/设施",
+       "score": 20
+      },
+      {
+       "cond": "SECONDARY",
+       "score": 12
+      },
+      {
+       "cond": "常规复制产能",
+       "score": 5
+      }
+     ]
+    }
+   ],
+   "gate": "仅宣布（工程确定性≤4）→ 封顶 45"
+  },
+  {
+   "card_id": "card_financing",
+   "name": "投融资",
+   "family_ids": [
+    "financing_capital_state",
+    "ownership_control_state"
+   ],
+   "info_examples": "产业新闻·融资/IPO/增资/并购（并购按本卡+控制权事件加成）",
+   "trl_weighted": "否（C 组，不乘 TRL 权重）",
+   "dims": [
+    {
+     "dim": "金额×域基线异常度",
+     "max": 35,
+     "bands": [
+      {
+       "cond": "≥10× 域典型轮次金额",
+       "score": 35
+      },
+      {
+       "cond": "3-10 倍",
+       "score": 25
+      },
+      {
+       "cond": "1-3 倍（常规）",
+       "score": 15
+      },
+      {
+       "cond": "<1 倍（小额）",
+       "score": 8
+      }
+     ]
+    },
+    {
+     "dim": "轮次与阶段匹配",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "轮次与该路线 TRL 匹配且推进明显（如固态 B/C 轮进入中试）",
+       "score": 25
+      },
+      {
+       "cond": "正常推进",
+       "score": 15
+      },
+      {
+       "cond": "错配/续命轮",
+       "score": 8
+      }
+     ]
+    },
+    {
+     "dim": "资本主体",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "头部战略方/产业链巨头/国家级基金领投",
+       "score": 20
+      },
+      {
+       "cond": "知名财务投资机构",
+       "score": 12
+      },
+      {
+       "cond": "不明/个人",
+       "score": 5
+      }
+     ]
+    },
+    {
+     "dim": "用途与域瓶颈匹配",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "直接投向 CORE 瓶颈（中试线/产能/关键材料）",
+       "score": 20
+      },
+      {
+       "cond": "一般研发/扩产",
+       "score": 10
+      },
+      {
+       "cond": "未说明",
+       "score": 4
+      }
+     ]
+    }
+   ],
+   "gate": "金额未披露 → 金额维度 0 且封顶 50；≥90 需『金额异常+战略主体+瓶颈用途』三证齐全",
+   "record_note": "例：固态电池 10 亿美元 D 轮、车企领投、投中试产能 = 35+25+20+20=100 → 缺第三方估值口径证据，按 ≥90 稀缺规则封顶 88"
+  },
+  {
+   "card_id": "card_procurement",
+   "name": "采购订单与招投标",
+   "family_ids": [
+    "procurement_commitment_state"
+   ],
+   "info_examples": "产业新闻·中标/订单/框架协议/供货合同",
+   "trl_weighted": "否（C 组）",
+   "dims": [
+    {
+     "dim": "客户层级",
+     "max": 30,
+     "bands": [
+      {
+       "cond": "头部终端/国家级业主/主机厂定点",
+       "score": 30
+      },
+      {
+       "cond": "二线终端/集成商",
+       "score": 18
+      },
+      {
+       "cond": "未知",
+       "score": 8
+      }
+     ]
+    },
+    {
+     "dim": "数量/金额×域基线",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "≥域典型订单量级 3 倍或战略独家",
+       "score": 25
+      },
+      {
+       "cond": "域典型量级",
+       "score": 15
+      },
+      {
+       "cond": "小额",
+       "score": 7
+      }
+     ]
+    },
+    {
+     "dim": "付费真实性",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "中标公示/正式合同/已交付",
+       "score": 20
+      },
+      {
+       "cond": "框架协议",
+       "score": 10
+      },
+      {
+       "cond": "意向/谅解备忘录",
+       "score": 4
+      }
+     ]
+    },
+    {
+     "dim": "重复订单/复购",
+     "max": 15,
+     "bands": [
+      {
+       "cond": "同客户复购或加单",
+       "score": 15
+      },
+      {
+       "cond": "首单",
+       "score": 8
+      }
+     ]
+    },
+    {
+     "dim": "领域阶段意义",
+     "max": 10,
+     "bands": [
+      {
+       "cond": "标志该路线首次商业采用/打开准入",
+       "score": 10
+      },
+      {
+       "cond": "常规",
+       "score": 4
+      }
+     ]
+    }
+   ],
+   "gate": "仅意向 → 封顶 35"
+  },
+  {
+   "card_id": "card_market",
+   "name": "市场与产业变化",
+   "family_ids": [
+    "market_industry_state"
+   ],
+   "info_examples": "产业新闻·份额/价格/出货量/关税/出口管制",
+   "trl_weighted": "否（C 组）",
+   "dims": [
+    {
+     "dim": "变化量级×域基线",
+     "max": 35,
+     "bands": [
+      {
+       "cond": "价格/量变化 ≥±50% 或创域历史极值",
+       "score": 35
+      },
+      {
+       "cond": "±20%-50%",
+       "score": 25
+      },
+      {
+       "cond": "±10%-20%",
+       "score": 15
+      },
+      {
+       "cond": "<±10%",
+       "score": 6
+      }
+     ]
+    },
+    {
+     "dim": "持续性",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "供需格局级/政策性（结构性）",
+       "score": 20
+      },
+      {
+       "cond": "事件性脉冲",
+       "score": 8
+      }
+     ]
+    },
+    {
+     "dim": "覆盖范围",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "全域/全球市场",
+       "score": 20
+      },
+      {
+       "cond": "区域/单环节",
+       "score": 8
+      }
+     ]
+    },
+    {
+     "dim": "可比口径",
+     "max": 15,
+     "bands": [
+      {
+       "cond": "有基期与口径",
+       "score": 15
+      },
+      {
+       "cond": "口径含糊",
+       "score": 6
+      }
+     ]
+    },
+    {
+     "dim": "方向与预警线索",
+     "max": 10,
+     "bands": [
+      {
+       "cond": "附带断供/管制/安全连锁信号",
+       "score": 10
+      },
+      {
+       "cond": "无",
+       "score": 0
+      }
+     ]
+    }
+   ],
+   "gate": "无数值/无基期 → 封顶 30"
+  },
+  {
+   "card_id": "card_supply",
+   "name": "供应链与供应网络",
+   "family_ids": [
+    "supply_network_state"
+   ],
+   "info_examples": "产业新闻·断供/独家供应/长协/替代验证/供应商变化",
+   "trl_weighted": "否（C 组；TRL8-9 成熟域的断供/替代事件天然高分）",
+   "dims": [
+    {
+     "dim": "节点关键性",
+     "max": 30,
+     "bands": [
+      {
+       "cond": "独家/卡脖子环节（无短期替代）",
+       "score": 30
+      },
+      {
+       "cond": "主要供应商（多源之一）",
+       "score": 18
+      },
+      {
+       "cond": "边缘环节",
+       "score": 8
+      }
+     ]
+    },
+    {
+     "dim": "事件类型",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "断供/禁运/出口管制",
+       "score": 25
+      },
+      {
+       "cond": "国产替代/第二源验证通过",
+       "score": 20
+      },
+      {
+       "cond": "长协/框架锁定",
+       "score": 12
+      },
+      {
+       "cond": "常规供货调整",
+       "score": 5
+      }
+     ]
+    },
+    {
+     "dim": "影响范围",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "波及全域产能/多家头部",
+       "score": 25
+      },
+      {
+       "cond": "单客户/单项目",
+       "score": 10
+      }
+     ]
+    },
+    {
+     "dim": "可替代性证据",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "给出替代路线与验证状态",
+       "score": 20
+      },
+      {
+       "cond": "宣称可替代未验证",
+       "score": 8
+      }
+     ]
+    }
+   ],
+   "gate": "传闻级断供（无主体无证据）→ 封顶 30，转人工核验"
+  },
+  {
+   "card_id": "card_enterprise",
+   "name": "企业经营",
+   "family_ids": [
+    "enterprise_operating_state"
+   ],
+   "info_examples": "产业新闻·盈利/亏损/财报/裁员/破产/重组",
+   "trl_weighted": "否（C 组）",
+   "dims": [
+    {
+     "dim": "突变幅度",
+     "max": 35,
+     "bands": [
+      {
+       "cond": "破产/接管/重组/退出该域（负向高情报价值）",
+       "score": 35
+      },
+      {
+       "cond": "盈亏反转/大幅超预期或低于预期(±50%+)",
+       "score": 28
+      },
+      {
+       "cond": "常规业绩波动",
+       "score": 10
+      }
+     ]
+    },
+    {
+     "dim": "主体地位",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "域头部/技术路线代表企业",
+       "score": 25
+      },
+      {
+       "cond": "二线",
+       "score": 12
+      },
+      {
+       "cond": "外围",
+       "score": 5
+      }
+     ]
+    },
+    {
+     "dim": "财务口径",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "审计报表/公告",
+       "score": 20
+      },
+      {
+       "cond": "媒体估算",
+       "score": 8
+      }
+     ]
+    },
+    {
+     "dim": "与域阶段关联",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "直接反映该路线商业化成败（如固态独角兽资金链断裂）",
+       "score": 20
+      },
+      {
+       "cond": "一般经营",
+       "score": 6
+      }
+     ]
+    }
+   ],
+   "gate": "无"
+  },
+  {
+   "card_id": "card_policy",
+   "name": "政策与制度准入",
+   "family_ids": [
+    "institutional_access_state"
+   ],
+   "info_examples": "产业新闻·补贴/新规/准入/配额/标准/认证",
+   "trl_weighted": "否（C 组）",
+   "dims": [
+    {
+     "dim": "影响强度",
+     "max": 35,
+     "bands": [
+      {
+       "cond": "强制准入/禁令/配额（改变市场结构）",
+       "score": 35
+      },
+      {
+       "cond": "大额补贴/税收（改变经济性）",
+       "score": 22
+      },
+      {
+       "cond": "指导性/吹风",
+       "score": 8
+      }
+     ]
+    },
+    {
+     "dim": "覆盖范围",
+     "max": 25,
+     "bands": [
+      {
+       "cond": "全域/全国性/多国协同",
+       "score": 25
+      },
+      {
+       "cond": "区域/试点",
+       "score": 12
+      }
+     ]
+    },
+    {
+     "dim": "填补空白",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "该域首个正式规则/标准（制度空白→规则）",
+       "score": 20
+      },
+      {
+       "cond": "既有规则修订",
+       "score": 10
+      }
+     ]
+    },
+    {
+     "dim": "与域瓶颈匹配",
+     "max": 20,
+     "bands": [
+      {
+       "cond": "直接针对 CORE 瓶颈（如储能安全强标、掺烧 NOx 排放标准）",
+       "score": 20
+      },
+      {
+       "cond": "间接相关",
+       "score": 8
+      }
+     ]
+    }
+   ],
+   "gate": "征求意见稿 → 强度维度封顶 12，标记待生效追踪"
+  },
+  {
+   "card_id": "card_talent",
+   "name": "人才与组织",
+   "family_ids": [
+    "organization_capability_state"
+   ],
+   "info_examples": "产业新闻·核心人才流动/团队成建制迁移/研发中心设立",
+   "trl_weighted": "否（C 组）",
+   "dims": [
+    {
+     "dim": "人物/团队层级",
+     "max": 30,
+     "bands": [
+      {
+       "cond": "域内公认技术带头人/核心团队",
+       "score": 30
+      },
+      {
+       "cond": "知名高管/骨干",
+       "score": 15
+      },
+      {
+       "cond": "一般人事",
+       "score": 5
+      }
+     ]
+    },
+    {
+     "dim": "与域关键能力关联",
+     "max": 40,
+     "bands": [
+      {
+       "cond": "携带 CORE 瓶颈方向关键能力/IP/产线经验，且流向直接竞争路线或新主体",
+       "score": 40
+      },
+      {
+       "cond": "能力相关但常规流动",
+       "score": 20
+      },
+      {
+       "cond": "关联弱",
+       "score": 8
+      }
+     ]
+    },
+    {
+     "dim": "迁移规模",
+     "max": 30,
+     "bands": [
+      {
+       "cond": "成建制团队(≥10人)/新建研发中心",
+       "score": 30
+      },
+      {
+       "cond": "小组(3-10人)",
+       "score": 15
+      },
+      {
+       "cond": "单人",
+       "score": 8
+      }
+     ]
+    }
+   ],
+   "gate": "无"
+  }
+ ],
+ "domain_cards": [
+  {
+   "domain_id": "pv_photovoltaic",
+   "domain": "光伏",
+   "core_terms": "光伏|钙钛矿|perovskite|太阳能电池|叠层电池|TOPCon|HJT|photovoltaic",
+   "ext_terms": "组件|硅片|电池片|逆变器|实证电站|BC",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/pv_photovoltaic.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/pv_photovoltaic.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/pv_photovoltaic.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/pv_photovoltaic.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/pv_photovoltaic.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "perovskite_long_term_stability",
+     "zh": "钙钛矿长期稳定性",
+     "state": "CORE",
+     "families": [
+      "technical_knowledge_change",
+      "engineering_validation_state"
+     ]
+    },
+    {
+     "id": "perovskite_large_area_manufacturing",
+     "zh": "钙钛矿大面积制备",
+     "state": "CORE",
+     "families": [
+      "engineering_validation_state",
+      "production_operation_state"
+     ]
+    },
+    {
+     "id": "pv_lead_management",
+     "zh": "光伏铅管理",
+     "state": "SECONDARY",
+     "families": [
+      "institutional_access_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "pce_certified_module_efficiency_pct",
+     "unit": "%",
+     "baseline": "26.2",
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "certified_module",
+     "route": "all_perovskite_tandem",
+     "tiers": {
+      "达标": 26.2,
+      "突破(≥10%)": 28.82,
+      "极大突破(≥20%)": 31.44,
+      "eng_based": false
+     }
+    },
+    {
+     "metric_id": "pce_tandem_lab_efficiency_pct",
+     "unit": "%",
+     "baseline": "34.07",
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "certified_lab_small_area",
+     "route": "perovskite_silicon_tandem",
+     "tiers": {
+      "达标": 34.07,
+      "突破(≥10%)": 37.48,
+      "极大突破(≥20%)": 40.88,
+      "eng_based": false
+     }
+    },
+    {
+     "metric_id": "manufacturing_capacity_gw",
+     "unit": "GW",
+     "baseline": null,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "announced_capacity",
+     "route": "",
+     "tiers": null
+    }
+   ],
+   "stage_words": "认证组件出货(装车档)|示范电站并网(交付档)|量产线(量产)|中试线/百兆瓦线(中试)|实验室小面积器件(实验室)",
+   "actors": "隆基绿能、晶科能源、天合光能、通威、协鑫、First Solar（示例清单，需维护）",
+   "scale_anchor": "产能基线 manufacturing_capacity_gw 原文未给数值(null)——规模维度按披露分",
+   "top_signals": [
+    "钙钛矿叠层认证效率超 34.07%（小面积）/26.2%（组件）",
+    "大面积制备良率与稳定性同时达标（复合信号）",
+    "GW 级新产能投产"
+   ],
+   "low_cases": [
+    "常规组件调价",
+    "无口径的效率宣称",
+    "展会新品无参数"
+   ],
+   "trl_routes": [
+    {
+     "route": "晶硅主链(TOPCon/HJT/BC)",
+     "trl": "8-9",
+     "basis": "MANUFACTURING/COMMERCIAL=ESTABLISHED"
+    },
+    {
+     "route": "钙钛矿单结/叠层",
+     "trl": "4-6",
+     "basis": "scope 备注: perovskite manufacturing=VALIDATING"
+    },
+    {
+     "route": "OPV/CIGS/CdTe",
+     "trl": "5-7",
+     "basis": "工程验证段"
+    }
+   ],
+   "applicable_families": [
+    "technical_knowledge_change",
+    "engineering_validation_state",
+    "production_operation_state",
+    "project_facility_state",
+    "market_industry_state",
+    "financing_capital_state",
+    "equipment_asset_state",
+    "enterprise_operating_state",
+    "patent_like_right_state",
+    "evidence_asset_state"
+   ]
+  },
+  {
+   "domain_id": "li_battery",
+   "domain": "锂电池",
+   "core_terms": "固态电池|锂离子|锂电池|锂电|lithium-ion|电芯|battery",
+   "ext_terms": "电解液|正极|负极|隔膜|电解质|lithium|batteries|高镍|硅碳",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/li_battery.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/li_battery.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/li_battery.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/li_battery.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/li_battery.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "ssb_scale_up_degradation",
+     "zh": "固态电池放大后衰减",
+     "state": "CORE",
+     "families": [
+      "engineering_validation_state",
+      "production_operation_state"
+     ]
+    },
+    {
+     "id": "high_energy_cycle_stability",
+     "zh": "高比能体系循环稳定性",
+     "state": "CORE",
+     "families": [
+      "technical_knowledge_change"
+     ]
+    },
+    {
+     "id": "ssb_cost_uncovered",
+     "zh": "固态电池成本未明",
+     "state": "EMERGING",
+     "families": [
+      "market_industry_state"
+     ]
+    },
+    {
+     "id": "thermal_runaway_safety",
+     "zh": "热失控安全",
+     "state": "SECONDARY",
+     "families": [
+      "engineering_validation_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "energy_density_wh_per_kg",
+     "unit": "Wh/kg",
+     "baseline": "300",
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "production_pack",
+     "route": "",
+     "tiers": {
+      "达标": 300.0,
+      "突破(≥10%)": 330.0,
+      "极大突破(≥20%)": 360.0,
+      "eng_based": false
+     }
+    },
+    {
+     "metric_id": "cycle_life_count",
+     "unit": "cycle",
+     "baseline": null,
+     "eng": 1000,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "production",
+     "route": "",
+     "tiers": {
+      "达标": 1000.0,
+      "突破(≥10%)": 1100.0,
+      "极大突破(≥20%)": 1200.0,
+      "eng_based": true
+     }
+    },
+    {
+     "metric_id": "ssb_energy_density_wh_per_kg",
+     "unit": "Wh/kg",
+     "baseline": "450",
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "cell_sample",
+     "route": "",
+     "tiers": {
+      "达标": 450.0,
+      "突破(≥10%)": 495.0,
+      "极大突破(≥20%)": 540.0,
+      "eng_based": false
+     }
+    },
+    {
+     "metric_id": "specific_capacity_mah_per_g",
+     "unit": "mAh/g",
+     "baseline": null,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "material_level",
+     "route": "",
+     "tiers": null
+    }
+   ],
+   "stage_words": "装车路试/示范车队(装车档)|定点/交付主机厂(交付档)|量产线投产(量产)|中试线(中试)|实验室电芯样品(实验室)",
+   "actors": "宁德时代、比亚迪、中创新航、亿纬锂能、丰田、三星SDI、QuantumScape、清陶能源、卫蓝新能源（示例清单，需维护）",
+   "scale_anchor": "规模看 GWh 级产线/吉瓦时产能；电芯看 Ah 容量披露",
+   "top_signals": [
+    "固态 cell 样品能量密度超 450 Wh/kg 基线",
+    "放大后循环 ≥1000 次(1C) 不衰减跳变",
+    "固态中试→量产跃迁",
+    "头部车企定点/装车"
+   ],
+   "low_cases": [
+    "无能量密度口径的固态宣称",
+    "液态体系常规扩产(TRL9)",
+    "只给参数不给测试条件"
+   ],
+   "trl_routes": [
+    {
+     "route": "液态高镍/硅碳量产体系",
+     "trl": "8-9",
+     "basis": "MANUFACTURING/COMMERCIAL=ESTABLISHED"
+    },
+    {
+     "route": "硫化物/氧化物固态电池",
+     "trl": "4-6",
+     "basis": "cell_sample 厂商样品点，放大衰减为 CORE 瓶颈"
+    },
+    {
+     "route": "锂金属/锂硫",
+     "trl": "3-5",
+     "basis": "高比能循环稳定性=CORE，工程验证早期"
+    }
+   ],
+   "applicable_families": [
+    "technical_knowledge_change",
+    "engineering_validation_state",
+    "production_operation_state",
+    "product_model_state",
+    "market_industry_state",
+    "financing_capital_state",
+    "evidence_asset_state",
+    "patent_like_right_state"
+   ]
+  },
+  {
+   "domain_id": "storage_system",
+   "domain": "储能系统",
+   "core_terms": "储能|长时储能|液流电池|压缩空气储能|储热|thermal storage|grid storage",
+   "ext_terms": "飞轮|超级电容|构网型|储能电站|容量电价",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/storage_system.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/storage_system.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/storage_system.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/storage_system.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/storage_system.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "long_duration_cost",
+     "zh": "长时储能成本",
+     "state": "CORE",
+     "families": [
+      "market_industry_state"
+     ]
+    },
+    {
+     "id": "caes_round_trip_efficiency",
+     "zh": "CAES 往返效率",
+     "state": "CORE",
+     "families": [
+      "engineering_validation_state"
+     ]
+    },
+    {
+     "id": "high_frequency_degradation",
+     "zh": "高频次充放衰减",
+     "state": "SECONDARY",
+     "families": [
+      "production_operation_state"
+     ]
+    },
+    {
+     "id": "storage_safety_pressure_vessel",
+     "zh": "储能安全与压力容器",
+     "state": "SECONDARY",
+     "families": [
+      "institutional_access_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "caes_route_efficiency_pct",
+     "unit": "%",
+     "baseline": null,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "caes_mixed",
+     "tiers": null
+    },
+    {
+     "metric_id": "lib_storage_round_trip_efficiency_pct",
+     "unit": "%",
+     "baseline": null,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "lithium_ion_storage",
+     "tiers": null
+    },
+    {
+     "metric_id": "project_power_mw",
+     "unit": "MW",
+     "baseline": null,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "",
+     "tiers": null
+    },
+    {
+     "metric_id": "project_capacity_mwh",
+     "unit": "MWh",
+     "baseline": null,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "",
+     "tiers": null
+    }
+   ],
+   "stage_words": "并网商运(装车档≡并网运行)|交付(交付)|投产(量产)|示范项目(中试)|台架/小系统(实验室)",
+   "actors": "特斯拉储能、阳光电源、宁德时代储能、比亚迪储能、海辰储能（示例清单，需维护）",
+   "scale_anchor": "项目规模 MW/MWh（profile 未给数值基线(null)），域内以百 MW/数百 MWh 为常见量级——草案锚：≥300MW/600MWh 记规模满分档候选",
+   "top_signals": [
+    "长时(≥4h)成本或度电成本实质下降",
+    "液流/新体系长时示范投运",
+    "容量电价等制度变化",
+    "大型项目事故（安全负向突变）"
+   ],
+   "low_cases": [
+    "常规工商业储能项目",
+    "无规模口径的订单",
+    "电价脉冲新闻"
+   ],
+   "trl_routes": [
+    {
+     "route": "锂电储能系统",
+     "trl": "8-9",
+     "basis": "COMMERCIAL=ESTABLISHED"
+    },
+    {
+     "route": "液流电池",
+     "trl": "6-8",
+     "basis": "示范-商业早期"
+    },
+    {
+     "route": "储热/新构型长时",
+     "trl": "4-6",
+     "basis": "长时成本=CORE 瓶颈"
+    }
+   ],
+   "applicable_families": [
+    "production_operation_state",
+    "project_facility_state",
+    "market_industry_state",
+    "financing_capital_state",
+    "institutional_access_state",
+    "equipment_asset_state",
+    "supply_network_state"
+   ]
+  },
+  {
+   "domain_id": "na_battery",
+   "domain": "钠离子电池",
+   "core_terms": "钠电|钠离子|sodium-ion",
+   "ext_terms": "钠电池|聚阴离子|层状氧化物|普鲁士蓝|煤基钠电",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/na_battery.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/na_battery.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/na_battery.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/na_battery.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/na_battery.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "na_energy_density_gap",
+     "zh": "钠电能量密度差距",
+     "state": "CORE",
+     "families": [
+      "technical_knowledge_change"
+     ]
+    },
+    {
+     "id": "na_cycle_life_verification",
+     "zh": "钠电循环寿命验证",
+     "state": "SECONDARY",
+     "families": [
+      "engineering_validation_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "na_energy_density_wh_per_kg",
+     "unit": "Wh/kg",
+     "baseline": "165",
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "",
+     "tiers": {
+      "达标": 165.0,
+      "突破(≥10%)": 181.5,
+      "极大突破(≥20%)": 198.0,
+      "eng_based": false
+     }
+    },
+    {
+     "metric_id": "na_cycle_life_count",
+     "unit": "cycle",
+     "baseline": 8000,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "",
+     "tiers": {
+      "达标": 8000.0,
+      "突破(≥10%)": 8800.0,
+      "极大突破(≥20%)": 9600.0,
+      "eng_based": false
+     }
+    }
+   ],
+   "stage_words": "装车/大规模示范(装车档)|交付(交付)|量产线(量产)|中试(中试)|实验室电芯(实验室)",
+   "actors": "中科海钠、宁德时代(钠电)、华阳股份、众钠能源（示例清单，需维护）",
+   "scale_anchor": "GWh 级产线；电芯 Ah 容量",
+   "top_signals": [
+    "量产电芯能量密度超 165 Wh/kg 基线",
+    "循环寿命第三方验证超 8000 次基线（注意 profile 标注厂商单方宣称待验证）",
+    "大规模示范/装车"
+   ],
+   "low_cases": [
+    "能量密度未超 165 的常规发布",
+    "无验证的循环宣称"
+   ],
+   "trl_routes": [
+    {
+     "route": "聚阴离子/层状氧化物量产",
+     "trl": "6-8",
+     "basis": "ENGINEERING=VALIDATING+MANUFACTURING=SCALING"
+    }
+   ],
+   "applicable_families": [
+    "technical_knowledge_change",
+    "engineering_validation_state",
+    "production_operation_state",
+    "product_model_state",
+    "market_industry_state"
+   ]
+  },
+  {
+   "domain_id": "hydrogen_based_energy",
+   "domain": "氢基能源",
+   "core_terms": "氢能|制氢|绿氢|电解水|燃料电池|fuel cell|hydrogen|液氢",
+   "ext_terms": "电解槽|PEM|碱性电解|AWE|SOEC|绿氨|绿甲醇|LOHC|输氢管道",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/hydrogen_based_energy.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/hydrogen_based_energy.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/hydrogen_based_energy.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "NASCENT",
+     "evidence_refs": [
+      "domain_summaries/hydrogen_based_energy.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/hydrogen_based_energy.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "electrolyzer_efficiency_durability",
+     "zh": "电解槽效率与耐久",
+     "state": "CORE",
+     "families": [
+      "engineering_validation_state"
+     ]
+    },
+    {
+     "id": "green_h2_cost_gap",
+     "zh": "绿氢成本差距",
+     "state": "CORE",
+     "families": [
+      "market_industry_state"
+     ]
+    },
+    {
+     "id": "h2_storage_transport_cost",
+     "zh": "氢储运成本",
+     "state": "SECONDARY",
+     "families": [
+      "market_industry_state"
+     ]
+    },
+    {
+     "id": "gw_scale_validation",
+     "zh": "GW 级工程验证",
+     "state": "SECONDARY",
+     "families": [
+      "engineering_validation_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "pem_electrolysis_efficiency_pct",
+     "unit": "%",
+     "baseline": null,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "pem",
+     "tiers": null
+    },
+    {
+     "metric_id": "green_ammonia_methanol_project_status",
+     "unit": null,
+     "baseline": "planning_or_construction",
+     "eng": null,
+     "dir": "EQUALS_REQUIRED",
+     "ctx": "",
+     "route": "",
+     "tiers": null
+    }
+   ],
+   "stage_words": "商运项目(装车档)|项目交付(交付)|产线投产(量产)|示范项目(中试)|实验室电解小试(实验室)",
+   "actors": "隆基氢能、考克利尔竞立、西门子能源、国氢科技、重塑能源（示例清单，需维护）",
+   "scale_anchor": "电解槽 GW 级产能；绿氨/绿醇项目状态锚 planning_or_construction（profile 唯一非 null 基线）",
+   "top_signals": [
+    "电解槽效率/耐久实质提升（profile 效率基线 null——按披露分）",
+    "绿氢成本逼近可竞争区间",
+    "GW 级绿氨/绿醇项目开工",
+    "输储运成本下降"
+   ],
+   "low_cases": [
+    "框架协议类项目签约（未开工）",
+    "无口径效率宣称"
+   ],
+   "trl_routes": [
+    {
+     "route": "碱性电解(AWE)",
+     "trl": "8-9",
+     "basis": "商业化成熟"
+    },
+    {
+     "route": "PEM 电解",
+     "trl": "7-8",
+     "basis": "效率耐久=CORE 瓶颈"
+    },
+    {
+     "route": "SOEC",
+     "trl": "5-7",
+     "basis": "工程验证段"
+    },
+    {
+     "route": "绿氨/绿甲醇项目",
+     "trl": "4-6",
+     "basis": "COMMERCIAL=NASCENT，项目状态锚 planning_or_construction"
+    }
+   ],
+   "applicable_families": [
+    "technical_knowledge_change",
+    "engineering_validation_state",
+    "project_facility_state",
+    "production_operation_state",
+    "market_industry_state",
+    "institutional_access_state"
+   ]
+  },
+  {
+   "domain_id": "wind_power",
+   "domain": "风电",
+   "core_terms": "风电|风机|海上风电|wind turbine|offshore wind",
+   "ext_terms": "叶片|塔筒|单桩|漂浮式|风储|深远海",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/wind_power.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/wind_power.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/wind_power.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/wind_power.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/wind_power.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "deep_sea_installation",
+     "zh": "深远海安装",
+     "state": "CORE",
+     "families": [
+      "project_facility_state"
+     ]
+    },
+    {
+     "id": "curtailment_grid",
+     "zh": "消纳与电网",
+     "state": "SECONDARY",
+     "families": [
+      "market_industry_state"
+     ]
+    },
+    {
+     "id": "blade_recycling",
+     "zh": "叶片回收",
+     "state": "SECONDARY",
+     "families": [
+      "technical_knowledge_change"
+     ]
+    },
+    {
+     "id": "turbine_safety",
+     "zh": "风机安全",
+     "state": "SECONDARY",
+     "families": [
+      "equipment_asset_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "offshore_project_distance_km",
+     "unit": "km",
+     "baseline": "70",
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "representative_event_huaneng",
+     "route": "",
+     "tiers": {
+      "达标": 70.0,
+      "突破(≥10%)": 77.0,
+      "极大突破(≥20%)": 84.0,
+      "eng_based": false
+     }
+    },
+    {
+     "metric_id": "wind_investment_cny_100m",
+     "unit": "亿元",
+     "baseline": null,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "",
+     "tiers": null
+    }
+   ],
+   "stage_words": "全场并网商运(装车档)|吊装交付(交付)|基地投产(量产)|示范风场(中试)|样机台架(实验室)",
+   "actors": "金风科技、明阳智能、东方电气、维斯塔斯（示例清单，需维护）",
+   "scale_anchor": "离岸距离基线 70km（profile 代表性事件锚）；15MW+ 机型",
+   "top_signals": [
+    "深远海（>70km 锚）/漂浮式安装突破",
+    "15MW+ 机组吊装/并网",
+    "叶片回收规模化（SECONDARY→升级中）",
+    "消纳政策变化"
+   ],
+   "low_cases": [
+    "常规机型订单",
+    "陆上风电例行新闻"
+   ],
+   "trl_routes": [
+    {
+     "route": "陆上/近海主力机型",
+     "trl": "8-9",
+     "basis": "全线 ESTABLISHED"
+    },
+    {
+     "route": "深远海/漂浮式/15MW+",
+     "trl": "6-8",
+     "basis": "深远海安装=CORE 瓶颈"
+    }
+   ],
+   "applicable_families": [
+    "project_facility_state",
+    "equipment_asset_state",
+    "production_operation_state",
+    "market_industry_state",
+    "enterprise_operating_state"
+   ]
+  },
+  {
+   "domain_id": "nuclear_power",
+   "domain": "核电(含聚变)",
+   "core_terms": "核电|核聚变|fusion|反应堆|SMR|小堆",
+   "ext_terms": "托卡马克|EAST|华龙一号|核供热|四代堆",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/nuclear_power.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/nuclear_power.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/nuclear_power.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/nuclear_power.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/nuclear_power.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "fusion_commercialization_horizon",
+     "zh": "聚变商业化周期",
+     "state": "CORE",
+     "families": [
+      "technical_knowledge_change"
+     ]
+    },
+    {
+     "id": "nuclear_waste_disposal",
+     "zh": "核废料处置",
+     "state": "CORE",
+     "families": [
+      "institutional_access_state"
+     ]
+    },
+    {
+     "id": "public_acceptance_safety",
+     "zh": "公众接受度与安全",
+     "state": "CORE",
+     "families": [
+      "institutional_access_state"
+     ]
+    },
+    {
+     "id": "construction_cycle_5_8y",
+     "zh": "5-8 年建设周期",
+     "state": "SECONDARY",
+     "families": [
+      "project_facility_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "fusion_plasma_parameter_coverage",
+     "unit": null,
+     "baseline": null,
+     "eng": null,
+     "dir": "EQUALS_REQUIRED",
+     "ctx": "",
+     "route": "",
+     "tiers": null
+    }
+   ],
+   "stage_words": "商运(装车档)|装料/交付(交付)|开工建设(量产≡开建)|工程验证/示范堆(中试)|物理实验(实验室)",
+   "actors": "中核、中广核、国家电投、中科院合肥物质院(EAST)、能量奇点（示例清单，需维护）",
+   "scale_anchor": "聚变等离子体参数 profile 无数值基线(extraction_gap_registered)——按披露分；裂变看 GW 级机组",
+   "top_signals": [
+    "聚变新机理/关键物理验证（TRL1-3 高权重受益域）",
+    "SMR 工程进展",
+    "核废料处置制度突破",
+    "建设周期缩短实证"
+   ],
+   "low_cases": [
+    "例行大修",
+    "常规机组运行通报(TRL9)"
+   ],
+   "trl_routes": [
+    {
+     "route": "三代+（华龙一号等）",
+     "trl": "8-9",
+     "basis": "商用成熟"
+    },
+    {
+     "route": "SMR/小堆",
+     "trl": "6-8",
+     "basis": "工程验证-示范"
+    },
+    {
+     "route": "聚变(托卡马克/EAST 等)",
+     "trl": "1-3",
+     "basis": "聚变商业化周期=CORE 瓶颈"
+    }
+   ],
+   "applicable_families": [
+    "technical_knowledge_change",
+    "project_facility_state",
+    "institutional_access_state",
+    "production_operation_state",
+    "evidence_asset_state"
+   ]
+  },
+  {
+   "domain_id": "caes",
+   "domain": "压缩空气储能",
+   "core_terms": "压缩空气储能|advanced adiabatic|CAES",
+   "ext_terms": "透平|储气库|盐穴|先进绝热",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "NASCENT",
+     "evidence_refs": [
+      "domain_summaries/caes.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/caes.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/caes.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/caes.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/caes.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "caes_efficiency_by_route",
+     "zh": "CAES 分路线效率",
+     "state": "CORE",
+     "families": [
+      "engineering_validation_state"
+     ]
+    },
+    {
+     "id": "site_geology_constraint",
+     "zh": "场址地质约束",
+     "state": "CORE",
+     "families": [
+      "resource_asset_state"
+     ]
+    },
+    {
+     "id": "capex_vs_lib",
+     "zh": "相对锂电的资本开支",
+     "state": "SECONDARY",
+     "families": [
+      "market_industry_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "caes_traditional_round_trip_efficiency_pct",
+     "unit": "%",
+     "baseline": "47.5",
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "traditional_caes",
+     "tiers": {
+      "达标": 47.5,
+      "突破(≥10%)": 52.25,
+      "极大突破(≥20%)": 57.0,
+      "eng_based": false
+     }
+    },
+    {
+     "metric_id": "caes_aa_target_round_trip_efficiency_pct",
+     "unit": "%",
+     "baseline": null,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "aa_caes",
+     "tiers": null
+    },
+    {
+     "metric_id": "project_capacity_mwh",
+     "unit": "MWh",
+     "baseline": "4200",
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "announced_max",
+     "route": "",
+     "tiers": {
+      "达标": 4200.0,
+      "突破(≥10%)": 4620.0,
+      "极大突破(≥20%)": 5040.0,
+      "eng_based": false
+     }
+    }
+   ],
+   "stage_words": "并网商运(装车档)|系统交付(交付)|电站投产(量产)|示范电站(中试)|系统台架(实验室)",
+   "actors": "中储国能、中国能建（示例清单，需维护）",
+   "scale_anchor": "项目容量基线 4200MWh（profile announced_max 锚）；效率基线 47.5%（传统路线）",
+   "top_signals": [
+    "传统路线效率超 47.5% 基线",
+    "AA-CAES 目标效率有实测值（现无）",
+    "≥4200MWh 级项目投运",
+    "新盐穴/场址资源落地"
+   ],
+   "low_cases": [
+    "小规模常规项目",
+    "无效率口径的投运新闻"
+   ],
+   "trl_routes": [
+    {
+     "route": "传统 CAES(补燃)",
+     "trl": "7-8",
+     "basis": "效率 47.5% 基线为传统路线实测"
+    },
+    {
+     "route": "AA-CAES(先进绝热)",
+     "trl": "5-7",
+     "basis": "ENGINEERING=VALIDATING，目标效率无实测值"
+    }
+   ],
+   "applicable_families": [
+    "project_facility_state",
+    "engineering_validation_state",
+    "production_operation_state",
+    "resource_asset_state"
+   ]
+  },
+  {
+   "domain_id": "steel_decarbonization",
+   "domain": "钢铁脱碳",
+   "core_terms": "钢铁|氢冶金|高炉|green steel|电炉",
+   "ext_terms": "DRI|直接还原|废钢|转炉|富氢",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/steel_decarbonization.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/steel_decarbonization.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/steel_decarbonization.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/steel_decarbonization.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/steel_decarbonization.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "green_steel_cost_premium",
+     "zh": "绿钢溢价",
+     "state": "CORE",
+     "families": [
+      "market_industry_state"
+     ]
+    },
+    {
+     "id": "scrap_supply",
+     "zh": "废钢供应",
+     "state": "SECONDARY",
+     "families": [
+      "supply_network_state"
+     ]
+    },
+    {
+     "id": "bf_carbon_intensity",
+     "zh": "高炉碳强度",
+     "state": "CORE",
+     "families": [
+      "production_operation_state"
+     ]
+    },
+    {
+     "id": "pressure_vessel_safety",
+     "zh": "压力容器安全",
+     "state": "SECONDARY",
+     "families": [
+      "institutional_access_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "steel_carbon_intensity_t_per_t",
+     "unit": "tCO2/t",
+     "baseline": "1.9",
+     "eng": null,
+     "dir": "LOWER_IS_BETTER",
+     "ctx": "",
+     "route": "bf_bof",
+     "tiers": {
+      "达标": 1.9,
+      "突破(≥10%)": 1.71,
+      "极大突破(≥20%)": 1.52,
+      "eng_based": false
+     }
+    },
+    {
+     "metric_id": "dri_eaf_cost_premium_pct",
+     "unit": "%",
+     "baseline": "30",
+     "eng": null,
+     "dir": "LOWER_IS_BETTER",
+     "ctx": "",
+     "route": "dri_eaf",
+     "tiers": {
+      "达标": 30.0,
+      "突破(≥10%)": 27.0,
+      "极大突破(≥20%)": 24.0,
+      "eng_based": false
+     }
+    }
+   ],
+   "stage_words": "商业化量产供货(装车档)|工程交付(交付)|产线投产(量产)|示范工程(中试)|实验室冶炼(实验室)",
+   "actors": "宝武、河钢、瑞典SSAB、安赛乐米塔尔（示例清单，需维护）",
+   "scale_anchor": "碳强度基线 1.9 tCO2/t（BF-BOF 路线）；DRI-EAF 溢价基线 30%",
+   "top_signals": [
+    "氢冶金吨钢碳强度大幅低于 1.9",
+    "DRI 溢价显著收窄(<30%→更低)",
+    "百万吨级氢冶金投产",
+    "绿钢溢价订单（溢价承受验证）"
+   ],
+   "low_cases": [
+    "常规产能置换",
+    "无碳强度口径的绿色宣称"
+   ],
+   "trl_routes": [
+    {
+     "route": "废钢 EAF",
+     "trl": "8-9",
+     "basis": "成熟工艺"
+    },
+    {
+     "route": "氢冶金 H2-DRI-EAF",
+     "trl": "6-8",
+     "basis": "绿钢溢价 30%=CORE，示范段"
+    },
+    {
+     "route": "高炉富氢改造",
+     "trl": "7-8",
+     "basis": "改造工程成熟"
+    }
+   ],
+   "applicable_families": [
+    "technical_knowledge_change",
+    "production_operation_state",
+    "enterprise_operating_state",
+    "institutional_access_state",
+    "market_industry_state"
+   ]
+  },
+  {
+   "domain_id": "cement_decarbonization",
+   "domain": "水泥脱碳",
+   "core_terms": "水泥|混凝土|cement|clinker",
+   "ext_terms": "熟料|替代燃料|矿渣粉|石灰石",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/cement_decarbonization.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/cement_decarbonization.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/cement_decarbonization.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/cement_decarbonization.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/cement_decarbonization.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "process_emission_inherent",
+     "zh": "过程排放固有(工艺释放CO2)",
+     "state": "CORE",
+     "families": [
+      "production_operation_state"
+     ]
+    },
+    {
+     "id": "clinker_temperature_1450c",
+     "zh": "熟料 1450°C 煅烧温度",
+     "state": "CORE",
+     "families": [
+      "technical_knowledge_change"
+     ]
+    },
+    {
+     "id": "alternative_fuel_rate",
+     "zh": "替代燃料替代率",
+     "state": "SECONDARY",
+     "families": [
+      "market_industry_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "clinker_carbon_intensity_t_per_t",
+     "unit": "tCO2/t clinker",
+     "baseline": "0.75",
+     "eng": null,
+     "dir": "LOWER_IS_BETTER",
+     "ctx": "",
+     "route": "",
+     "tiers": {
+      "达标": 0.75,
+      "突破(≥10%)": 0.68,
+      "极大突破(≥20%)": 0.6,
+      "eng_based": false
+     }
+    },
+    {
+     "metric_id": "alternative_fuel_rate_pct",
+     "unit": "%",
+     "baseline": "40",
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "",
+     "tiers": {
+      "达标": 40.0,
+      "突破(≥10%)": 44.0,
+      "极大突破(≥20%)": 48.0,
+      "eng_based": false
+     }
+    }
+   ],
+   "stage_words": "全厂运行(装车档)|技改交付(交付)|产线投产(量产)|示范技改(中试)|实验室胶凝材料(实验室)",
+   "actors": "海螺水泥、华新水泥、Holcim（示例清单，需维护）",
+   "scale_anchor": "熟料碳强度基线 0.75 tCO2/t；替代燃料率基线 40%（EU 领先口径）",
+   "top_signals": [
+    "熟料碳强度低于 0.75",
+    "替代燃料率超 40%",
+    "水泥窑 CCUS 示范投运",
+    "熟料替代新材料验证"
+   ],
+   "low_cases": [
+    "常规价格/产量通报",
+    "无口径减碳宣称"
+   ],
+   "trl_routes": [
+    {
+     "route": "替代燃料/熟料替代",
+     "trl": "7-9",
+     "basis": "MANUFACTURING/COMMERCIAL=ESTABLISHED"
+    },
+    {
+     "route": "水泥窑 CCUS",
+     "trl": "4-6",
+     "basis": "RESEARCH/ENGINEERING=UNKNOWN，按事件词定"
+    }
+   ],
+   "applicable_families": [
+    "production_operation_state",
+    "institutional_access_state",
+    "market_industry_state",
+    "technical_knowledge_change"
+   ]
+  },
+  {
+   "domain_id": "thermal_power_cofiring",
+   "domain": "火电掺氨掺氢",
+   "core_terms": "掺烧|掺氨|氨掺|co-firing|掺氢",
+   "ext_terms": "燃煤|火电|灵活性改造|NOx",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/thermal_power_cofiring.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/thermal_power_cofiring.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/thermal_power_cofiring.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "ESTABLISHED",
+     "evidence_refs": [
+      "domain_summaries/thermal_power_cofiring.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/thermal_power_cofiring.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "cofiring_ratio_stability_nox",
+     "zh": "掺烧比例稳定性与 NOx",
+     "state": "CORE",
+     "families": [
+      "engineering_validation_state"
+     ]
+    },
+    {
+     "id": "thermal_efficiency_penalty",
+     "zh": "热效率损失",
+     "state": "SECONDARY",
+     "families": [
+      "production_operation_state"
+     ]
+    },
+    {
+     "id": "coal_carbon_intensity",
+     "zh": "煤电碳强度",
+     "state": "CORE",
+     "families": [
+      "production_operation_state"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "cofiring_h2_ratio_pct",
+     "unit": "%",
+     "baseline": "45",
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "",
+     "tiers": {
+      "达标": 45.0,
+      "突破(≥10%)": 49.5,
+      "极大突破(≥20%)": 54.0,
+      "eng_based": false
+     }
+    },
+    {
+     "metric_id": "coal_power_carbon_intensity_kg_per_kwh",
+     "unit": "kgCO2/kWh",
+     "baseline": "0.9",
+     "eng": null,
+     "dir": "LOWER_IS_BETTER",
+     "ctx": "",
+     "route": "pulverized_coal",
+     "tiers": {
+      "达标": 0.9,
+      "突破(≥10%)": 0.81,
+      "极大突破(≥20%)": 0.72,
+      "eng_based": false
+     }
+    }
+   ],
+   "stage_words": "长期商运掺烧(装车档)|改造交付(交付)|工程投运(量产)|示范掺烧(中试)|燃烧试验台(实验室)",
+   "actors": "国家能源集团、华能、大唐（示例清单，需维护）",
+   "scale_anchor": "掺氢比例基线 45%（660MW 机组，profile 标注单点警示值非行业均值）；煤电碳强度基线 0.9 kgCO2/kWh",
+   "top_signals": [
+    "掺氨比例稳定性/NOx 达标下的比例提升",
+    "大机组长期掺烧运行数据",
+    "碳强度低于 0.9 的实证",
+    "氨供应规模化"
+   ],
+   "low_cases": [
+    "改造意向签约",
+    "无比例/无排放口径的试验新闻"
+   ],
+   "trl_routes": [
+    {
+     "route": "掺氨 20-60%",
+     "trl": "5-7",
+     "basis": "示范段（45% 为 660MW 机组单点警示值）"
+    },
+    {
+     "route": "掺氢/富氢燃烧",
+     "trl": "6-8",
+     "basis": "工程验证-示范"
+    },
+    {
+     "route": "灵活性改造",
+     "trl": "8-9",
+     "basis": "成熟改造"
+    }
+   ],
+   "applicable_families": [
+    "engineering_validation_state",
+    "production_operation_state",
+    "institutional_access_state",
+    "technical_knowledge_change"
+   ]
+  },
+  {
+   "domain_id": "ccus",
+   "domain": "CCUS",
+   "core_terms": "碳捕集|CCUS|carbon capture|DAC|直接空气捕集|CO2RR",
+   "ext_terms": "矿化|BECCS|胺法|MOF|CO2利用|电催化还原",
+   "stages": [
+    {
+     "axis": "RESEARCH",
+     "state": "SCALING",
+     "evidence_refs": [
+      "domain_summaries/ccus.md"
+     ]
+    },
+    {
+     "axis": "ENGINEERING",
+     "state": "VALIDATING",
+     "evidence_refs": [
+      "domain_summaries/ccus.md"
+     ]
+    },
+    {
+     "axis": "MANUFACTURING",
+     "state": "NASCENT",
+     "evidence_refs": [
+      "domain_summaries/ccus.md"
+     ]
+    },
+    {
+     "axis": "COMMERCIAL",
+     "state": "NASCENT",
+     "evidence_refs": [
+      "domain_summaries/ccus.md"
+     ]
+    },
+    {
+     "axis": "INSTITUTIONAL",
+     "state": "UNKNOWN",
+     "evidence_refs": [
+      "domain_summaries/ccus.md"
+     ]
+    }
+   ],
+   "bottlenecks": [
+    {
+     "id": "dac_cost_1000_to_100",
+     "zh": "DAC 成本(千→百美元/tCO2)",
+     "state": "CORE",
+     "families": [
+      "market_industry_state"
+     ]
+    },
+    {
+     "id": "amine_regeneration_energy",
+     "zh": "胺法再生能耗",
+     "state": "CORE",
+     "families": [
+      "engineering_validation_state"
+     ]
+    },
+    {
+     "id": "scale_gap_50mt",
+     "zh": "全球 50Mt/年规模缺口",
+     "state": "CORE",
+     "families": [
+      "production_operation_state"
+     ]
+    },
+    {
+     "id": "co2rr_lab_stage",
+     "zh": "CO2RR 仍处实验室阶段",
+     "state": "SECONDARY",
+     "families": [
+      "technical_knowledge_change"
+     ]
+    }
+   ],
+   "metrics": [
+    {
+     "metric_id": "dac_cost_usd_per_tco2",
+     "unit": "USD/tCO2",
+     "baseline": null,
+     "eng": null,
+     "dir": "LOWER_IS_BETTER",
+     "ctx": "",
+     "route": "dac",
+     "tiers": null
+    },
+    {
+     "metric_id": "capture_scale_mt_per_yr",
+     "unit": "Mt/y",
+     "baseline": null,
+     "eng": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "global_annual",
+     "route": "",
+     "tiers": null
+    }
+   ],
+   "stage_words": "商业设施运行(装车档)|装置交付(交付)|设施投产(量产)|示范装置(中试)|实验室材料/催化剂(实验室)",
+   "actors": "中石化、国家能源集团、Climeworks、壳牌（示例清单，需维护）",
+   "scale_anchor": "DAC 成本区间 100-1000 USD/tCO2（profile 判定区间过宽不给点基线）；捕集量 Mt/y 无基线(null)——按披露分",
+   "top_signals": [
+    "DAC 成本向 100 美元档实质逼近（有口径）",
+    "胺法再生能耗下降",
+    "Mt 级设施投运（50Mt 缺口）",
+    "CO2RR 从实验室走向中试"
+   ],
+   "low_cases": [
+    "小型试点例行进展",
+    "无成本口径的捕集量宣称"
+   ],
+   "trl_routes": [
+    {
+     "route": "胺法点源捕集",
+     "trl": "7-8",
+     "basis": "工程成熟（再生能耗=CORE）"
+    },
+    {
+     "route": "DAC",
+     "trl": "4-6",
+     "basis": "成本 100-1000 美元区间过宽=CORE，MANUFACTURING=NASCENT"
+    },
+    {
+     "route": "CO2RR/电催化",
+     "trl": "3-5",
+     "basis": "实验室阶段=SECONDARY 瓶颈"
+    },
+    {
+     "route": "MOF 新吸附材料",
+     "trl": "2-4",
+     "basis": "材料研究段"
+    },
+    {
+     "route": "矿化/BECCS",
+     "trl": "5-7",
+     "basis": "示范段"
+    }
+   ],
+   "applicable_families": [
+    "technical_knowledge_change",
+    "engineering_validation_state",
+    "project_facility_state",
+    "market_industry_state",
+    "resource_asset_state"
+   ]
+  }
+ ],
+ "domain_params": [
+  {
+   "domain": "光伏",
+   "metric_id": "pce_certified_module_efficiency_pct",
+   "unit": "%",
+   "baseline": "26.2",
+   "ctx": "certified_module",
+   "route": "all_perovskite_tandem",
+   "tiers": "达标 26.2 / 突破 28.82 / 极大 31.44",
+   "stage_words": "认证组件出货(装车档)|示范电站并网(交付档)|量产线(量产)|中试线/百兆瓦线(中试)|实验室小面积器件(实验室)",
+   "scale_anchor": "产能基线 manufacturing_capacity_gw 原文未给数值(null)——规模维度按披露分"
+  },
+  {
+   "domain": "光伏",
+   "metric_id": "pce_tandem_lab_efficiency_pct",
+   "unit": "%",
+   "baseline": "34.07",
+   "ctx": "certified_lab_small_area",
+   "route": "perovskite_silicon_tandem",
+   "tiers": "达标 34.07 / 突破 37.48 / 极大 40.88",
+   "stage_words": "认证组件出货(装车档)|示范电站并网(交付档)|量产线(量产)|中试线/百兆瓦线(中试)|实验室小面积器件(实验室)",
+   "scale_anchor": "产能基线 manufacturing_capacity_gw 原文未给数值(null)——规模维度按披露分"
+  },
+  {
+   "domain": "光伏",
+   "metric_id": "manufacturing_capacity_gw",
+   "unit": "GW",
+   "baseline": null,
+   "ctx": "announced_capacity",
+   "route": "",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "认证组件出货(装车档)|示范电站并网(交付档)|量产线(量产)|中试线/百兆瓦线(中试)|实验室小面积器件(实验室)",
+   "scale_anchor": "产能基线 manufacturing_capacity_gw 原文未给数值(null)——规模维度按披露分"
+  },
+  {
+   "domain": "锂电池",
+   "metric_id": "energy_density_wh_per_kg",
+   "unit": "Wh/kg",
+   "baseline": "300",
+   "ctx": "production_pack",
+   "route": "",
+   "tiers": "达标 300.0 / 突破 330.0 / 极大 360.0",
+   "stage_words": "装车路试/示范车队(装车档)|定点/交付主机厂(交付档)|量产线投产(量产)|中试线(中试)|实验室电芯样品(实验室)",
+   "scale_anchor": "规模看 GWh 级产线/吉瓦时产能；电芯看 Ah 容量披露"
+  },
+  {
+   "domain": "锂电池",
+   "metric_id": "cycle_life_count",
+   "unit": "cycle",
+   "baseline": "eng:1000",
+   "ctx": "production",
+   "route": "",
+   "tiers": "达标 1000.0 / 突破 1100.0 / 极大 1200.0",
+   "stage_words": "装车路试/示范车队(装车档)|定点/交付主机厂(交付档)|量产线投产(量产)|中试线(中试)|实验室电芯样品(实验室)",
+   "scale_anchor": "规模看 GWh 级产线/吉瓦时产能；电芯看 Ah 容量披露"
+  },
+  {
+   "domain": "锂电池",
+   "metric_id": "ssb_energy_density_wh_per_kg",
+   "unit": "Wh/kg",
+   "baseline": "450",
+   "ctx": "cell_sample",
+   "route": "",
+   "tiers": "达标 450.0 / 突破 495.0 / 极大 540.0",
+   "stage_words": "装车路试/示范车队(装车档)|定点/交付主机厂(交付档)|量产线投产(量产)|中试线(中试)|实验室电芯样品(实验室)",
+   "scale_anchor": "规模看 GWh 级产线/吉瓦时产能；电芯看 Ah 容量披露"
+  },
+  {
+   "domain": "锂电池",
+   "metric_id": "specific_capacity_mah_per_g",
+   "unit": "mAh/g",
+   "baseline": null,
+   "ctx": "material_level",
+   "route": "",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "装车路试/示范车队(装车档)|定点/交付主机厂(交付档)|量产线投产(量产)|中试线(中试)|实验室电芯样品(实验室)",
+   "scale_anchor": "规模看 GWh 级产线/吉瓦时产能；电芯看 Ah 容量披露"
+  },
+  {
+   "domain": "储能系统",
+   "metric_id": "caes_route_efficiency_pct",
+   "unit": "%",
+   "baseline": null,
+   "ctx": "",
+   "route": "caes_mixed",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "并网商运(装车档≡并网运行)|交付(交付)|投产(量产)|示范项目(中试)|台架/小系统(实验室)",
+   "scale_anchor": "项目规模 MW/MWh（profile 未给数值基线(null)），域内以百 MW/数百 MWh 为常见量级——草案锚：≥300MW/600MWh 记规模满分档候选"
+  },
+  {
+   "domain": "储能系统",
+   "metric_id": "lib_storage_round_trip_efficiency_pct",
+   "unit": "%",
+   "baseline": null,
+   "ctx": "",
+   "route": "lithium_ion_storage",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "并网商运(装车档≡并网运行)|交付(交付)|投产(量产)|示范项目(中试)|台架/小系统(实验室)",
+   "scale_anchor": "项目规模 MW/MWh（profile 未给数值基线(null)），域内以百 MW/数百 MWh 为常见量级——草案锚：≥300MW/600MWh 记规模满分档候选"
+  },
+  {
+   "domain": "储能系统",
+   "metric_id": "project_power_mw",
+   "unit": "MW",
+   "baseline": null,
+   "ctx": "",
+   "route": "",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "并网商运(装车档≡并网运行)|交付(交付)|投产(量产)|示范项目(中试)|台架/小系统(实验室)",
+   "scale_anchor": "项目规模 MW/MWh（profile 未给数值基线(null)），域内以百 MW/数百 MWh 为常见量级——草案锚：≥300MW/600MWh 记规模满分档候选"
+  },
+  {
+   "domain": "储能系统",
+   "metric_id": "project_capacity_mwh",
+   "unit": "MWh",
+   "baseline": null,
+   "ctx": "",
+   "route": "",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "并网商运(装车档≡并网运行)|交付(交付)|投产(量产)|示范项目(中试)|台架/小系统(实验室)",
+   "scale_anchor": "项目规模 MW/MWh（profile 未给数值基线(null)），域内以百 MW/数百 MWh 为常见量级——草案锚：≥300MW/600MWh 记规模满分档候选"
+  },
+  {
+   "domain": "钠离子电池",
+   "metric_id": "na_energy_density_wh_per_kg",
+   "unit": "Wh/kg",
+   "baseline": "165",
+   "ctx": "",
+   "route": "",
+   "tiers": "达标 165.0 / 突破 181.5 / 极大 198.0",
+   "stage_words": "装车/大规模示范(装车档)|交付(交付)|量产线(量产)|中试(中试)|实验室电芯(实验室)",
+   "scale_anchor": "GWh 级产线；电芯 Ah 容量"
+  },
+  {
+   "domain": "钠离子电池",
+   "metric_id": "na_cycle_life_count",
+   "unit": "cycle",
+   "baseline": 8000,
+   "ctx": "",
+   "route": "",
+   "tiers": "达标 8000.0 / 突破 8800.0 / 极大 9600.0",
+   "stage_words": "装车/大规模示范(装车档)|交付(交付)|量产线(量产)|中试(中试)|实验室电芯(实验室)",
+   "scale_anchor": "GWh 级产线；电芯 Ah 容量"
+  },
+  {
+   "domain": "氢基能源",
+   "metric_id": "pem_electrolysis_efficiency_pct",
+   "unit": "%",
+   "baseline": null,
+   "ctx": "",
+   "route": "pem",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "商运项目(装车档)|项目交付(交付)|产线投产(量产)|示范项目(中试)|实验室电解小试(实验室)",
+   "scale_anchor": "电解槽 GW 级产能；绿氨/绿醇项目状态锚 planning_or_construction（profile 唯一非 null 基线）"
+  },
+  {
+   "domain": "氢基能源",
+   "metric_id": "green_ammonia_methanol_project_status",
+   "unit": "",
+   "baseline": "planning_or_construction",
+   "ctx": "",
+   "route": "",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "商运项目(装车档)|项目交付(交付)|产线投产(量产)|示范项目(中试)|实验室电解小试(实验室)",
+   "scale_anchor": "电解槽 GW 级产能；绿氨/绿醇项目状态锚 planning_or_construction（profile 唯一非 null 基线）"
+  },
+  {
+   "domain": "风电",
+   "metric_id": "offshore_project_distance_km",
+   "unit": "km",
+   "baseline": "70",
+   "ctx": "representative_event_huaneng",
+   "route": "",
+   "tiers": "达标 70.0 / 突破 77.0 / 极大 84.0",
+   "stage_words": "全场并网商运(装车档)|吊装交付(交付)|基地投产(量产)|示范风场(中试)|样机台架(实验室)",
+   "scale_anchor": "离岸距离基线 70km（profile 代表性事件锚）；15MW+ 机型"
+  },
+  {
+   "domain": "风电",
+   "metric_id": "wind_investment_cny_100m",
+   "unit": "亿元",
+   "baseline": null,
+   "ctx": "",
+   "route": "",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "全场并网商运(装车档)|吊装交付(交付)|基地投产(量产)|示范风场(中试)|样机台架(实验室)",
+   "scale_anchor": "离岸距离基线 70km（profile 代表性事件锚）；15MW+ 机型"
+  },
+  {
+   "domain": "核电(含聚变)",
+   "metric_id": "fusion_plasma_parameter_coverage",
+   "unit": "",
+   "baseline": null,
+   "ctx": "",
+   "route": "",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "商运(装车档)|装料/交付(交付)|开工建设(量产≡开建)|工程验证/示范堆(中试)|物理实验(实验室)",
+   "scale_anchor": "聚变等离子体参数 profile 无数值基线(extraction_gap_registered)——按披露分；裂变看 GW 级机组"
+  },
+  {
+   "domain": "压缩空气储能",
+   "metric_id": "caes_traditional_round_trip_efficiency_pct",
+   "unit": "%",
+   "baseline": "47.5",
+   "ctx": "",
+   "route": "traditional_caes",
+   "tiers": "达标 47.5 / 突破 52.25 / 极大 57.0",
+   "stage_words": "并网商运(装车档)|系统交付(交付)|电站投产(量产)|示范电站(中试)|系统台架(实验室)",
+   "scale_anchor": "项目容量基线 4200MWh（profile announced_max 锚）；效率基线 47.5%（传统路线）"
+  },
+  {
+   "domain": "压缩空气储能",
+   "metric_id": "caes_aa_target_round_trip_efficiency_pct",
+   "unit": "%",
+   "baseline": null,
+   "ctx": "",
+   "route": "aa_caes",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "并网商运(装车档)|系统交付(交付)|电站投产(量产)|示范电站(中试)|系统台架(实验室)",
+   "scale_anchor": "项目容量基线 4200MWh（profile announced_max 锚）；效率基线 47.5%（传统路线）"
+  },
+  {
+   "domain": "压缩空气储能",
+   "metric_id": "project_capacity_mwh",
+   "unit": "MWh",
+   "baseline": "4200",
+   "ctx": "announced_max",
+   "route": "",
+   "tiers": "达标 4200.0 / 突破 4620.0 / 极大 5040.0",
+   "stage_words": "并网商运(装车档)|系统交付(交付)|电站投产(量产)|示范电站(中试)|系统台架(实验室)",
+   "scale_anchor": "项目容量基线 4200MWh（profile announced_max 锚）；效率基线 47.5%（传统路线）"
+  },
+  {
+   "domain": "钢铁脱碳",
+   "metric_id": "steel_carbon_intensity_t_per_t",
+   "unit": "tCO2/t",
+   "baseline": "1.9",
+   "ctx": "",
+   "route": "bf_bof",
+   "tiers": "达标 1.9 / 突破 1.71 / 极大 1.52",
+   "stage_words": "商业化量产供货(装车档)|工程交付(交付)|产线投产(量产)|示范工程(中试)|实验室冶炼(实验室)",
+   "scale_anchor": "碳强度基线 1.9 tCO2/t（BF-BOF 路线）；DRI-EAF 溢价基线 30%"
+  },
+  {
+   "domain": "钢铁脱碳",
+   "metric_id": "dri_eaf_cost_premium_pct",
+   "unit": "%",
+   "baseline": "30",
+   "ctx": "",
+   "route": "dri_eaf",
+   "tiers": "达标 30.0 / 突破 27.0 / 极大 24.0",
+   "stage_words": "商业化量产供货(装车档)|工程交付(交付)|产线投产(量产)|示范工程(中试)|实验室冶炼(实验室)",
+   "scale_anchor": "碳强度基线 1.9 tCO2/t（BF-BOF 路线）；DRI-EAF 溢价基线 30%"
+  },
+  {
+   "domain": "水泥脱碳",
+   "metric_id": "clinker_carbon_intensity_t_per_t",
+   "unit": "tCO2/t clinker",
+   "baseline": "0.75",
+   "ctx": "",
+   "route": "",
+   "tiers": "达标 0.75 / 突破 0.68 / 极大 0.6",
+   "stage_words": "全厂运行(装车档)|技改交付(交付)|产线投产(量产)|示范技改(中试)|实验室胶凝材料(实验室)",
+   "scale_anchor": "熟料碳强度基线 0.75 tCO2/t；替代燃料率基线 40%（EU 领先口径）"
+  },
+  {
+   "domain": "水泥脱碳",
+   "metric_id": "alternative_fuel_rate_pct",
+   "unit": "%",
+   "baseline": "40",
+   "ctx": "",
+   "route": "",
+   "tiers": "达标 40.0 / 突破 44.0 / 极大 48.0",
+   "stage_words": "全厂运行(装车档)|技改交付(交付)|产线投产(量产)|示范技改(中试)|实验室胶凝材料(实验室)",
+   "scale_anchor": "熟料碳强度基线 0.75 tCO2/t；替代燃料率基线 40%（EU 领先口径）"
+  },
+  {
+   "domain": "火电掺氨掺氢",
+   "metric_id": "cofiring_h2_ratio_pct",
+   "unit": "%",
+   "baseline": "45",
+   "ctx": "",
+   "route": "",
+   "tiers": "达标 45.0 / 突破 49.5 / 极大 54.0",
+   "stage_words": "长期商运掺烧(装车档)|改造交付(交付)|工程投运(量产)|示范掺烧(中试)|燃烧试验台(实验室)",
+   "scale_anchor": "掺氢比例基线 45%（660MW 机组，profile 标注单点警示值非行业均值）；煤电碳强度基线 0.9 kgCO2/kWh"
+  },
+  {
+   "domain": "火电掺氨掺氢",
+   "metric_id": "coal_power_carbon_intensity_kg_per_kwh",
+   "unit": "kgCO2/kWh",
+   "baseline": "0.9",
+   "ctx": "",
+   "route": "pulverized_coal",
+   "tiers": "达标 0.9 / 突破 0.81 / 极大 0.72",
+   "stage_words": "长期商运掺烧(装车档)|改造交付(交付)|工程投运(量产)|示范掺烧(中试)|燃烧试验台(实验室)",
+   "scale_anchor": "掺氢比例基线 45%（660MW 机组，profile 标注单点警示值非行业均值）；煤电碳强度基线 0.9 kgCO2/kWh"
+  },
+  {
+   "domain": "CCUS",
+   "metric_id": "dac_cost_usd_per_tco2",
+   "unit": "USD/tCO2",
+   "baseline": null,
+   "ctx": "",
+   "route": "dac",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "商业设施运行(装车档)|装置交付(交付)|设施投产(量产)|示范装置(中试)|实验室材料/催化剂(实验室)",
+   "scale_anchor": "DAC 成本区间 100-1000 USD/tCO2（profile 判定区间过宽不给点基线）；捕集量 Mt/y 无基线(null)——按披露分"
+  },
+  {
+   "domain": "CCUS",
+   "metric_id": "capture_scale_mt_per_yr",
+   "unit": "Mt/y",
+   "baseline": null,
+   "ctx": "global_annual",
+   "route": "",
+   "tiers": "无基线(null) → 按披露完整性 0-10，不做达标判定",
+   "stage_words": "商业设施运行(装车档)|装置交付(交付)|设施投产(量产)|示范装置(中试)|实验室材料/催化剂(实验室)",
+   "scale_anchor": "DAC 成本区间 100-1000 USD/tCO2（profile 判定区间过宽不给点基线）；捕集量 Mt/y 无基线(null)——按披露分"
+  }
+ ],
+ "examples": [
+  {
+   "ex_id": 1,
+   "title": "产品发布 × 固态电池（用户示例场景）",
+   "news": "某二线电池厂发布硫化物固态电解质电芯：能量密度 500 Wh/kg（cell 样品，硫化物体系），容量 20 Ah，中试线小批量交付客户 A 验证",
+   "steps": [
+    "领域契合度：标题核心词『固态电池』『电芯』≥2 → 40；正文核心词重复 +18；指标 500Wh/kg +15；主体未在示例清单 0 → D=73 → 主域=锂电池",
+    "类型契合度：载体新闻 30 + 标题族词『发布…新品』40 + 阶段动词『交付』15 + 数值载荷 15 → T=100 → 主类型=产业新闻·产品发布 → 选卡 card_product",
+    "TRL 判定：事件词『中试线』→ TRL6（权重 0.95）",
+    "阶段阶梯：交付/客户验证 26",
+    "性能×域阈值：500 vs 基线 450（ssb_energy_density_wh_per_kg, cell_sample, 硫化物）= +11.1% ≥10% → 突破档 25",
+    "规格/容量披露：容量 20Ah + 体系/口径 → 完整 15",
+    "主体层级：二线 10；指标完整性：cell 样品口径齐全 10",
+    "EventScore = 26+25+15+10+10 = 86；加权 = 86 × 0.95 = 81.7 ≈ 82"
+   ],
+   "final": 82,
+   "note": "同一新闻若为『仅宣布、无参数』→ Gate 封顶 40×0.95=38"
+  },
+  {
+   "ex_id": 2,
+   "title": "技术知识 × 聚变新机理（TRL1-3 高权重演示）",
+   "news": "某团队在 Nature 发表新型磁约束稳定性机理，无任何工程性能数值",
+   "steps": [
+    "领域契合度：标题『核聚变』核心 40 + 正文重复 12 + 主体（院所）15 + 无域规范指标 7 → D=74 → 主域=核电(含聚变)",
+    "类型契合度：载体 RSS 文献 30 + 族默认 TECH 25 + 数值载荷 0 → T=55 → 主类型=期刊文献（载体强制，与现行 S4 一致）→ card_tech",
+    "TRL 判定：『机理』→ TRL2（权重 1.00）",
+    "瓶颈相关性：fusion_commercialization_horizon=Core → 30",
+    "指标表现：无数值，TRL1-3 → NA=12（不因缺性能降档）",
+    "新颖性：新机理 25；证据质量：Nature 20",
+    "EventScore = 30+12+25+20 = 87；加权 = 87 × 1.00 = 87"
+   ],
+   "final": 87,
+   "note": "体现『TRL1-3 可忽略性能参数缺陷，理念新即可高分』"
+  },
+  {
+   "ex_id": 3,
+   "title": "生产运行 × 液态锂电（TRL9 常规 vs 突变对照）",
+   "news": "对照 A：某头部厂液态产线满产通报（无跃迁）；对照 B：同产线突发停产/良率骤降 30%",
+   "steps": [
+    "两例主域=锂电池(D≈85)，主类型=产业新闻·生产运行 → card_production；事件词『满产/停产』→ TRL9（权重 0.85）",
+    "A 常规满产：跃迁=常规运行 10 + 规模 GWh 级 25 + 良率未披露 0 + 出货单点 7 + 头部 10 = 52 → 52×0.85=44.2≈44；且『常规运行通报』触发卡级封顶 30×0.85≈26 → 取更低：26",
+    "B 负向突变：跃迁=停产/骤降 35 + 规模 25 + 良率披露 15 + 运行证据 7 + 头部 10 = 92 → 92×0.85=78.2≈78"
+   ],
+   "final": "A=26 / B=78",
+   "note": "体现『TRL8-9 只认运营突变，常规运行低分；负向事件同为高情报价值』（框架 §13）"
+  },
+  {
+   "ex_id": 4,
+   "title": "工程验证 × 钙钛矿组件（TRL4-7 性能+规模并重）",
+   "news": "某厂第三方认证大面积全钙钛矿叠层组件效率 26.5%（基线口径 certified_module 26.2%），首条百兆瓦中试线跑通",
+   "steps": [
+    "主域=光伏(D≈88)；主类型=产业新闻·工程验证 → card_validation；『中试线』→ TRL6(0.95)",
+    "验证尺度：示范级/全尺寸组件 30",
+    "结果量化：26.5 vs 26.2 = +1.1% <10% → 未达突破档，『达到基线』14",
+    "条件真实性：第三方认证 20；瓶颈匹配：大面积制备=Core 15；持续性：未披露 0",
+    "EventScore = 30+14+20+15+0 = 79；加权 = 79 × 0.95 = 75.1 ≈ 75"
+   ],
+   "final": 75,
+   "note": "TRL4-7 段 +1.1% 的效率提升不足以进突破档——性能幅度门槛生效"
+  },
+  {
+   "ex_id": 5,
+   "title": "投融资 × 固态电池大额（C 组不乘 TRL + ≥90 门控）",
+   "news": "某固态电池企业完成 10 亿美元 D 轮，头部车企领投，资金投中试到量产产能爬坡",
+   "steps": [
+    "主域=锂电池(D≈80)；主类型=产业新闻·投融资 → card_financing（C 组，不乘 TRL 权重）",
+    "金额×域基线：10 亿美元 ≥10× 域典型大额轮（草案锚：固态典型轮 1 亿美元级）→ 35",
+    "轮次匹配：D 轮与硫化物固态 TRL4-6→量产推进匹配 25",
+    "资本主体：头部车企战略领投 20；用途匹配：中试→量产产能 20",
+    "EventScore = 100 → 触发『≥90 需三证齐全』门控：缺第三方估值/工商变更等佐证 → 封顶 88"
+   ],
+   "final": 88,
+   "note": "体现高分段稀缺性与证据门控（框架 §8.2）"
+  },
+  {
+   "ex_id": 6,
+   "title": "产品发布 × 晶硅组件（TRL9 常规发布低分演示）",
+   "news": "一线组件厂发布量产 N 型组件，效率 23.5%（与基线 26.2% 的 all_perovskite_tandem 认证组件口径不同路线，不可比）",
+   "steps": [
+    "主域=光伏；card_product；『量产』→ TRL9(0.85)",
+    "阶段：量产 22",
+    "性能×域阈值：路线不可比（晶硅 vs 钙钛矿叠层基线）→ 按披露完整性：效率+功率两项 → 10",
+    "规格披露：完整 15；主体：一线 15；口径：认证口径部分 5",
+    "EventScore = 22+10+15+15+5 = 67；加权 = 67 × 0.85 = 56.95 ≈ 57"
+   ],
+   "final": 57,
+   "note": "成熟路线常规发布被 TRL9 权重与路线口径双重压低——符合『TRL8-9 基础赋分最低』"
+  }
+ ],
+ "record_synthesis": {
+  "formula": "RecordScore = max(各 EventWeightedScore) + Σ 异质强信号递减增益",
+  "rules": [
+   "同一新闻拆多个 Event Unit（如融资为主 + 正文披露产线投产）：各 Event 独立按其类型卡+域参数评分",
+   "主导 Event 定基准档；第二强异质 Event +5，第三强 +3（同族只取最高，防同事件重复计分）",
+   "≥90 分段保持稀缺：需卡内 Gate 全部通过（证据完整 + 突破/突变幅度达标）",
+   "duplicate/corroboration 不重复计分（沿用 00_score_contract record_delta_rules）；fact_enrichment 按新增事实触发新 Signal",
+   "信息可信度不进入 RecordScore（独立坐标轴：高价值+低可信 → 优先核验，框架 §4）"
+  ]
+ },
+ "honesty": [
+  "本版新增（TRL 权重/契合度/族卡分档/域规则卡）全部为规则草案 v0.9 数值，待按评分框架 §16 用历史样本回测校准后生效；现行生产引擎仍是 Round 115 triage + W30 v1",
+  "所有指标基线/工程阈值均一字未改引自 domain-profiles.yaml（Round 102/112），三档系数 1.10/1.20（或 0.90/0.80）为草案值",
+  "基线为 null 的指标（如 storage 全部、DAC 成本、聚变参数）不做达标判定，性能维度按披露完整性 0-10 给分——不编造阈值",
+  "TRL 为本版新增维度：仓库此前无 TRL 实现（框架 §6.1 仅作辅助参考）；域/路线默认 TRL 带由 stage_references 推导，为草案值",
+  "20 个评价族中 19 个映射到 12 张卡（ownership 并入投融资卡、actor_commitment 并入项目卡）；resource_asset_state（储量/矿权类）不设卡——现状层该族 GOLD_COVERAGE_ZERO 未定价，此类新闻按披露完整性记分并转人工，不编造档位；classification-target-policy.yaml 的 39 叶→20 族分派政策不变",
+  "产业资本制度类（C 组）不乘 TRL 权重：其『高运营成熟度只认突变』的取向已内嵌在市场/供应链/生产运行卡的分档里，避免双重惩罚",
+  "算例中的新闻为演示构造，评分复算过程全部给出，可人工逐步核对"
+ ],
+ "as_is": {
+  "w30_dimensions": {
+   "impact_score": {
+    "name": "影响力",
+    "mapping": "{0: 10.0, 1: 35.0, 2: 65.0, 3: 90.0}",
+    "basis": "importance_level 0-3 → 分值映射（确定性，脚本设定）"
+   },
+   "urgency_score": {
+    "name": "紧迫度",
+    "mapping": "{0: 10.0, 1: 25.0, 2: 50.0, 3: 85.0}",
+    "basis": "importance_level 0-3 → 分值映射（确定性，脚本设定）"
+   },
+   "relevance_score": {
+    "name": "相关度",
+    "mapping": "0-100 整数",
+    "basis": "LLM 按 system prompt 判定（对科技/能源/材料/AI/产业政策情报的相关程度）"
+   },
+   "confidence_score": {
+    "name": "置信度",
+    "mapping": "0-100 整数",
+    "basis": "LLM 自评（evidence_score 同值落库）"
+   },
+   "novelty_score": {
+    "name": "新颖度",
+    "mapping": "50.0",
+    "basis": "固定值（v1 占位，未启用语义判定）"
+   },
+   "promotion_score": {
+    "name": "推荐度",
+    "mapping": "10.0",
+    "basis": "固定值（v1 占位）"
+   },
+   "data_density_score": {
+    "name": "数据密度",
+    "mapping": "len(正文)/30, cap 100",
+    "basis": "正文长度除以 30，上限 100（确定性公式）"
+   },
+   "source_credibility_score": {
+    "name": "来源可信度",
+    "mapping": "60.0",
+    "basis": "固定值（v1 占位）"
+   }
+  },
+  "review_gates": [
+   [
+    "relevance_score < 55",
+    "→ manual_review（人工复审）"
+   ],
+   [
+    "confidence_score < 65",
+    "→ manual_review（人工复审）"
+   ],
+   [
+    "importance_level >= 2",
+    "→ priority_review（优先审）"
+   ],
+   [
+    "其余（rel≥55 且 conf≥65 且 imp<2）",
+    "→ accept（直接入库）"
+   ]
+  ],
+  "domain_patterns": {
+   "pv_photovoltaic": "光伏|钙钛矿|perovskite|太阳能电池|TOPCon|HJT|叠层电池|photovoltaic",
+   "li_battery": "锂电池|锂离子|固态电池|锂电|电解液|正极|负极|隔膜|lithium|battery|电芯",
+   "storage_system": "储能|长时储能|液流电池|压缩空气储能|飞轮|储热|thermal storage|CAES|grid storage",
+   "na_battery": "钠电|钠离子|sodium-ion",
+   "hydrogen_based_energy": "氢能|制氢|绿氢|电解水|fuel cell|燃料电池|hydrogen|液氢",
+   "wind_power": "风电|风机|海上风电|wind (turbine|power|farm)|offshore wind",
+   "nuclear_power": "核电|核聚变|fusion|nuclear|反应堆|小堆|SMR",
+   "caes": "压缩空气|advanced adiabatic",
+   "steel_decarbonization": "钢铁|氢冶金|高炉|steelmaking|green steel|电炉",
+   "cement_decarbonization": "水泥|混凝土|cement|concrete.*decarb|clinker",
+   "thermal_power_cofiring": "掺烧|燃煤|火电|co-firing|biomass.*coal|氨掺",
+   "ccus": "碳捕集|CCUS|CO2 ?capture|carbon capture|DAC|直接空气捕集|碳利用|CO2RR|电催化还原"
+  },
+  "family_patterns": {
+   "patent_like_right_state": "专利|知识产权|infringement|侵权",
+   "copyright_right_state": "版权|著作权",
+   "financing_capital_state": "融资|完成.{0,6}轮|IPO|上市|募资|投资.{0,12}(亿|万美?元)|获得.{0,12}投资|增资|领投",
+   "ownership_control_state": "收购|并购|控股|股权变更|入股",
+   "actor_commitment_plan_state": "计划.{0,8}投资|宣布.{0,8}计划|规划.{0,8}产能|签约|战略合作",
+   "market_industry_state": "市场份额|暴涨|暴跌|涨价|降价|出货量|销量|关税|出口管制",
+   "procurement_commitment_state": "中标|订单|采购|框架协议|供货合同",
+   "production_operation_state": "投产|量产|满产|停产|产能爬坡|下线",
+   "engineering_validation_state": "通过验证|测试成功|认证|型式试验|实证|示范项目|pilot|中试",
+   "project_facility_state": "开工奠基|封顶|建设项目|工厂建设|项目建设|备案|监理",
+   "equipment_asset_state": "首台套|设备交付|安装调试",
+   "product_model_state": "发布.{0,10}型号|推出.{0,10}新品|量产版|正式发布",
+   "supply_network_state": "供应链|断供|独家供应|供应商|长协",
+   "institutional_access_state": "补贴|新规|准入|配额|标准发布|管理办法|条例",
+   "resource_asset_state": "储量|探明|矿权|资源量|采矿权",
+   "evidence_structure_change": "基准测试|benchmark|评价体系|白皮书",
+   "evidence_asset_state": "开源|数据集发布",
+   "organization_capability_state": "成立.{0,6}(部门|中心|研究院)|实验室成立",
+   "enterprise_operating_state": "盈利|亏损|营收|财报|裁员|破产|重组"
+  },
+  "tech_gates": [
+   {
+    "band": "no_value",
+    "condition": "速递|日报|周报|月报|盘点|汇总|观察|观点|评论|杂谈|早报|晚报|快讯|速报|合集|目录|回顾|历史上的今天|访谈|对话|专访|直播预告|招聘|会议预告|议程 标题命中 且 无强量化",
+    "reason": "DIGEST_OR_OPINION",
+    "detail": "标题为摘要型/观点型载体，且无 %|效率|容量|电压|能量密度|纪录|record|创历史|最大 强量化信号"
+   },
+   {
+    "band": "high",
+    "condition": "强量化命中 且 顶刊/认证/纪录/首X 载体命中",
+    "reason": "QUANTIFIED + TOP_CARRIER_OR_RECORD",
+    "detail": "Nature/Science/JACS/Joule/Cell/certified/纪录/breakthrough/里程碑/(全球|世界|全国…)首[个家条片座型]"
+   },
+   {
+    "band": "medium",
+    "condition": "强量化命中 或 (普通量化 + 顶刊载体)",
+    "reason": "QUANTIFIED_LAB_RESULT",
+    "detail": "强量化=%|效率|容量|电压|能量密度|纪录(?!片)|record|创历史|最大；普通量化=数字+单位（GW/MW/kW/Wh/亿/万/吨/TWh/GWh/MWh/mV/mA/V/cycle/次/年）"
+   },
+   {
+    "band": "low",
+    "condition": "无任何量化 且 非摘要型",
+    "reason": "SINGLE_CARRIER_CLAIM_NO_QUANT",
+    "detail": "单载体声明、无可量化增量"
+   },
+   {
+    "band": "medium(digest)",
+    "condition": "周到情报|情报|速递|日报 系列命中",
+    "reason": "DIGEST_CONTAINS_EVENTS + NEEDS_SPLIT",
+    "detail": "摘要型但含事件，评 medium 并标记需拆分"
+   }
+  ],
+  "dedup": {
+   "group key": "sha256(title[:48]) — syndication group identity",
+   "rule": "同组首条计 dup_count=0 保留，其余计 dup_count+=1 折叠（保留一条代表）",
+   "corroboration": "同事件多源不重复计分：duplicate → no_automatic_signal；pure_corroboration → evidence_update_only（00_score_contract.md record_delta_rules）"
+  },
+  "pipeline": [
+   {
+    "step": "S1 接收与去重",
+    "logic": "三源接入（文献周报/新闻日抓/微信日抓）→ sha256(title[:48]) syndication 去重，同组保留首条",
+    "source": "run_triage.load() + _synd()"
+   },
+   {
+    "step": "S2 域门过滤",
+    "logic": "12 域正则命中计数，取最大命中域；零命中 → NO_TARGET/OUT_OF_DOMAIN_SCOPE；邻接词（SAF/生物燃料/氨）按 grill 裁决归 CCUS 或储能",
+    "source": "run_triage.classify() DOMAINS/ADJACENT"
+   },
+   {
+    "step": "S3 载体判定",
+    "logic": "carrier ∈ {RESEARCH_ARTICLE, NEWS}：文献 RSS → RESEARCH_ARTICLE，新闻/微信 → NEWS",
+    "source": "run_triage.load()"
+   },
+   {
+    "step": "S3b 新闻类型(leaf)归并",
+    "logic": "标题关键词 → 39 leaf 之一（政策/标准/融资/订单/…）；NEWS 默认 TECH，RESEARCH_ARTICLE 强制 TECH（除非族命中≥2）",
+    "source": "run_triage.classify() + taxonomy information.yaml"
+   },
+   {
+    "step": "S4 族分类",
+    "logic": "20 族关键词正则命中计数取最大；RESEARCH_ARTICLE 载体默认 technical_knowledge_change",
+    "source": "run_triage.classify() FAMILIES"
+   },
+   {
+    "step": "S5 价值评分",
+    "logic": "TECH 族走五档门（见评分表）；15 provisional 族按锚点模式评档（ANCHOR_PROVISIONAL）；MKT/INST/COPY/RES 零锚 → UNSCORED_NO_ANCHOR",
+    "source": "run_triage.score() + signal-coverage.yaml"
+   },
+   {
+    "step": "S6 复审与落库",
+    "logic": "W30 引擎 rel<55/conf<65 → manual_review；imp≥2 → priority_review；其余 accept。v3.0 档位 + 理由码落 triage.jsonl",
+    "source": "process_w30.save_batch() + run_triage.main()"
+   }
+  ],
+  "leaf_info_type": {
+   "research_paper": "期刊文献",
+   "review_paper": "期刊文献",
+   "modeling_analysis_paper": "期刊文献",
+   "technology_assessment_roadmap": "期刊文献",
+   "industry_research_report": "期刊文献",
+   "market_economic_research_report": "期刊文献",
+   "policy_strategy_research_report": "期刊文献",
+   "whitepaper_special_study": "期刊文献",
+   "dataset_database_statistics_release": "期刊文献",
+   "patent": "期刊文献",
+   "software_copyright": "期刊文献",
+   "other_technical_ip": "期刊文献",
+   "research_project_plan": "期刊文献",
+   "third_party_test_benchmark": "产业新闻",
+   "engineering_validation": "产业新闻",
+   "project_facility_development": "产业新闻",
+   "product_equipment": "产业新闻",
+   "production_operation_performance": "产业新闻",
+   "corporate_operation": "产业新闻",
+   "corporate_cooperation": "产业新闻",
+   "financing": "产业新闻",
+   "merger_asset_asset_transaction": "产业新闻",
+   "merger_asset_transaction": "产业新闻",
+   "resource_system": "产业新闻",
+   "market_trade_change": "产业新闻",
+   "supply_network": "产业新闻",
+   "procurement_order_tender": "产业新闻",
+   "policy_strategy": "产业新闻",
+   "law_regulation": "产业新闻",
+   "standard_specification": "产业新闻",
+   "certification_license": "产业新闻",
+   "core_talent_movement": "产业新闻",
+   "team_change": "产业新闻",
+   "hiring_capability_expansion": "产业新闻",
+   "lab_rd_center_division_build": "产业新闻",
+   "organization_restructure_integration": "产业新闻",
+   "opinion_interview_speech": "微信公众号",
+   "in_depth_analysis_commentary": "微信公众号",
+   "conference_event": "微信公众号",
+   "unknown_insufficient": "手工整理"
+  },
+  "master_volume": {
+   "rows": 35098,
+   "by_info_type": {
+    "期刊文献": 31718,
+    "产业新闻": 2124,
+    "微信公众号": 983,
+    "手工整理": 273
+   },
+   "metric_carry": {
+    "期刊文献": 488,
+    "产业新闻": 896,
+    "微信公众号": 463,
+    "手工整理": 210
+   },
+   "by_it_rows": {
+    "期刊文献": 31718,
+    "产业新闻": 2124,
+    "微信公众号": 983,
+    "手工整理": 273
+   },
+   "domain_hits": {
+    "期刊文献|storage_system": 3233,
+    "期刊文献|pv_photovoltaic": 2252,
+    "期刊文献|li_battery": 559,
+    "期刊文献|ccus": 189,
+    "期刊文献|steel_decarbonization": 1290,
+    "期刊文献|nuclear_power": 332,
+    "期刊文献|hydrogen_based_energy": 569,
+    "期刊文献|cement_decarbonization": 164,
+    "产业新闻|storage_system": 508,
+    "产业新闻|li_battery": 45,
+    "产业新闻|steel_decarbonization": 70,
+    "产业新闻|nuclear_power": 24,
+    "产业新闻|pv_photovoltaic": 464,
+    "产业新闻|cement_decarbonization": 9,
+    "产业新闻|hydrogen_based_energy": 26,
+    "产业新闻|ccus": 1,
+    "微信公众号|pv_photovoltaic": 166,
+    "微信公众号|hydrogen_based_energy": 48,
+    "微信公众号|nuclear_power": 32,
+    "微信公众号|li_battery": 75,
+    "微信公众号|storage_system": 132,
+    "微信公众号|steel_decarbonization": 8,
+    "微信公众号|ccus": 9,
+    "微信公众号|cement_decarbonization": 3,
+    "手工整理|storage_system": 30,
+    "手工整理|pv_photovoltaic": 46,
+    "手工整理|li_battery": 87
+   }
+  },
+  "w30_dist": {
+   "other": {
+    "n": 47,
+    "rel": [
+     5.0,
+     90.0
+    ],
+    "imp": [
+     10.0,
+     90.0
+    ],
+    "urg": [
+     10.0,
+     85.0
+    ],
+    "rel_mid": 58.1,
+    "imp_mid": 51.9,
+    "actions": {
+     "priority_review": 21,
+     "accept": 9,
+     "manual_review": 17
+    }
+   },
+   "solar": {
+    "n": 25,
+    "rel": [
+     40.0,
+     95.0
+    ],
+    "imp": [
+     33.0,
+     90.0
+    ],
+    "urg": [
+     25.0,
+     85.0
+    ],
+    "rel_mid": 82.8,
+    "imp_mid": 59.7,
+    "actions": {
+     "manual_review": 2,
+     "accept": 5,
+     "priority_review": 18
+    }
+   },
+   "policy_industry": {
+    "n": 23,
+    "rel": [
+     35.0,
+     95.0
+    ],
+    "imp": [
+     35.0,
+     90.0
+    ],
+    "urg": [
+     25.0,
+     85.0
+    ],
+    "rel_mid": 70.0,
+    "imp_mid": 57.6,
+    "actions": {
+     "accept": 5,
+     "manual_review": 4,
+     "priority_review": 14
+    }
+   },
+   "materials": {
+    "n": 17,
+    "rel": [
+     30.0,
+     90.0
+    ],
+    "imp": [
+     35.0,
+     90.0
+    ],
+    "urg": [
+     25.0,
+     85.0
+    ],
+    "rel_mid": 74.0,
+    "imp_mid": 65.6,
+    "actions": {
+     "priority_review": 14,
+     "manual_review": 2,
+     "accept": 1
+    }
+   },
+   "ai": {
+    "n": 15,
+    "rel": [
+     70.0,
+     95.0
+    ],
+    "imp": [
+     35.0,
+     90.0
+    ],
+    "urg": [
+     25.0,
+     85.0
+    ],
+    "rel_mid": 86.3,
+    "imp_mid": 73.0,
+    "actions": {
+     "priority_review": 14,
+     "accept": 1
+    }
+   },
+   "storage": {
+    "n": 11,
+    "rel": [
+     85.0,
+     95.0
+    ],
+    "imp": [
+     65.0,
+     90.0
+    ],
+    "urg": [
+     50.0,
+     85.0
+    ],
+    "rel_mid": 90.0,
+    "imp_mid": 67.3,
+    "actions": {
+     "priority_review": 11
+    }
+   },
+   "battery": {
+    "n": 10,
+    "rel": [
+     65.0,
+     95.0
+    ],
+    "imp": [
+     35.0,
+     90.0
+    ],
+    "urg": [
+     25.0,
+     85.0
+    ],
+    "rel_mid": 86.0,
+    "imp_mid": 66.3,
+    "actions": {
+     "manual_review": 1,
+     "priority_review": 7,
+     "accept": 2
+    }
+   },
+   "wind": {
+    "n": 3,
+    "rel": [
+     75.0,
+     85.0
+    ],
+    "imp": [
+     35.0,
+     65.0
+    ],
+    "urg": [
+     25.0,
+     50.0
+    ],
+    "rel_mid": 81.7,
+    "imp_mid": 55.0,
+    "actions": {
+     "accept": 1,
+     "priority_review": 2
+    }
+   },
+   "hydrogen": {
+    "n": 2,
+    "rel": [
+     95.0,
+     95.0
+    ],
+    "imp": [
+     90.0,
+     90.0
+    ],
+    "urg": [
+     85.0,
+     85.0
+    ],
+    "rel_mid": 95.0,
+    "imp_mid": 90.0,
+    "actions": {
+     "priority_review": 2
+    }
+   }
+  },
+  "dom_metrics": {
+   "pv_photovoltaic": [
+    {
+     "metric_id": "pce_certified_module_efficiency_pct",
+     "unit": "%",
+     "baseline": "26.2",
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "certified_module",
+     "route": "all_perovskite_tandem"
+    },
+    {
+     "metric_id": "pce_tandem_lab_efficiency_pct",
+     "unit": "%",
+     "baseline": "34.07",
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "certified_lab_small_area",
+     "route": "perovskite_silicon_tandem"
+    }
+   ],
+   "li_battery": [
+    {
+     "metric_id": "energy_density_wh_per_kg",
+     "unit": "Wh/kg",
+     "baseline": "300",
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "production_pack",
+     "route": ""
+    },
+    {
+     "metric_id": "cycle_life_count",
+     "unit": "cycle",
+     "baseline": null,
+     "eng": 1000,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "production",
+     "route": ""
+    },
+    {
+     "metric_id": "ssb_energy_density_wh_per_kg",
+     "unit": "Wh/kg",
+     "baseline": "450",
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "cell_sample",
+     "route": ""
+    }
+   ],
+   "storage_system": [],
+   "na_battery": [
+    {
+     "metric_id": "na_energy_density_wh_per_kg",
+     "unit": "Wh/kg",
+     "baseline": "165",
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": ""
+    },
+    {
+     "metric_id": "na_cycle_life_count",
+     "unit": "cycle",
+     "baseline": 8000,
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": ""
+    }
+   ],
+   "hydrogen_based_energy": [
+    {
+     "metric_id": "green_ammonia_methanol_project_status",
+     "unit": null,
+     "baseline": "planning_or_construction",
+     "eng": null,
+     "app": null,
+     "dir": "EQUALS_REQUIRED",
+     "ctx": "",
+     "route": ""
+    }
+   ],
+   "wind_power": [
+    {
+     "metric_id": "offshore_project_distance_km",
+     "unit": "km",
+     "baseline": "70",
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "representative_event_huaneng",
+     "route": ""
+    }
+   ],
+   "nuclear_power": [],
+   "caes": [
+    {
+     "metric_id": "caes_traditional_round_trip_efficiency_pct",
+     "unit": "%",
+     "baseline": "47.5",
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": "traditional_caes"
+    },
+    {
+     "metric_id": "project_capacity_mwh",
+     "unit": "MWh",
+     "baseline": "4200",
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "announced_max",
+     "route": ""
+    }
+   ],
+   "steel_decarbonization": [
+    {
+     "metric_id": "steel_carbon_intensity_t_per_t",
+     "unit": "tCO2/t",
+     "baseline": "1.9",
+     "eng": null,
+     "app": null,
+     "dir": "LOWER_IS_BETTER",
+     "ctx": "",
+     "route": "bf_bof"
+    },
+    {
+     "metric_id": "dri_eaf_cost_premium_pct",
+     "unit": "%",
+     "baseline": "30",
+     "eng": null,
+     "app": null,
+     "dir": "LOWER_IS_BETTER",
+     "ctx": "",
+     "route": "dri_eaf"
+    }
+   ],
+   "cement_decarbonization": [
+    {
+     "metric_id": "clinker_carbon_intensity_t_per_t",
+     "unit": "tCO2/t clinker",
+     "baseline": "0.75",
+     "eng": null,
+     "app": null,
+     "dir": "LOWER_IS_BETTER",
+     "ctx": "",
+     "route": ""
+    },
+    {
+     "metric_id": "alternative_fuel_rate_pct",
+     "unit": "%",
+     "baseline": "40",
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": ""
+    }
+   ],
+   "thermal_power_cofiring": [
+    {
+     "metric_id": "cofiring_h2_ratio_pct",
+     "unit": "%",
+     "baseline": "45",
+     "eng": null,
+     "app": null,
+     "dir": "HIGHER_IS_BETTER",
+     "ctx": "",
+     "route": ""
+    },
+    {
+     "metric_id": "coal_power_carbon_intensity_kg_per_kwh",
+     "unit": "kgCO2/kWh",
+     "baseline": "0.9",
+     "eng": null,
+     "app": null,
+     "dir": "LOWER_IS_BETTER",
+     "ctx": "",
+     "route": "pulverized_coal"
+    }
+   ],
+   "ccus": []
+  },
+  "families": [
+   {
+    "family_id": "technical_knowledge_change",
+    "name": "技术知识变化",
+    "value_mapping": "complete",
+    "bands": [
+     "critical",
+     "high",
+     "medium",
+     "low",
+     "no_substantive_value"
+    ],
+    "eligible": true,
+    "no_go": []
+   },
+   {
+    "family_id": "patent_like_right_state",
+    "name": "专利类权利状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "TERMINAL_SIGNAL_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "copyright_right_state",
+    "name": "软件著作权状态",
+    "value_mapping": "unsupported",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "TERMINAL_SIGNAL_NOT_PRICED",
+     "GOLD_COVERAGE_ZERO"
+    ]
+   },
+   {
+    "family_id": "institutional_access_state",
+    "name": "制度与准入状态",
+    "value_mapping": "unsupported",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "LEGAL_EFFECT_NOT_PRICED",
+     "GOLD_COVERAGE_ZERO"
+    ]
+   },
+   {
+    "family_id": "procurement_commitment_state",
+    "name": "采购承诺状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "COMMITMENT_STATE_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "evidence_structure_change",
+    "name": "证据结构变化",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "STRUCTURE_SIGNAL_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "evidence_asset_state",
+    "name": "证据资产状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "ASSET_SIGNAL_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "engineering_validation_state",
+    "name": "工程验证状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "VALIDATION_RESULT_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "production_operation_state",
+    "name": "生产运行状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "OPERATION_TRANSITION_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "project_facility_state",
+    "name": "项目设施状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "PROJECT_TRANSITION_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "resource_asset_state",
+    "name": "资源资产状态",
+    "value_mapping": "unsupported",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "RESOURCE_DELTA_NOT_PRICED",
+     "GOLD_COVERAGE_ZERO"
+    ]
+   },
+   {
+    "family_id": "product_model_state",
+    "name": "产品型号状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "PRODUCT_TRANSITION_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "equipment_asset_state",
+    "name": "装备资产状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "ASSET_TRANSITION_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "supply_network_state",
+    "name": "供应网络状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "NETWORK_CHANGE_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "market_industry_state",
+    "name": "市场与产业状态",
+    "value_mapping": "unsupported",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "MARKET_MATERIALITY_REQUIRES_DOMAIN",
+     "GOLD_COVERAGE_ZERO"
+    ]
+   },
+   {
+    "family_id": "enterprise_operating_state",
+    "name": "企业经营状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "OPERATING_DELTA_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "organization_capability_state",
+    "name": "组织能力状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "CAPABILITY_DELTA_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "financing_capital_state",
+    "name": "融资资本状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "CAPITAL_MATERIALITY_REQUIRES_DOMAIN",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "ownership_control_state",
+    "name": "所有权与控制状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "CONTROL_TRANSITION_NOT_PRICED",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   },
+   {
+    "family_id": "actor_commitment_plan_state",
+    "name": "主体承诺与计划状态",
+    "value_mapping": "partial",
+    "bands": [],
+    "eligible": false,
+    "no_go": [
+     "PLAN_STRENGTH_MAPPING_NOT_EXECUTABLE",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3",
+     "ANCHOR_PROVISIONAL_N_LEQ_3"
+    ]
+   }
+  ]
+ }
+}
