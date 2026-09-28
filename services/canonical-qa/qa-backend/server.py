@@ -553,8 +553,19 @@ def dedup_search_results(results: list) -> tuple:
         meta = result.get("meta") or {}
         rid = str(meta.get("record_id", "") or "")
         if meta.get("kind") == "upload":
-            # uploads are chunk-level; dedupe by document so one doc keeps
-            # only its best chunk
+            # uploads are chunk-level. Chunk 级带 u/t 时（pipeline 同步与
+            # feed 导入的记录型 chunk）与基础索引记录用同一组身份键
+            # （url → 标题），避免"同一篇文章 = 基础索引一份 + 增量一份"
+            # 的双引用；无 u/t 的真实上传文件退回 document 级（一个文档
+            # 只保留最优 chunk），与原契约一致。
+            url = str(meta.get("u", "") or "").strip()
+            title = " ".join(str(meta.get("t", "") or "").split()).strip()
+            if url:
+                return f"url:{url}", meta
+            if title:
+                date = str(meta.get("d", "") or "").strip()
+                source = str(meta.get("a", meta.get("s", "")) or "").strip()
+                return f"art:{title[:80]}|{date}|{source[:40]}", meta
             return f"doc:{meta.get('document_id', rid or meta.get('idx', ''))}", meta
         orig_idx = meta.get("idx", -1)
         record = records[orig_idx] if isinstance(orig_idx, int) and 0 <= orig_idx < len(records) else {}
@@ -733,6 +744,15 @@ class IndexChunk(BaseModel):
     chunk_id: str = ""
     text: str
     metadata: dict = Field(default_factory=dict)
+    # chunk 级溯源字段（pipeline 同步与 feed 导入的记录型 chunk 使用）：
+    # 此前未声明被 Pydantic 静默丢弃，引用卡只能显示合成文档标题
+    title: str = ""
+    record_date: str = ""
+    source_name: str = ""
+    url: str = ""
+    summary: str = ""
+    primary_category: str = ""
+    tags: list[str] | str = ""
 
 
 class IndexUpsertRequest(BaseModel):

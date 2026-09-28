@@ -97,6 +97,13 @@ def _upsert_payload(rec: BreadthManualRecord) -> dict:
                 {
                     "chunk_id": f"{rec.id}-{len(chunks)}",
                     "text": piece,
+                    # chunk 级溯源键：canonical-qa 增量索引据此生成引用卡
+                    # （标题/日期/来源/链接）并参与跨索引去重
+                    "title": rec.title or "",
+                    "record_date": rec.document_date or "",
+                    "source_name": rec.source_name or "",
+                    "url": rec.url or "",
+                    "summary": (rec.ai_summary or "")[:300],
                     "metadata": {
                         "document_date": rec.document_date or "",
                         "url": rec.url or "",
@@ -111,7 +118,9 @@ def _upsert_payload(rec: BreadthManualRecord) -> dict:
             )
     return {
         "document_id": str(rec.id),
-        "filename": (rec.source_ref or {}).get("file") if isinstance(rec.source_ref, dict) else None,
+        # canonical-qa 的 filename 声明为 str（不接受 null）——source_ref
+        # 缺 file 时必须落空串，否则整条 422 进不了增量索引
+        "filename": (rec.source_ref or {}).get("file") if isinstance(rec.source_ref, dict) else "",
         "title": rec.title or "",
         "primary_category": rec.category or "未分类",
         "secondary_categories": [],
