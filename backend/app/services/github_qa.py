@@ -70,15 +70,38 @@ def _service_error(exc: Exception) -> QAServiceError:
     return QAServiceError("qa_service_error", "检索服务返回异常，请稍后重试。", str(exc))
 
 
-async def search_canonical(query: str, top_k: int = 25) -> list[dict[str, Any]]:
-    """Return upstream citation-shaped results from the canonical hybrid index."""
+async def search_canonical(
+    query: str,
+    top_k: int = 25,
+    exclude_ids: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Return upstream citation-shaped results from the canonical hybrid index.
+
+    exclude_ids：历史轮已引用记录 ID（novelty exclusion），追问不重复召回。
+    """
+    payload = await search_canonical_raw(query, top_k=top_k, exclude_ids=exclude_ids)
+    if payload.get("is_relevant") is False:
+        return []
+    return [item for item in payload["results"] if isinstance(item, dict)]
+
+
+async def search_canonical_raw(
+    query: str,
+    top_k: int = 25,
+    exclude_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """检索原始载荷：citations 之外还带 evidence/retrieval_trace（编排层评估）。
+
+    旧版 canonical-qa（无编排层）不返回这两个键，兼容降级为 {}。
+    """
     base_url = _require_url()
+    params: dict[str, Any] = {"q": query, "top_k": min(max(top_k, 1), 50)}
+    novelty = [str(x).strip() for x in (exclude_ids or []) if str(x).strip()][:80]
+    if novelty:
+        params["exclude_ids"] = ",".join(novelty)
     try:
         async with httpx.AsyncClient(timeout=qa_service_timeout()) as client:
-            response = await client.get(
-                f"{base_url}/api/search",
-                params={"q": query, "top_k": min(max(top_k, 1), 50)},
-            )
+            response = await client.get(f"{base_url}/api/search", params=params)
             response.raise_for_status()
             payload = response.json()
     except (httpx.HTTPError, ValueError, QAServiceError) as exc:
@@ -89,11 +112,7 @@ async def search_canonical(query: str, top_k: int = 25) -> list[dict[str, Any]]:
     results = payload.get("results")
     if not isinstance(results, list):
         raise QAServiceError("qa_contract_error", "检索服务响应格式不兼容。")
-    # A low-confidence lexical/vector hit should not become answer evidence.
-    # Older canonical services omit this field, so preserve compatibility.
-    if payload.get("is_relevant") is False:
-        return []
-    return [item for item in results if isinstance(item, dict)]
+    return payload
 
 
 async def service_status() -> dict[str, Any]:

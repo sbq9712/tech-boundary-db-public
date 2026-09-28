@@ -24,7 +24,7 @@ from app.models.conversation import (
     ConversationMessage,
     ConversationSession,
 )
-from app.services.github_qa import QAServiceError, search_canonical
+from app.services.github_qa import QAServiceError, search_canonical_raw
 from app.services.model_catalog import get_catalog
 
 logger = logging.getLogger(__name__)
@@ -118,6 +118,37 @@ def _latest_history_citations(history: list[dict]) -> list[dict]:
     return []
 
 
+_EXCLUDE_MAX_IDS = 80
+
+
+def _history_exclude_ids(history: list[dict]) -> list[str]:
+    """novelty exclusion 的排除集：历史轮 assistant 消息引用过的全部记录。
+
+    与旧 tech-db chat_stream 的 searched/cited_record_ids 排除对齐：
+    收集历史引用的 record_id/document_id/url，作为不重复召回的依据。
+    """
+    ids: list[str] = []
+    seen: set[str] = set()
+    for message in history or []:
+        if message.get("role") != "assistant":
+            continue
+        for item in message.get("citations") or []:
+            if not isinstance(item, dict):
+                continue
+            for key in ("record_id", "document_id", "url"):
+                value = str(item.get(key) or "").strip()
+                if value and value not in seen:
+                    seen.add(value)
+                    ids.append(value)
+            chunk_meta = item.get("chunk_metadata")
+            if isinstance(chunk_meta, dict):
+                value = str(chunk_meta.get("record_id") or "").strip()
+                if value and value not in seen:
+                    seen.add(value)
+                    ids.append(value)
+    return ids[:_EXCLUDE_MAX_IDS]
+
+
 def _citation_key(item: dict) -> tuple:
     return (
         str(item.get("record_id") or ""),
@@ -189,6 +220,74 @@ def _used_citations(response: str, candidates: list[dict]) -> list[dict]:
         if re.search(rf"\[{citation_id}\]", response):
             used.append(item)
     return used
+
+
+# ── 答案侧核验（legacy_hybrid 答案 flags 等价实现的确定性版本）──────────
+_MARK_RE = re.compile(r"\[(\d{1,3})\]")
+_SENT_SPLIT_RE = re.compile(r"[。！？!?\n]+")
+_ASSERT_MARKERS = ("为", "是", "达", "占", "增长", "下降", "提升", "预计", "将",
+                   "显示", "根据", "指出", "认为", "突破", "超过", "约")
+_SAFETY_PATTERNS = (
+    ("local_path", re.compile(r"(?<![\w/])(/home/|/root/|C:\\\\Users\\\\)[^\s\"']{2,}")),
+    ("api_key", re.compile(r"(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|gh_[A-Za-z0-9]{20,})")),
+    ("internal_host", re.compile(r"https?://(localhost|127\.0\.0\.1|host\.docker\.internal)[^\s]*")),
+)
+
+
+def _claim_check(answer: str, citation_count: int) -> dict:
+    """CITATION_GROUNDING + CLAIM_MAPPING：引用标注核验与句子级 claim 映射。"""
+    marks = [int(m) for m in _MARK_RE.findall(answer or "")]
+    invalid = sorted({m for m in marks if m < 1 or m > max(citation_count, 0)})
+    sentences = [s.strip() for s in _SENT_SPLIT_RE.split(answer or "") if s.strip()]
+    factual = [s for s in sentences
+               if any(mk in s for mk in _ASSERT_MARKERS) and len(s) >= 8]
+    cited_sentences = sum(1 for s in factual if _MARK_RE.search(s))
+    mapping = [{"claim": s[:80], "citation": sorted({int(m) for m in _MARK_RE.findall(s)})}
+               for s in factual if _MARK_RE.search(s)][:20]
+    return {
+        "citation_marks": len(marks),
+        "invalid_markers": invalid,
+        "factual_sentences": len(factual),
+        "cited_sentences": cited_sentences,
+        "cited_ratio": round(cited_sentences / len(factual), 4) if factual else None,
+        "claim_citation_map": mapping,
+    }
+
+
+def _compute_answer_status(used_citation_count: int, evidence_status: str,
+                           claim_check: dict, citation_count: int) -> str:
+    """ANSWER_STATUS：verified / partial / insufficient。"""
+    if not citation_count:
+        return "insufficient"
+    if used_citation_count and evidence_status == "sufficient":
+        ratio = claim_check.get("cited_ratio")
+        if ratio is None or ratio >= 0.4:
+            return "verified"
+        return "partial"
+    if used_citation_count:
+        return "partial"
+    return "insufficient"
+
+
+def _boundary_note(status: str, evidence_status: str) -> str | None:
+    """KNOWLEDGE_BOUNDARY：证据薄弱时的边界声明（不伪造完整性）。"""
+    if status == "insufficient" or evidence_status == "insufficient":
+        return ("⚠️ 知识边界提示：当前数据库中与该问题直接相关的情报不足，"
+                "以上内容可能不完整；建议补充检索条件或等待后续情报更新。")
+    if status == "partial":
+        return ("⚠️ 知识边界提示：以上回答仅部分覆盖数据库现有证据，"
+                "关键结论请核对引用原文。")
+    return None
+
+
+def _safety_scan(text: str) -> list[dict]:
+    """CONTENT_SAFETY：答案泄密面扫描（本地路径/密钥/内网地址）。"""
+    hits: list[dict] = []
+    for name, pattern in _SAFETY_PATTERNS:
+        m = pattern.search(text or "")
+        if m:
+            hits.append({"kind": name, "sample": m.group(0)[:24]})
+    return hits
 
 
 def _build_prompt(query: str, retrieval_results: dict, history: list[dict]) -> list[dict]:
@@ -434,8 +533,15 @@ async def stream_agent_response(
 
     yield _sse("status", {"stage": "retrieving", "message": "正在检索相关知识..."})
     retrieval_query = _build_retrieval_query(effective_query, history, conversation.topic_hint)
+    # novelty exclusion：历史轮已引用记录不再重复召回（ITERATIVE_RETRIEVAL，
+    # legacy_hybrid 等价）；无历史时为空列表，行为与旧单轮检索一致。
+    exclude_ids = _history_exclude_ids(history)
     try:
-        current_citations = _normalize_citations(await search_canonical(retrieval_query, top_k=25))
+        raw_payload = await search_canonical_raw(
+            retrieval_query, top_k=25, exclude_ids=exclude_ids or None)
+        current_citations = _normalize_citations(
+            [item for item in raw_payload.get("results", []) if isinstance(item, dict)]
+            if raw_payload.get("is_relevant") is not False else [])
     except QAServiceError as exc:
         logger.warning("canonical QA retrieval failed: code=%s detail=%s", exc.code, exc.detail)
         _finish_run(db, run, "failed", error=exc.code)
@@ -447,6 +553,9 @@ async def stream_agent_response(
 
     previous_keys = {_citation_key(item) for item in prior_citations}
     inherited_count = sum(1 for item in citations if _citation_key(item) in previous_keys)
+    # 检索编排层的证据评估与追溯（旧版服务无此两键 → 兼容为空）
+    evidence = raw_payload.get("evidence") if isinstance(raw_payload.get("evidence"), dict) else {}
+    retrieval_trace = raw_payload.get("retrieval_trace") if isinstance(raw_payload.get("retrieval_trace"), dict) else {}
     summary = {
         "knowledge_base": len(citations),
         "current_retrieval": len(current_citations),
@@ -454,8 +563,12 @@ async def stream_agent_response(
         "history_messages": len(history),
         "history_chars": history_chars,
         "retrieval_query": retrieval_query,
+        "novelty_excluded": len(exclude_ids),
+        "evidence": evidence,
+        "retrieval_trace": retrieval_trace,
         "provider": "sbq9712/tech-db canonical hybrid retrieval",
     }
+    evidence_status = str(evidence.get("status") or "unknown")
     if not citations:
         answer = "抱歉，数据库中没有足够的情报来回答这个问题。请尝试用更具体的关键词或换个角度提问。"
         assistant = ConversationMessage(
@@ -609,6 +722,33 @@ async def stream_agent_response(
 
     final_citations = _used_citations(full_response, citations) or citations[:8]
     summary["displayed_citations"] = len(final_citations)
+
+    # ── 答案侧核验（legacy_hybrid 答案 flags 等价实现，全链 FAIL_SAFE）──
+    # CITATION_GROUNDING/CLAIM_MAPPING：标注核验 + claim→引用映射；
+    # ANSWER_STATUS：verified/partial/insufficient；
+    # KNOWLEDGE_BOUNDARY：证据薄弱时的边界声明；
+    # CONTENT_SAFETY：答案泄密面（本地路径/密钥/内网地址）扫描。
+    # 任一核验异常只降级（字段缺省），绝不影响答案本身下发。
+    answer_status = "unassessed"
+    knowledge_boundary = None
+    claim_check: dict = {}
+    safety_hits: list = []
+    try:
+        claim_check = _claim_check(full_response, len(citations))
+        used_count = len(_used_citations(full_response, citations))
+        answer_status = _compute_answer_status(
+            used_count, evidence_status, claim_check, len(citations))
+        if answer_status != "verified":
+            knowledge_boundary = _boundary_note(answer_status, evidence_status)
+        safety_hits = _safety_scan(full_response)
+        summary["claim_check"] = claim_check
+        summary["answer_status"] = answer_status
+        summary["safety_hits"] = safety_hits
+    except Exception:  # pragma: no cover - 核验失败不阻断答案
+        logger.warning("answer-side verification degraded", exc_info=True)
+    if knowledge_boundary:
+        yield _sse("status", {"stage": "knowledge_boundary", "message": knowledge_boundary})
+
     assistant = ConversationMessage(
         id=uuid.uuid4(),
         session_id=conversation_id,
@@ -636,6 +776,10 @@ async def stream_agent_response(
             "truncated": truncated,
             "finish_reason": finish_reason,
             "fallback_used": fallback_used,
+            "answer_status": answer_status,
+            "knowledge_boundary": knowledge_boundary,
+            "claim_check": claim_check,
+            "safety_hits": safety_hits,
         },
     )
 

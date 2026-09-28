@@ -4,6 +4,7 @@
 qa-backend/*
 !qa-backend/config.py
 !qa-backend/server.py
+!qa-backend/retrieval_pipeline.py
 !qa-backend/incremental_index.py
 !qa-backend/check_assets.py
 !qa-backend/qa-assets-manifest.json

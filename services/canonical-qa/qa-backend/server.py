@@ -68,6 +68,55 @@ RETRIEVAL_TOP_K = 50  # candidates per route
 FINAL_TOP_K = 25     # max records after fusion
 RELEVANCE_FLOOR = 0.3  # vector similarity floor for "honest answer" trigger
 
+# ── 检索编排层（第七节问答能力迁移：legacy_hybrid 等价实现）──────────────
+# 纯标准库模块；feature flags 缺省与 tech-db legacy_hybrid profile 逐字对齐
+# （21 个 shipped ON / 4 个实验 OFF），QA_<FLAG> 环境变量可覆盖。
+from retrieval_pipeline import (
+    feature_flags as _pipeline_flags,
+    decompose_query as _pl_decompose,
+    rrf_merge_rounds as _pl_rrf_merge,
+    novelty_filter as _pl_novelty,
+    rerank_results as _pl_rerank,
+    match_entities as _pl_match_entities,
+    graph_expand as _pl_graph_expand,
+    grade_evidence as _pl_grade,
+    numeric_facts as _pl_numeric_facts,
+    check_claims as _pl_check_claims,
+    compute_answer_status as _pl_answer_status,
+    boundary_note as _pl_boundary_note,
+    content_safety_scan as _pl_safety_scan,
+)
+
+FLAGS = _pipeline_flags()  # 进程级一次读取；测试可 reload 模块覆盖
+_GRAPH_CACHE: dict = {"loaded": False, "labels": [], "adjacency": {}}
+
+
+def _graph_index() -> tuple[list, dict]:
+    """懒加载 graph-export.json：节点标签（按 degree 降序）+ 邻接表。"""
+    if _GRAPH_CACHE["loaded"]:
+        return _GRAPH_CACHE["labels"], _GRAPH_CACHE["adjacency"]
+    labels: list[tuple[str, str, int]] = []
+    adjacency: dict[str, list[tuple[str, str]]] = {}
+    try:
+        graph_file = WORKING_DIR / "graph-export.json"
+        if graph_file.exists():
+            data = json.loads(graph_file.read_text("utf-8"))
+            nodes = data.get("nodes", []) or []
+            labels = [(str(n.get("id")), str(n.get("label") or ""), int(n.get("degree") or 0))
+                      for n in nodes if n.get("label")]
+            id2label = {nid: lab for nid, lab, _ in labels}
+            for edge in data.get("edges", []) or []:
+                src, dst = str(edge.get("source")), str(edge.get("target"))
+                rel = str(edge.get("label") or "")
+                # 邻接表存邻居"标签"（图谱关系直接作为 BM25 词项参与召回）
+                adjacency.setdefault(src, []).append((id2label.get(dst, dst), rel))
+                adjacency.setdefault(dst, []).append((id2label.get(src, src), rel))
+    except Exception as exc:
+        print(f"[graph-index] load failed, semantic graph disabled: {exc}", flush=True)
+        labels, adjacency = [], {}
+    _GRAPH_CACHE.update({"loaded": True, "labels": labels, "adjacency": adjacency})
+    return labels, adjacency
+
 # Generic follow-up language adds noise to BM25 and can overpower the domain
 # terms in short queries. Keep compact domain atoms because jieba sometimes
 # segments Chinese technical names into one-character tokens.
@@ -338,6 +387,152 @@ async def hybrid_search(query: str) -> tuple:
     return results, is_relevant
 
 
+def _bm25_by_label(label: str, top_k: int = 6) -> list:
+    """SEMANTIC_GRAPH：以实体/关系邻居标签为词项的补充 BM25 检索。"""
+    try:
+        return bm25_search(label, top_k=top_k)
+    except Exception:
+        return []
+
+
+def _hydrate_texts(results: list) -> list:
+    """把 {meta, score} 检索结果补齐 title/category/date/body_snippet 文本字段。
+
+    rerank / evidence grading / graph gate 需要确定性文本可判；upload 类
+    结果从 meta 自带字段取，基线记录从 all-records-lite.json 取。
+    """
+    records = load_records()
+    out: list = []
+    for r in results:
+        meta = r.get("meta") or {}
+        if meta.get("kind") == "upload":
+            text = {
+                "title": str(meta.get("filename") or meta.get("title") or ""),
+                "category": str(meta.get("category") or "上传资料"),
+                "date": str(meta.get("date") or ""),
+                "body_snippet": str(meta.get("chunk_text") or meta.get("text") or "")[:600],
+            }
+        else:
+            idx = meta.get("idx", -1)
+            record = records[idx] if isinstance(records, list) and 0 <= idx < len(records) else {}
+            tags = record.get("tg", [])
+            if isinstance(tags, str):
+                tags = [tags]
+            text = {
+                "title": str(record.get("t", "") or ""),
+                "category": str(record.get("c", "") or ""),
+                "date": str(record.get("d", "") or ""),
+                "body_snippet": (str(record.get("as", "") or "") + str(record.get("b", "") or "")
+                                 + " ".join(map(str, tags)))[:600],
+            }
+        out.append(dict(r, **text))
+    return out
+
+
+async def orchestrated_search(query: str, exclude_ids: list | None = None,
+                              final_top_k: int = FINAL_TOP_K) -> tuple:
+    """legacy_hybrid 等价检索编排（DECOMPOSITION → 多路检索 → 图谱扩展 →
+    novelty 排除 → 重排 → 证据评估），全链各阶段 FAIL_SAFE 降级。
+
+    返回 (search_results, evidence, trace)。任何阶段异常都回落到单路
+    hybrid_search，保证检索永不因编排层失败而整体不可用。
+    """
+    trace: dict = {"flags": {k: v for k, v in FLAGS.items() if v}}
+    base = (query or "").strip()
+    try:
+        # 1) Router + Decomposition：子查询拆分
+        subqueries, dec_trace = _pl_decompose(base, FLAGS)
+        trace["decomposition"] = dec_trace
+
+        # 2) ITERATIVE_RETRIEVAL：多路 hybrid 检索 + RRF 归并
+        #    （补齐 title/body 文本，供重排/证据评估/图谱闸门确定性判断）
+        rounds: list[list] = []
+        for sub in subqueries[:4]:
+            results, _rel = await hybrid_search(sub)
+            if results:
+                rounds.append(_hydrate_texts(results))
+        if not rounds:
+            return [], {"status": "insufficient", "count": 0}, trace
+        merged = rounds[0] if len(rounds) == 1 else _pl_rrf_merge(rounds)
+        # 跨路去重：同一文章在不同批次/子查询下 record_idx 不同但实体相同
+        merged, cross_dup = dedup_search_results(merged)
+        trace["cross_round_dedup_dropped"] = cross_dup
+        trace["retrieval_rounds"] = len(rounds)
+        trace["merged_candidates"] = len(merged)
+
+        # 3) novelty exclusion：历史已引用记录不再重复召回（保底防饿死）
+        if FLAGS.get("ITERATIVE_RETRIEVAL_ENABLED"):
+            merged, excluded_n, excluded_ids = _pl_novelty(merged, exclude_ids)
+            trace["novelty_excluded"] = excluded_n
+            if excluded_ids:
+                trace["novelty_excluded_ids"] = excluded_ids[:10]
+
+        # 4) ENTITY_RESOLUTION + SEMANTIC_GRAPH：实体匹配 → 关系扩展 →
+        #    邻居标签补充检索（图谱真实参与召回，而非仅可视化）
+        graph_extra: list = []
+        if FLAGS.get("SEMANTIC_GRAPH_ENABLED"):
+            labels, adjacency = _graph_index()
+            entities = _pl_match_entities(base, labels) if FLAGS.get("ENTITY_RESOLUTION_ENABLED") else []
+            trace["graph_entities"] = [e["label"] for e in entities]
+            if entities:
+                neighbor_labels, paths = _pl_graph_expand(entities, adjacency)
+                trace["graph_expansion"] = paths[:8]
+                seen_ids = {_pl_result_key(r) for r in merged}
+                # 图谱扩展相关性闸门：邻居标签命中（或与查询词重叠）的记录
+                # 才作为补充证据，防止泛化共现边把无关记录带进证据窗
+                from retrieval_pipeline import extract_query_terms as _eqt
+                gate_terms = set(_eqt(base)) | {e["label"] for e in entities}
+                for lab in neighbor_labels[:6]:
+                    label_hit = lab in base or any(t in lab for t in gate_terms)
+                    for r in _hydrate_texts(_bm25_by_label(lab)):
+                        if _pl_result_key(r) in seen_ids:
+                            continue
+                        text = str(r.get("title", "")) + str(r.get("body_snippet", ""))
+                        if not label_hit and not any(t and t in text for t in gate_terms):
+                            continue
+                        seen_ids.add(_pl_result_key(r))
+                        meta = r.get("meta") or {}
+                        meta = dict(meta, via_graph=lab)
+                        graph_extra.append(dict(r, meta=meta, score=float(r.get("score") or 0)))
+                trace["graph_extra_results"] = len(graph_extra)
+                if graph_extra:
+                    merged = _pl_rrf_merge([merged, graph_extra])
+                    merged, graph_dup = dedup_search_results(merged)
+
+        # 5) RERANKER（含 TEMPORAL / EVIDENCE_SELECTOR 窗口）
+        ranked, rerank_trace = _pl_rerank(merged, base, FLAGS, cap=final_top_k)
+        trace["rerank"] = rerank_trace
+
+        # 6) EVIDENCE_GRADER：证据充足性门控 + NUMERIC_FACTS 事实点
+        evidence = _pl_grade(ranked, base) if FLAGS.get("EVIDENCE_GRADER_ENABLED") else {"status": "unknown"}
+        if FLAGS.get("NUMERIC_FACTS_ENABLED") and ranked:
+            evidence["numeric_facts"] = _pl_numeric_facts(
+                [str(r.get("body_snippet", "")) for r in ranked[:5]])
+        trace["provenance"] = {
+            "subqueries": subqueries,
+            "graph_first": bool(graph_extra) and FLAGS.get("SEMANTIC_GRAPH_ENABLED"),
+            "exclude_ids_received": len(exclude_ids or []),
+        }
+        return ranked, evidence, trace
+    except Exception as exc:
+        # FAIL_SAFE_VERIFY：编排层任何异常 → 回落单路基线检索
+        print(f"[orchestrated-search] degraded to baseline: {exc.__class__.__name__}: {exc}", flush=True)
+        trace["degraded"] = True
+        trace["degrade_reason"] = f"{exc.__class__.__name__}"
+        try:
+            results, _rel = await hybrid_search(base)
+            results = _hydrate_texts(results)
+            evidence = _pl_grade(results, base)
+            return results, evidence, trace
+        except Exception:
+            return [], {"status": "insufficient", "count": 0}, trace
+
+
+def _pl_result_key(result: dict) -> tuple:
+    from retrieval_pipeline import result_identity
+    return result_identity(result)
+
+
 def dedup_search_results(results: list) -> tuple:
     """Collapse near-duplicate records before context building.
 
@@ -463,6 +658,9 @@ class ChatRequest(BaseModel):
     query: str
     conversation_id: str = ""
     history: list = []
+    # novelty exclusion：历史轮已引用的记录 ID（record_idx/document_id/url），
+    # 追问时不再重复召回；由调用方（backend agent_service）从会话历史提取。
+    exclude_ids: list = []
 
 
 # ── Lifespan ──
@@ -518,6 +716,12 @@ async def health():
         "incremental_records": _incremental_index.record_count,
         "incremental_documents": _incremental_index.document_count,
         "total_indexed_records": (len(_index_meta) if _index_meta else 0) + _incremental_index.record_count,
+        "retrieval_pipeline": {
+            "profile": "legacy_hybrid",
+            "flags_on": sum(1 for v in FLAGS.values() if v),
+            "flags_total": len(FLAGS),
+            "experimental_off": [k for k, v in FLAGS.items() if not v],
+        },
         "total_records": len(_records) if _records else 0,
         "index_mapping_ready": _index_mapping_status is not None,
         "index_mapping": _index_mapping_status or {},
@@ -615,13 +819,18 @@ async def chat_stream(req: ChatRequest):
                 })}
                 return
 
-            # Hybrid search (vector + BM25 → RRF)
-            search_results, is_relevant = await hybrid_search(req.query)
+            # 检索编排（legacy_hybrid 等价）：拆解 → 多路检索 → 图谱扩展 →
+            # novelty 排除 → 重排 → 证据评估；失败自动回落基线单路检索
+            search_results, evidence, retrieval_trace = await orchestrated_search(
+                req.query, exclude_ids=req.exclude_ids or None)
 
-            if not search_results or not is_relevant:
+            if not search_results or evidence.get("status") == "insufficient":
                 yield {"event": "done", "data": json.dumps({
                     "answer": "抱歉，数据库中没有足够的情报来回答这个问题。请尝试用更具体的关键词或换个角度提问。",
-                    "citations": []
+                    "citations": [],
+                    "answer_status": "insufficient",
+                    "evidence": evidence,
+                    "retrieval_trace": retrieval_trace,
                 })}
                 return
 
@@ -631,6 +840,10 @@ async def chat_stream(req: ChatRequest):
             # Yield citations
             if citations:
                 yield {"event": "citations", "data": json.dumps({"citations": citations})}
+            yield {"event": "status", "data": json.dumps({
+                "step": "evidence",
+                "message": f"证据评估：{evidence.get('status', 'unknown')}（{len(search_results)} 条候选）"
+            })}
 
             # Step 2: Analysis
             yield {"event": "status", "data": json.dumps({
@@ -706,9 +919,38 @@ async def chat_stream(req: ChatRequest):
                     })}
                     return
 
+            # ── 答案侧核验（legacy_hybrid 答案 flags 的等价实现）────────
+            # CITATION_GROUNDING/CLAIM_MAPPING：标注核验 + claim→引用映射；
+            # ANSWER_STATUS；KNOWLEDGE_BOUNDARY；CONTENT_SAFETY 泄密面扫描。
+            # 全部 FAIL_SAFE：核验失败不影响答案本身下发。
+            answer_status = "partial"
+            boundary = None
+            safety_hits: list = []
+            claim_check: dict = {}
+            try:
+                if FLAGS.get("CITATION_GROUNDING_ENABLED") or FLAGS.get("CLAIM_MAPPING_ENABLED"):
+                    claim_check = _pl_check_claims(full_answer, len(citations))
+                used_count = len({m for m in claim_check.get("claim_citation_map", [])
+                                  if m.get("citation")})
+                answer_status = _pl_answer_status(
+                    used_count, evidence.get("status", "unknown"), claim_check, len(citations)
+                ) if FLAGS.get("ANSWER_STATUS_ENABLED") else "unassessed"
+                if FLAGS.get("KNOWLEDGE_BOUNDARY_ENABLED"):
+                    boundary = _pl_boundary_note(answer_status, evidence.get("status", "unknown"))
+                if FLAGS.get("CONTENT_SAFETY_ENABLED"):
+                    safety_hits = _pl_safety_scan(full_answer)
+            except Exception as exc:
+                print(f"[answer-check] degraded: {exc.__class__.__name__}", flush=True)
+
             yield {"event": "done", "data": json.dumps({
                 "answer": full_answer,
-                "citations": citations
+                "citations": citations,
+                "answer_status": answer_status,
+                "knowledge_boundary": boundary,
+                "claim_check": claim_check,
+                "safety_hits": safety_hits,
+                "evidence": evidence,
+                "retrieval_trace": retrieval_trace,
             })}
 
         except Exception as e:
@@ -775,14 +1017,23 @@ async def stats():
         "bm25_ready": _bm25_index is not None,
         "index_mapping_ready": _index_mapping_status is not None,
         "index_mapping": _index_mapping_status or {},
+        "retrieval_pipeline": {
+            "profile": "legacy_hybrid",
+            "flags_on": sum(1 for v in FLAGS.values() if v),
+            "flags_total": len(FLAGS),
+        },
         "model": MODEL_NAME,
         "llm_configured": LLM_CONFIGURED,
     }
 
 
 @app.get("/api/search")
-async def search(q: str, top_k: int = 10):
-    """Quick vector search without LLM generation. Returns matching records."""
+async def search(q: str, top_k: int = 10, exclude_ids: str = ""):
+    """检索端点（backend agent_service 的证据来源）。
+
+    编排检索（拆解/图谱扩展/novelty 排除/重排/证据评估）；
+    exclude_ids 为逗号分隔的历史已引用记录 ID（追问时不重复召回）。
+    """
     if _vector_index is None and not _incremental_index.record_count:
         return JSONResponse(
             {"error": "Vector index not loaded", "results": []},
@@ -791,13 +1042,19 @@ async def search(q: str, top_k: int = 10):
     if not q.strip():
         return {"results": [], "query": q}
 
-    results, is_relevant = await hybrid_search(q.strip())
-    context, citations = build_context(results[:min(max(top_k, 1), 50)])
+    exclude_list = [x.strip() for x in (exclude_ids or "").split(",") if x.strip()][:80]
+    results, evidence, trace = await orchestrated_search(
+        q.strip(), exclude_ids=exclude_list or None,
+        final_top_k=min(max(top_k, 1), 50))
+    is_relevant = evidence.get("status") != "insufficient"
+    context, citations = build_context(results)
     return {
         "query": q,
         "results": citations,
         "total": len(citations),
         "is_relevant": is_relevant,
+        "evidence": evidence,
+        "retrieval_trace": trace,
     }
 
 

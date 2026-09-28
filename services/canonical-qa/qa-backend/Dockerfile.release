@@ -16,6 +16,7 @@ RUN useradd --create-home --uid 10001 qa
 WORKDIR /app
 
 COPY --chown=qa:qa qa-backend/config.py qa-backend/server.py qa-backend/incremental_index.py \
+    qa-backend/retrieval_pipeline.py \
     qa-backend/check_assets.py qa-backend/qa-assets-manifest.json /app/qa-backend/
 COPY --chown=qa:qa data/lightrag /app/data/lightrag
 COPY --chown=qa:qa data/processed/all-records-lite.json /app/data/processed/all-records-lite.json
