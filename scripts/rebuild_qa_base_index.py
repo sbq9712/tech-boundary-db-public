@@ -105,8 +105,10 @@ def evidence_text(rec: dict, cap: int) -> str:
     return text[:cap]
 
 
-def format_embed_text(rec: dict) -> str:
+def format_embed_text(rec: dict, cap: int | None = None) -> str:
     """[leaf] title [tg] [tp] kp… 证据文本（复刻 format_record_text 组成）。"""
+    if cap is None:
+        cap = EMBED_TEXT_CHARS
     parts = []
     cat = str(rec.get("c", "") or "")
     if cat:
@@ -125,7 +127,7 @@ def format_embed_text(rec: dict) -> str:
     kp = rec.get("kp") or []
     if isinstance(kp, list) and kp:
         parts.append("; ".join(str(k) for k in kp))
-    ev = evidence_text(rec, EMBED_TEXT_CHARS)
+    ev = evidence_text(rec, cap)
     if ev:
         parts.append(ev)
     return " ".join(parts)
@@ -172,20 +174,40 @@ def build_custom_dict(records: list[dict]) -> set:
     return terms
 
 
+def _pending_positions(n: int) -> list[int]:
+    """扫分片找真实的未嵌入位置（计数器断点在长度排序的稀疏落盘下不可信：
+    崩溃重启后低位空洞会被跳过——实测 1914 个。分片非零行才是事实）。"""
+    n_shards = (n + SHARD_EMBEDS - 1) // SHARD_EMBEDS
+    pending: list[int] = []
+    for shard_no in range(n_shards):
+        shard_path = CHUNK_DIR / f"emb-{shard_no:05d}.npy"
+        if not shard_path.exists():
+            pending.extend(range(shard_no * SHARD_EMBEDS,
+                                 min((shard_no + 1) * SHARD_EMBEDS, n)))
+            continue
+        arr = np.load(shard_path)
+        for row in range(arr.shape[0]):
+            pos = shard_no * SHARD_EMBEDS + row
+            if pos >= n:
+                break
+            if abs(arr[row]).sum() == 0.0:
+                pending.append(pos)
+    return pending
+
+
 def cmd_embed(argv: list[str] | None = None) -> int:
     records = load_published_records()
     n = len(records)
     print(f"[rebuild] 发布视图：{n} 条", flush=True)
 
     CHUNK_DIR.mkdir(parents=True, exist_ok=True)
-    done = 0
-    if PROGRESS.exists():
-        prog = json.loads(PROGRESS.read_text("utf-8"))
-        done = int(prog.get("done", 0))
-        print(f"[rebuild] 断点续跑：已完成 {done}/{n}", flush=True)
+    pending = _pending_positions(n)
+    print(f"[rebuild] 分片扫描：待嵌入 {len(pending)}/{n}", flush=True)
 
-    if done >= n:
+    if not pending:
         print("[rebuild] 嵌入已全部完成 —— 直接 assemble", flush=True)
+        PROGRESS.write_text(json.dumps({"done": n, "total": n,
+                                        "updated_at": datetime.now(timezone.utc).isoformat()}), "utf-8")
         return 0
 
     os.environ.setdefault("TECHDB_QA_MODEL_PATH", "/home/rhett/bge-m3-model")
@@ -195,17 +217,21 @@ def cmd_embed(argv: list[str] | None = None) -> int:
     except ImportError as exc:
         print(f"[FATAL] 需要 pipeline/.venv（缺依赖）：{exc}", flush=True)
         return 2
-    torch.set_num_threads(min(12, os.cpu_count() or 8))
+    torch.set_num_threads(int(os.environ.get("QA_REBUILD_THREADS", "6")))
     model_path = os.environ["TECHDB_QA_MODEL_PATH"]
     model = SentenceTransformer(model_path, device="cpu")
 
-    # 长度分桶：短文本先批量（ST pad 到批内最长，混批浪费算力）
-    remaining = sorted(range(done, n), key=lambda i: len(format_embed_text(records[i])))
+    # 长度分桶：短文本先批量（ST pad 到批内最长，混批浪费算力）；
+    # 长文本截断可用环境变量下调（剩余尾部全是最长文本，600→400 ≈ 1.5x 吞吐）。
+    embed_chars = int(os.environ.get("QA_REBUILD_EMBED_CHARS", str(EMBED_TEXT_CHARS)))
+    if embed_chars != EMBED_TEXT_CHARS:
+        print(f"[rebuild] 嵌入证据截断覆盖：{embed_chars}（默认 {EMBED_TEXT_CHARS}）", flush=True)
+    remaining = sorted(pending, key=lambda i: len(format_embed_text(records[i], embed_chars)))
     t0 = time.time()
     processed = 0
     for start in range(0, len(remaining), EMBED_BATCH):
         idxs = remaining[start:start + EMBED_BATCH]
-        texts = [format_embed_text(records[i]) or "无内容" for i in idxs]
+        texts = [format_embed_text(records[i], embed_chars) or "无内容" for i in idxs]
         embs = model.encode(texts, batch_size=len(texts), show_progress_bar=False,
                             normalize_embeddings=True)
         embs = np.asarray(embs, dtype=np.float32)
@@ -223,26 +249,25 @@ def cmd_embed(argv: list[str] | None = None) -> int:
             arr[slot] = embs[pos]
             np.save(shard_path, arr)
         processed += len(idxs)
-        done_now = done + processed
-        if done_now % SHARD_EMBEDS < EMBED_BATCH or done_now == n:
-            PROGRESS.write_text(json.dumps({"done": done_now, "total": n,
-                                            "updated_at": datetime.now(timezone.utc).isoformat()}), "utf-8")
-        if processed % 500 < EMBED_BATCH:
+        if processed % 500 < EMBED_BATCH or processed == len(remaining):
             rate = processed / max(time.time() - t0, 1)
             eta = (len(remaining) - processed) / max(rate, 1e-9) / 3600
-            print(f"[rebuild] {done_now}/{n}  {rate:.2f} 条/s  ETA {eta:.1f}h", flush=True)
-    PROGRESS.write_text(json.dumps({"done": n, "total": n,
+            print(f"[rebuild] {processed}/{len(remaining)}  {rate:.2f} 条/s  ETA {eta:.1f}h", flush=True)
+            PROGRESS.write_text(json.dumps({"done": processed, "total": len(remaining),
+                                            "updated_at": datetime.now(timezone.utc).isoformat()}), "utf-8")
+    PROGRESS.write_text(json.dumps({"done": len(remaining), "total": len(remaining),
                                     "updated_at": datetime.now(timezone.utc).isoformat()}), "utf-8")
-    print(f"[rebuild] 嵌入完成：{n} 条，用时 {(time.time()-t0)/3600:.2f}h", flush=True)
+    print(f"[rebuild] 嵌入完成：{len(remaining)} 条，用时 {(time.time()-t0)/3600:.2f}h", flush=True)
     return 0
 
 
 def cmd_assemble(argv: list[str] | None = None) -> int:
     records = load_published_records()
     n = len(records)
-    prog = json.loads(PROGRESS.read_text("utf-8")) if PROGRESS.exists() else {}
-    if int(prog.get("done", 0)) < n:
-        print(f"[FATAL] 嵌入未完成（{prog.get('done', 0)}/{n}）—— 先跑 embed", flush=True)
+    # 完整性以分片非零行判定（计数器断点在稀疏落盘下不可信）
+    pending = _pending_positions(n)
+    if pending:
+        print(f"[FATAL] 嵌入未完成：{len(pending)} 个空位（如 {pending[:5]}）—— 先跑 embed", flush=True)
         return 1
     print(f"[rebuild] 装配 {n} 条向量 …", flush=True)
     embs = np.zeros((n, DIM), dtype=np.float32)

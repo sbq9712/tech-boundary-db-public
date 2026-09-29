@@ -9,7 +9,7 @@ COPY --chown=qa:qa qa-backend/config.py qa-backend/server.py \
     qa-backend/incremental_index.py qa-backend/retrieval_pipeline.py /app/qa-backend/
 COPY --chown=qa:qa qa-backend/qa-assets-manifest.json /app/qa-backend/qa-assets-manifest.json
 COPY --chown=qa:qa data/lightrag/vector_index_v2.pkl data/lightrag/bm25_index.pkl \
-    data/lightrag/jieba_custom_dict.txt /app/data/lightrag/
+    data/lightrag/jieba_custom_dict.txt data/lightrag/graph-export.json /app/data/lightrag/
 COPY --chown=qa:qa data/processed/all-records-lite.json /app/data/processed/all-records-lite.json
 RUN mkdir -p /app/data/lightrag/incremental \
     && chown -R qa:qa /app/data/lightrag/incremental \
