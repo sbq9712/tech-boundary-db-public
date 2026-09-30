@@ -6,7 +6,14 @@ FROM ${QA_BASE_IMAGE}
 
 USER root
 COPY --chown=qa:qa qa-backend/config.py qa-backend/server.py \
-    qa-backend/incremental_index.py qa-backend/retrieval_pipeline.py /app/qa-backend/
+    qa-backend/incremental_index.py qa-backend/retrieval_pipeline.py \
+    qa-backend/graph_fragment.py qa-backend/answer_chain.py \
+    qa-backend/epistemic.py qa-backend/verifier.py qa-backend/claim_mapping.py \
+    qa-backend/citation_grounding.py qa-backend/numeric_facts.py \
+    qa-backend/primary_evidence.py qa-backend/answer_status.py \
+    qa-backend/knowledge_boundary.py qa-backend/answer_repair.py \
+    qa-backend/provenance.py qa-backend/evidence_metadata.py \
+    qa-backend/runtime_safety.py /app/qa-backend/
 COPY --chown=qa:qa qa-backend/qa-assets-manifest.json /app/qa-backend/qa-assets-manifest.json
 COPY --chown=qa:qa data/lightrag/vector_index_v2.pkl data/lightrag/bm25_index.pkl \
     data/lightrag/jieba_custom_dict.txt data/lightrag/graph-export.json /app/data/lightrag/

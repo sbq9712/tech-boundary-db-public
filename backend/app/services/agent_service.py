@@ -40,6 +40,72 @@ AI_HISTORY_MAX_CHARS = int(os.getenv("TECHDB_AGENT_HISTORY_MAX_CHARS", "60000"))
 AI_RETRIEVAL_MAX_CHARS = int(os.getenv("TECHDB_AGENT_RETRIEVAL_MAX_CHARS", "30000"))
 AI_MAX_OUTPUT_TOKENS = int(os.getenv("TECHDB_AGENT_MAX_OUTPUT_TOKENS", "10000"))
 
+# ── 五.1（2026-09-30）：legacy_hybrid 答案侧真实核验链 ───────────────────
+# epistemic 认识论分类/提示词注入 + fail-safe 事实核验 + claim→引用映射 +
+# 引用证据原文定位 + 数值核验 + 有界修复 + 状态机定案 + 校准弃权。
+# 旧的 _claim_check/_compute_answer_status 标记计数启发式保留为该链不可用
+# 时的降级路径。核验开关与旧系统 QA_ 前缀一致，全部默认 ON（legacy_hybrid
+# gate-3 缺省）。
+try:
+    from app.services.qa_verification import (
+        ANSWER_CHAIN_VERSION,
+        build_rewrite_prompt,
+        classify_or_empty,
+        compact_for_payload,
+        epistemic_prompt,
+        run_answer_verification,
+    )
+    from app.services.qa_verification import llm_compat as _qa_llm_compat
+
+    _QA_CHAIN_AVAILABLE = True
+except Exception as _qa_import_exc:  # pragma: no cover - 核验链可选降级
+    logger.warning("qa_verification chain unavailable, marker fallback only: %s", _qa_import_exc)
+    _QA_CHAIN_AVAILABLE = False
+
+
+def _qa_chain_flags() -> dict:
+    """legacy_hybrid 答案侧开关（QA_<NAME>=0 可关；gate-3 缺省全 ON）。"""
+
+    def _flag(name: str, default: bool = True) -> bool:
+        raw = os.environ.get(f"QA_{name}")
+        if raw is None:
+            return default
+        return raw.strip().lower() in ("1", "true", "yes", "on")
+
+    return {
+        "FAIL_SAFE_VERIFY_ENABLED": _flag("FAIL_SAFE_VERIFY_ENABLED"),
+        "CLAIM_MAPPING_ENABLED": _flag("CLAIM_MAPPING_ENABLED"),
+        "CITATION_GROUNDING_ENABLED": _flag("CITATION_GROUNDING_ENABLED"),
+        "ANSWER_STATUS_ENABLED": _flag("ANSWER_STATUS_ENABLED"),
+        "KNOWLEDGE_BOUNDARY_ENABLED": _flag("KNOWLEDGE_BOUNDARY_ENABLED"),
+        "EPISTEMIC_ENABLED": _flag("EPISTEMIC_ENABLED"),
+        "ANSWER_REPAIR_ENABLED": _flag("ANSWER_REPAIR_ENABLED"),
+    }
+
+
+async def _qa_llm_rewrite(answer: str, drop_ids=None, claims=None, issues=None) -> str:
+    """RT-026 修复改写闭包（BoundedRepairLoop regenerate_fn 注入契约）。
+
+    只修问题句、不新增事实；任何失败返回空串（= 放弃改写，走降级）。"""
+    if not AI_API_KEY or not answer.strip():
+        return ""
+    prompt = build_rewrite_prompt(
+        _qa_llm_rewrite_ctx.get("query", ""), answer,
+        claims=claims, issues=issues, drop_ids=drop_ids)
+    try:
+        return str(await asyncio.wait_for(
+            _qa_llm_compat.llm_model_func(
+                prompt,
+                system_prompt="你是事实核查修复助手。只输出修正后的完整回答，不要输出任何解释。",
+                temperature=0.0, max_tokens=8192),
+            timeout=60)) or ""
+    except Exception:  # noqa: BLE001
+        logger.warning("qa repair rewrite degraded", exc_info=True)
+        return ""
+
+
+_qa_llm_rewrite_ctx: dict = {}  # 请求级 {"query": ...}，仅修复改写提示词用
+
 FOLLOW_UP_MARKERS = (
     "这些", "那些", "上述", "前面", "刚才", "其中", "这个", "那个", "该技术", "它们", "其",
     "详细", "展开", "继续", "再说", "补充", "深入", "具体说", "第一波", "第二波", "索引",
@@ -601,6 +667,28 @@ async def stream_agent_response(
 
     yield _sse("status", {"stage": "analyzing", "message": f"找到 {len(citations)} 条相关记录，正在分析..."})
     messages = _build_prompt(effective_query, {"citations": citations}, history)
+
+    # ── 五.1：生成前的认识论分类 + 提示词注入（旧 legacy 路径同序）。──
+    claim_metadata: list[dict] = []
+    qa_flags = _qa_chain_flags()
+    if _QA_CHAIN_AVAILABLE and qa_flags["EPISTEMIC_ENABLED"] and citations:
+        _pseudo_results = [
+            {"meta": {
+                "t": c.get("title", ""), "s": c.get("source", ""),
+                "d": c.get("date", ""),
+                "as": str(c.get("chunk_text") or c.get("body_snippet") or ""),
+                "b": str(c.get("chunk_text") or ""),
+            }}
+            # 分类面必须对齐生成器可引用面（≤25，五.1 钠离子电池回归）：
+            # 只分类 top-5 会让 verifier 把 [24]/[25] 判为不存在的 chunk。
+            for c in citations[:25]
+        ]
+        claim_metadata = await classify_or_empty(effective_query, _pseudo_results)
+        messages[0] = {
+            "role": "system",
+            "content": epistemic_prompt(messages[0]["content"], claim_metadata),
+        }
+
     yield _sse("status", {"stage": "generating", "message": "正在生成回答..."})
 
     if not AI_API_KEY:
@@ -618,6 +706,12 @@ async def stream_agent_response(
         "temperature": 0.3,
         "max_tokens": AI_MAX_OUTPUT_TOKENS,
     }
+    # 核验链 LLM 调用（分类/事实核验/声明映射/修复改写）与生成同模型——
+    # 冻结「相同模型与配置」的可比性（五.4 前提）。
+    if _QA_CHAIN_AVAILABLE:
+        _qa_llm_compat.current_model.set(request_model)
+        _qa_llm_rewrite_ctx.clear()
+        _qa_llm_rewrite_ctx["query"] = effective_query
     full_response = ""
     finish_reason: str | None = None
     stream_error: Exception | None = None
@@ -723,29 +817,76 @@ async def stream_agent_response(
     final_citations = _used_citations(full_response, citations) or citations[:8]
     summary["displayed_citations"] = len(final_citations)
 
-    # ── 答案侧核验（legacy_hybrid 答案 flags 等价实现，全链 FAIL_SAFE）──
-    # CITATION_GROUNDING/CLAIM_MAPPING：标注核验 + claim→引用映射；
-    # ANSWER_STATUS：verified/partial/insufficient；
-    # KNOWLEDGE_BOUNDARY：证据薄弱时的边界声明；
-    # CONTENT_SAFETY：答案泄密面（本地路径/密钥/内网地址）扫描。
-    # 任一核验异常只降级（字段缺省），绝不影响答案本身下发。
+    # ── 答案侧真实核验链（五.1/五.2，2026-09-30；legacy_hybrid 同序）──
+    # epistemic 事实核验（fail-safe：异常/超时一律 UNVERIFIED，绝不 PASSED）
+    # + claim→引用映射 + 引用证据原文定位 + 数值核验（确定性，矛盾即降级）
+    # + 有界修复（VERIFY_FAILED 时 1 轮，修复后复检）+ AnswerStateMachine
+    # 定案（唯一状态权威）+ 校准弃权（库内边界 ≠ 现实不存在）+ 泄密面扫描。
+    # 五.2：拒答文本（「数据库中没有相关资料」）⇒ UNSUPPORTED，绝不因带
+    # 引用标注就报 verified。全链 FAIL_SAFE：任一步失败只降级字段，绝不
+    # 阻断答案下发。旧标记计数实现保留为核验链不可用时的降级路径。
     answer_status = "unassessed"
     knowledge_boundary = None
     claim_check: dict = {}
     safety_hits: list = []
-    try:
-        claim_check = _claim_check(full_response, len(citations))
-        used_count = len(_used_citations(full_response, citations))
-        answer_status = _compute_answer_status(
-            used_count, evidence_status, claim_check, len(citations))
-        if answer_status != "verified":
-            knowledge_boundary = _boundary_note(answer_status, evidence_status)
-        safety_hits = _safety_scan(full_response)
-        summary["claim_check"] = claim_check
-        summary["answer_status"] = answer_status
-        summary["safety_hits"] = safety_hits
-    except Exception:  # pragma: no cover - 核验失败不阻断答案
-        logger.warning("answer-side verification degraded", exc_info=True)
+    chain_report: dict = {}
+    if _QA_CHAIN_AVAILABLE and qa_flags["ANSWER_STATUS_ENABLED"]:
+
+        def _resolve_record(cit: dict) -> dict | None:
+            """引用 → 伪记录（同 lite 字段形态）：backend 拿不到 canonical
+            的基础索引全文，用 citation 自带文本（chunk_text 优先）参与
+            grounding/数值核验/溯源。"""
+            text = str(cit.get("chunk_text") or "") or str(cit.get("body_snippet") or "")
+            if not text:
+                return None
+            return {"fb": "", "b": text, "as": "",
+                    "t": cit.get("title", ""), "a": cit.get("source", ""),
+                    "tg": cit.get("tag", "")}
+
+        chain_report = await run_answer_verification(
+            effective_query, full_response, citations,
+            claim_metadata=claim_metadata,
+            records_resolver=_resolve_record,
+            has_results=bool(citations),
+            is_relevant=evidence_status != "insufficient",
+            evidence_status=evidence_status,
+            flags=qa_flags,
+            safety_scan=_safety_scan,
+            llm_rewrite=_qa_llm_rewrite if qa_flags["ANSWER_REPAIR_ENABLED"] else None,
+        )
+        # 修复链改写了答案 ⇒ SSE replace（前端已有该事件的处理路径）
+        if chain_report.get("answer") and chain_report["answer"] != full_response:
+            full_response = chain_report["answer"]
+            yield _sse("replace", {"content": full_response})
+        answer_status = chain_report.get("answer_status", "UNVERIFIED")
+        knowledge_boundary = chain_report.get("boundary_message") or None
+        safety_hits = chain_report.get("safety_hits", [])
+        claim_check = compact_for_payload(chain_report)
+        summary["answer_chain"] = {
+            "version": chain_report.get("version"),
+            "stop_reason": chain_report.get("stop_reason"),
+            "refusal": chain_report.get("refusal"),
+            "verification": chain_report.get("verification"),
+            "numeric": chain_report.get("numeric"),
+            "grounding": chain_report.get("grounding"),
+            "claims_total": len((chain_report.get("claim_map") or {}).get("claims", [])),
+        }
+        logger.info("[chain-audit] %s", json.dumps(claim_check, ensure_ascii=False)[:2000])
+    else:
+        # ── 降级：标记计数启发式（qa_verification 不可用 / 状态开关关闭）──
+        try:
+            claim_check = _claim_check(full_response, len(citations))
+            used_count = len(_used_citations(full_response, citations))
+            answer_status = _compute_answer_status(
+                used_count, evidence_status, claim_check, len(citations))
+            if answer_status != "verified":
+                knowledge_boundary = _boundary_note(answer_status, evidence_status)
+            safety_hits = _safety_scan(full_response)
+        except Exception:  # pragma: no cover - 核验失败不阻断答案
+            logger.warning("answer-side verification degraded", exc_info=True)
+    summary["claim_check"] = claim_check
+    summary["answer_status"] = answer_status
+    summary["safety_hits"] = safety_hits
     if knowledge_boundary:
         yield _sse("status", {"stage": "knowledge_boundary", "message": knowledge_boundary})
 

@@ -34,6 +34,10 @@ services:
       TZ: Asia/Shanghai
       TECHDB_QA_INDEX_TOKEN: ${TECHDB_QA_INDEX_TOKEN:-}
       TECHDB_QA_INCREMENTAL_INDEX_PATH: /app/data/lightrag/incremental/index.pkl
+      # 五.1 答案侧核验链（2026-09-30）：GLM-5.2 推理型输出在 60s/次内
+      # 常超时（3 连超时 → UNVERIFIED），放宽 verifier 内层单次预算；
+      # 外层编排预算见 answer_chain.py（QA_VERIFY_BUDGET，独立 env 名）。
+      QA_VERIFY_TIMEOUT: "90"
     volumes:
       - qa_incremental_data:/app/data/lightrag/incremental
       # 知识图谱（门户星空）：独立管线每次发布后重建，只读挂载即时生效
