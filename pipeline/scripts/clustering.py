@@ -65,13 +65,51 @@ def fingerprint(record: dict) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def find_local_bge_m3():
+    """定位本地预置的 bge-m3 快照（2026-09-30 修复）。
+
+    历史缺陷：HF 缓存为非标准布局——$HF_HOME/hub/ 下直接是
+    snapshots//refs//blobs/，缺少 models--BAAI--bge-m3/ 层。HF_HUB_OFFLINE=1
+    时 huggingface_hub 无法把 "BAAI/bge-m3" 解析到该缓存 → 报
+    "couldn't find them in the cached files"，全部增量聚类被永久跳过
+    （实证：breadth-pipeline.log 07:32/11:39/19:37/19:39 多次失败）。
+    修复：显式定位快照目录直连加载；找不到时返回 None 走原路径并暴露错误。
+    """
+    hf_home = os.environ.get("HF_HOME") or os.path.join(
+        os.path.expanduser("~"), ".cache", "huggingface")
+    hub = os.path.join(hf_home, "hub")
+    # 标准布局：hub/models--BAAI--bge-m3/snapshots/<rev>/
+    std = os.path.join(hub, "models--BAAI--bge-m3", "snapshots")
+    if os.path.isdir(std):
+        for rev in sorted(os.listdir(std)):
+            cand = os.path.join(std, rev)
+            if os.path.exists(os.path.join(cand, "modules.json")):
+                return cand
+    # 本仓库布局：hub/snapshots/<rev>/（快照直挂 hub 下）
+    direct = os.path.join(hub, "snapshots")
+    if os.path.isdir(direct):
+        for rev in sorted(os.listdir(direct)):
+            cand = os.path.join(direct, rev)
+            if os.path.exists(os.path.join(cand, "modules.json")):
+                return cand
+    return None
+
+
 def get_model():
     global _MODEL
     if _MODEL is None:
         os.environ["HF_HUB_OFFLINE"] = "1"
         os.environ["TRANSFORMERS_OFFLINE"] = "1"
         from sentence_transformers import SentenceTransformer
-        _MODEL = SentenceTransformer("BAAI/bge-m3", device="cpu")
+        local_model = os.environ.get("CLUSTER_MODEL_PATH") or find_local_bge_m3()
+        if local_model:
+            print(f"[clustering] 使用本地预置模型: {local_model}", flush=True)
+            _MODEL = SentenceTransformer(local_model, device="cpu")
+        else:
+            print("[clustering] [WARN] 未找到本地 bge-m3 快照，回退按仓库名加载"
+                  "（离线环境下将失败——请预置模型或设置 CLUSTER_MODEL_PATH）",
+                  flush=True)
+            _MODEL = SentenceTransformer("BAAI/bge-m3", device="cpu")
     return _MODEL
 
 
@@ -376,6 +414,24 @@ def pool_window_indices(buckets: dict, date_a: datetime, window_days: int) -> li
         if day in buckets:
             pool.extend(buckets[day])
     return pool
+
+
+def comparison_scan(data: list[dict], target_indices: list[int],
+                    pool_indices: list[int],
+                    window_days: int = TIME_WINDOW_DAYS) -> list[int]:
+    """make_candidates 实际可能触碰的索引集 = 目标 ∪ 日期窗口内的历史池。
+
+    ensure_vectors 必须恰好覆盖这个集合：覆盖不足 → vectors[b] 裸 KeyError
+    （2026-09-30 实测 KeyError(61646)）；覆盖过全（整个 41k 池）→ 首轮要把
+    全历史都嵌一遍（数小时，且违反最小嵌入原则）。窗口外池记录在余弦比对
+    中永远不会被取到，无需向量。"""
+    buckets = build_date_buckets(data, pool_indices)
+    scan = set(target_indices)
+    for a in target_indices:
+        date_a = parse_date(data[a].get("d", ""))
+        if date_a:
+            scan.update(pool_window_indices(buckets, date_a, window_days))
+    return sorted(scan)
 
 
 def make_candidates(

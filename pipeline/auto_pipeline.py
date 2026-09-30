@@ -6,7 +6,7 @@
   （web 容器只读卷挂载，即时生效），并重建广度页派生快照、同步报告、
   bump breadth/version.txt（触发前端「新版本」提示条）。
 - 无 GitHub push、无 state 上传；state 只存本地 .pipeline_state.json。
-- 搜索索引重建（Step 10）由调用方以 SKIP_INDEX_BUILD=1 跳过。
+- QA 索引同步（Step 10，scripts/sync_qa_index.py）可用 SKIP_QA_INDEX_SYNC=1 跳过。
 
 原管线语义全部保留：
   1. state 是「已成功发布」的文件记录，不是「已看到的文件」
@@ -16,6 +16,14 @@
   5. 无日期文件（如 articles.csv）每次都重新处理（因为内容会变）
   6. 分片数量由数据量动态决定，前端也动态检测
   7. 单实例锁防止并发
+  8. 收尾维护（QA 索引同步、日报周报补跑、失败任务重试）每轮必跑——
+     「无新文件」不再作为跳过未完成任务的理由（2026-09-30 修复）
+
+退出码约定（systemd/cron 侧可据此告警）：
+  0 = 成功（全部源正常、维护完成）
+  1 = 失败（发布失败，state 未提交，下轮自动重试；未捕获异常同此）
+  2 = 失败（全部源 API 失败；收尾维护仍会执行）
+  3 = 部分成功（部分源/文件失败，或收尾维护未全部完成）
 """
 import json, os, sys, subprocess, time, hashlib, glob, re, fcntl
 from datetime import datetime, timezone, timedelta
@@ -25,7 +33,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scr
 from build_snapshot import build_snapshot
 from llm_client import call_glm_batch, call_glm
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.abspath(__file__))   # pipeline/ 根
+REPO_ROOT = os.path.dirname(REPO)                    # 仓库根（scripts/ 所在层）。
+# 历史缺陷：Step 10/11 把「仓库根脚本」拼在 REPO（pipeline/）下 → 实际日志
+# "Step 10: SKIPPED (scripts/sync_qa_index.py not found)"、
+# "pipeline/pipeline/scripts/generate_reports.py 不存在，日报周报月报全部失败"。
+# 仓库根脚本统一走 REPO_ROOT，pipeline 内脚本走 REPO。
+PENDING_FILE = os.path.join(REPO, ".pipeline_pending.json")
 DATA_DIR = os.path.join(REPO, "data", "processed")
 LITE_PATH = os.path.join(DATA_DIR, "all-records-lite.json")
 # state 放在持久化目录，不放 /tmp（tmpfs 重启即丢）
@@ -100,8 +114,14 @@ def gh_api(url):
         return None
 
 def get_source_files():
-    """Get latest file lists from all 3 source repos"""
+    """Get latest file lists (+ blob SHAs) from all 3 source repos.
+
+    返回 (files, sha_map)：sha_map[name][fname] = GitHub blob SHA，
+    用于检测已知文件的内容修订（防止历史文件版本被 7 天过滤或
+    「只看新文件名」机制永久漏掉）。
+    """
     new_files = {}
+    sha_map = {}
     for name, info in SOURCES.items():
         url = f"{info['repo']}/contents/{info['path']}"
         data = gh_api(url)
@@ -110,7 +130,9 @@ def get_source_files():
             continue
         csvs = sorted([d["name"] for d in data if d["name"].endswith(".csv")])
         new_files[name] = csvs
-    return new_files
+        sha_map[name] = {d["name"]: d.get("sha", "") for d in data
+                         if d["name"].endswith(".csv")}
+    return new_files, sha_map
 
 # ── State 管理 ──
 def load_state():
@@ -176,20 +198,26 @@ def clear_checkpoint():
 
 def check_new_files():
     """检测新文件或内容变化的滚动文件。
-    不修改 state。返回 (has_new, new_per_source, current, n_failed)。"""
+    不修改 state。返回 (has_new, new_per_source, current, n_failed, sha_map)。"""
     state = load_state()
-    current = get_source_files()
+    current, sha_map = get_source_files()
 
     # CI mode: only process files from the last N days to avoid backlog.
     # 冷启动豁免：state 里没有任何已知文件（新环境/全量重建）时不裁剪——
     # 从三个源头完整重建必须处理全部历史，不能只处理最近 7 天。
     max_days = os.environ.get("PIPELINE_MAX_DAYS")
     cold_start = not any(state.get("known_files", {}).values())
+    cutoff_str = None
     if max_days and not cold_start:
         max_days = int(max_days)
         cutoff = datetime.now(timezone(timedelta(hours=8))) - timedelta(days=max_days)
         cutoff_str = cutoff.strftime("%Y-%m-%d")
         log(f"  CI mode: only processing files dated >= {cutoff_str}")
+    else:
+        # 冷启动豁免或未设置 PIPELINE_MAX_DAYS：不做日期裁剪（全历史）。
+        # 历史缺陷：冷启动时 max_days 保持为真值字符串（如 "7"），下方
+        # `if max_days:` 仍生效但 cutoff_str 从未赋值 → UnboundLocalError。
+        max_days = None
 
     n_failed = len(SOURCES) - len(current)
     has_new = False
@@ -200,7 +228,22 @@ def check_new_files():
         new = current_set - known
         # CI filter: only keep recent files
         if max_days:
-            new = {f for f in new if _extract_date_from_filename(f, name) >= cutoff_str}
+            # 文件名无日期的文件保守保留（"" >= cutoff 恒 False 会静默丢弃）；
+            # 滚动文件本就每次做内容 hash 检查，无日期不受影响。
+            new = {f for f in new
+                   if not _extract_date_from_filename(f, name)
+                   or _extract_date_from_filename(f, name) >= cutoff_str}
+        # 已知非滚动文件的内容修订检测（GitHub blob SHA）：源重发布旧日期
+        # 文件时也能被发现——known 集合不再意味着永久跳过。
+        if not cold_start:
+            for fname in known & current_set:
+                if fname in ROLLING_FILES:
+                    continue  # 滚动文件下方有内容 hash 变化检查
+                cur_sha = (sha_map.get(name) or {}).get(fname)
+                old_sha = state.get("file_shas", {}).get(f"{name}/{fname}")
+                if cur_sha and old_sha and cur_sha != old_sha:
+                    new.add(fname)
+                    log(f"  [rev] {name}/{fname}: content revised (blob SHA changed)")
         # 滚动文件：即使文件名已知，如果内容 hash 变了也要重新处理
         for fname in list(files):
             if fname in ROLLING_FILES and fname in known:
@@ -212,7 +255,7 @@ def check_new_files():
         else:
             log(f"  {name}: up to date ({len(files)} files)")
 
-    return has_new, new_per_source, current, n_failed
+    return has_new, new_per_source, current, n_failed, sha_map
 
 
 def _extract_date_from_filename(fname, source_name):
@@ -230,35 +273,51 @@ def _extract_date_from_filename(fname, source_name):
         return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
     return ""
 
-def commit_state(current, processed_files):
+def commit_state(current, processed_files, sha_map=None):
     """只把成功处理并推送的文件标记为已处理。
-    processed_files: {source_name: [(fname, content_hash), ...]}"""
+    processed_files: {source_name: [(fname, content_hash), ...]}
+    sha_map: {source_name: {fname: github_blob_sha}}（用于内容修订检测）"""
     state = load_state()
     # Ensure keys exist (handle legacy state files)
     if "known_files" not in state:
         state["known_files"] = {}
     if "file_hashes" not in state:
         state["file_hashes"] = {}
+    if "file_shas" not in state:
+        state["file_shas"] = {}
+    sha_map = sha_map or {}
     for name in current:
         existing = set(state["known_files"].get(name, []))
         for fname, _hash in processed_files.get(name, []):
             existing.add(fname)
             state["file_hashes"][f"{name}/{fname}"] = _hash
+            sha = (sha_map.get(name) or {}).get(fname)
+            if sha:
+                state["file_shas"][f"{name}/{fname}"] = sha
         state["known_files"][name] = sorted(existing)
     save_state(state)
     log(f"  State committed ({sum(len(v) for v in processed_files.values())} files marked)")
 
 # ── CSV 下载与解析 ──
 def download_new_csvs(new_per_source):
-    """下载 CSV 文件。返回 (records, successfully_downloaded, failed_files)。
+    """下载 CSV 文件。返回 (records, successfully_downloaded, failed_files,
+    roll_changed, roll_deleted)。
     successfully_downloaded: {source: [(fname, hash), ...]}
     failed_files: [(source, fname), ...]
+    roll_changed: 源内容有修订的记录行（旧版本由 Step 2b upsert 移除后，
+                  新版本随正常入库链重新分类/摘要/合并）
+    roll_deleted: 源已删除记录的 URL 列表（Step 2b 从 lite 移除）
+    历史缺陷（2026-09-30 修复）：diff_csv_records/upsert_records 已实现但
+    主流程从未调用 → 源内容更新与删除永远落不了地。
     """
     import csv as csv_mod
+    import shutil
 
     new_records = []
     successfully_downloaded = {}
     failed_files = []
+    roll_changed = []
+    roll_deleted = []
 
     for name, new_files in new_per_source.items():
         info = SOURCES[name]
@@ -313,15 +372,12 @@ def download_new_csvs(new_per_source):
 
             # 验证内容是否真的变化（针对滚动文件）
             chash = file_content_hash(local_path)
-            # T5: Persist CSV to data/csv_cache/ for future record-level diff
+            # T5/T6/T7: 记录级 diff 的基线缓存 data/csv_cache/{source}/{fname}。
+            # 顺序修复：旧缓存在解析成功后才被新副本覆盖——解析失败的文件
+            # 不会丢失 diff 基线（旧实现先覆盖后解析，失败即永久丢基线）。
             cache_dir = os.path.join(REPO, "data", "csv_cache", name)
             os.makedirs(cache_dir, exist_ok=True)
             cache_path = os.path.join(cache_dir, fname)
-            try:
-                import shutil
-                shutil.copy2(local_path, cache_path)
-            except Exception:
-                pass  # Non-fatal: cache is best-effort
             state = load_state()
             old_hash = state.get("file_hashes", {}).get(
                 f"{name}/{fname}",
@@ -329,8 +385,18 @@ def download_new_csvs(new_per_source):
             )
             if fname in ROLLING_FILES and old_hash == chash:
                 log(f"  {fname}: content unchanged, skipping")
+                try:
+                    shutil.copy2(local_path, cache_path)  # 确保缓存为最新副本
+                except Exception:
+                    pass  # Non-fatal: cache is best-effort
                 successfully_downloaded[name].append((fname, chash))
                 continue
+            # 内容确有变化且存在旧缓存 → 做记录级 diff（更新/删除接入）。
+            # 不限于 ROLLING_FILES：日期文件被源重发布（SHA 检测重新入队）时
+            # 同样能捕获修订。
+            diff_base = None
+            if os.path.exists(cache_path) and file_content_hash(cache_path) != chash:
+                diff_base = cache_path
 
             # Parse CSV
             try:
@@ -385,11 +451,26 @@ def download_new_csvs(new_per_source):
                             "sr": f"{name}/{fname}",
                         })
                 successfully_downloaded[name].append((fname, chash))
+                # 解析成功才落缓存/做 diff（失败文件下轮重试时仍用旧基线）
+                if diff_base:
+                    try:
+                        d = diff_csv_records(diff_base, local_path, name)
+                        if d["changed"] or d["deleted"]:
+                            roll_changed.extend(d["changed"])
+                            roll_deleted.extend(d["deleted"])
+                            log(f"  {fname}: record diff → changed={len(d['changed'])} "
+                                f"deleted={len(d['deleted'])} new={len(d['new'])}")
+                    except Exception as diff_err:
+                        log(f"  [WARN] record diff failed (non-fatal): {diff_err}")
+                try:
+                    shutil.copy2(local_path, cache_path)
+                except Exception:
+                    pass  # Non-fatal: cache is best-effort
             except Exception as e:
                 log(f"  [ERROR] Parse error {fname}: {e} — will NOT mark as processed")
                 failed_files.append((name, fname))
 
-    return new_records, successfully_downloaded, failed_files
+    return new_records, successfully_downloaded, failed_files, roll_changed, roll_deleted
 
 # ── 去重 ──
 def normalize_url(url):
@@ -461,6 +542,9 @@ def diff_csv_records(old_csv_path, new_csv_path, source_name):
     """Compare old and new CSV at record level using URL as key.
     Returns dict with keys: unchanged, changed, deleted, new (lists of new-CSV rows).
     """
+    import csv as csv_mod  # 历史缺陷：csv_mod 只在 download_new_csvs 内导入，
+    # 本函数从未被主流程调用 → NameError 一直潜伏未被暴露（2026-09-30 接线时修复）
+
     def load_csv_rows(path):
         """Load CSV into {normalize_url: [rows]} mapping."""
         groups = {}
@@ -504,11 +588,19 @@ def diff_csv_records(old_csv_path, new_csv_path, source_name):
 def upsert_records(lite, changed_records, deleted_urls):
     """Process changed and deleted records from rolling file updates.
     Does NOT touch manually imported records (source=='excel-import' or lv>=1).
-    Returns updated lite list.
+    Returns (updated_lite, changed_removed, deleted_removed)。
+
+    2026-09-30 接线时修复的两处死代码缺陷：
+    1. changed_records 是 diff_csv_records 返回的原始 CSV 行（列名
+       url/link/URL），不是 lite 记录（键 u）——旧实现只取 "u" 键 →
+       URL 恒空、更新静默无效；
+    2. 旧实现在 changed 过滤后缩小 lite，再复用旧 url_index 处理删除 →
+       索引错位：命中错位的保护记录时漏删，否则可能误删无辜记录。
+       现改为：变更/删除统一在原始索引上判定，最后一次过滤。
     """
     PROTECTED = lambda r: r.get("source") == "excel-import" or r.get("lv") == 3
 
-    # Build URL → [idx] index for non-protected records only
+    # Build URL → [idx] index for non-protected records only（原始索引）
     url_index = {}
     for idx, r in enumerate(lite):
         if PROTECTED(r):
@@ -517,35 +609,28 @@ def upsert_records(lite, changed_records, deleted_urls):
         if u:
             url_index.setdefault(u, []).append(idx)
 
-    # Handle changed: delete old, append new
-    changed_count = 0
+    changed_to_delete = set()
     if changed_records:
-        changed_urls = set()
         for r in changed_records:
-            u = normalize_url(r.get("u", ""))
+            u = normalize_url(r.get("u", r.get("url", r.get("link", r.get("URL", "")))))
             if u:
-                changed_urls.add(u)
-        # Delete old records with these URLs (non-protected only)
-        to_delete = set()
-        for u in changed_urls:
-            for idx in url_index.get(u, []):
-                if not PROTECTED(lite[idx]):
-                    to_delete.add(idx)
-        lite = [r for i, r in enumerate(lite) if i not in to_delete]
-        changed_count = len(to_delete)
+                for idx in url_index.get(u, []):
+                    changed_to_delete.add(idx)
 
-    # Handle deleted: remove records with these URLs
-    deleted_count = 0
+    deleted_to_delete = set()
     if deleted_urls:
-        to_delete = set()
         for u in deleted_urls:
-            for idx in url_index.get(u, []):
-                if not PROTECTED(lite[idx]):
-                    to_delete.add(idx)
-        lite = [r for i, r in enumerate(lite) if i not in to_delete]
-        deleted_count = len(to_delete)
+            for idx in url_index.get(str(u), []):
+                deleted_to_delete.add(idx)
 
-    return lite, changed_count, deleted_count
+    # 同一 URL 同时出现在 changed 与 deleted 时按 deleted 计（语义更保守：
+    # 源已声明删除）；两个集合都只统计真正会移除的记录
+    deleted_to_delete -= changed_to_delete
+    to_remove = (changed_to_delete | deleted_to_delete)
+    to_remove = {i for i in to_remove if not PROTECTED(lite[i])}
+
+    new_lite = [r for i, r in enumerate(lite) if i not in to_remove]
+    return new_lite, len(changed_to_delete & to_remove), len(deleted_to_delete & to_remove)
 
 # ── GLM 调用 ──
 # call_glm_batch is imported from llm_client (no longer uses hermes CLI)
@@ -966,8 +1051,17 @@ def incremental_cluster(start_index, total_count):
     cache = clustering.load_cache()
     log(f"  增量聚类: {len(new_indices)} 新记录，embedding 缓存 {len(cache)}")
 
-    # Ensure vectors for new records (historical ones are already cached)
-    vectors = clustering.ensure_vectors(data, new_indices, cache, save_every=64)
+    # 2026-09-30 修复：候选比对扫的是「新记录 ∪ 20 天日期窗口内的历史池」，
+    # 向量必须两边都有。历史缺陷：只 ensure 新记录向量——make_candidates 取
+    # 历史池向量时 vectors[b] 抛裸 KeyError(<lite 位置>)（模型加载失败长期
+    # 掩盖了这条路径，模型修复后首次暴露）。扫描集必须按日期窗口取（实测
+    # 4626 条），不能并上整个 41k 池——窗口外的池记录在比对中永远不会被
+    # 触碰，全池嵌入等于把全历史重嵌一遍（数小时，违反最小嵌入原则）。
+    scan_indices = clustering.comparison_scan(data, new_indices, pool_indices)
+    n_cached_before = sum(1 for i in scan_indices
+                          if clustering.fingerprint(data[i]) in cache)
+    log(f"  候选扫描集: {len(scan_indices)} 条（其中历史池已缓存 {n_cached_before}）")
+    vectors = clustering.ensure_vectors(data, scan_indices, cache, save_every=64)
 
     candidates = clustering.make_candidates(data, new_indices, pool_indices, vectors)
     log(f"  候选对: {len(candidates)}")
@@ -1155,6 +1249,229 @@ def publish_to_boundary():
         return False
 
 
+# ── 失败任务持久化与重试（2026-09-30 修复）──
+# 设计约束：失败任务持久化并重试，不允许永久跳过。聚类/会议提取失败
+# 先落 .pipeline_pending.json（先标记后执行，崩溃也不丢），每轮收尾补跑，
+# 成功即清除。不设尝试上限——任务失败会在日志中持续暴露。
+
+def _record_key(r):
+    return "|".join([str(r.get("t", "") or ""), str(r.get("d", "") or ""),
+                     str(r.get("u", "") or "")])
+
+
+def _load_pending():
+    try:
+        with open(PENDING_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_pending(p):
+    tmp = PENDING_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(p, f, ensure_ascii=False)
+    os.replace(tmp, PENDING_FILE)
+
+
+def _mark_pending(key, value):
+    p = _load_pending()
+    p[key] = value
+    _save_pending(p)
+
+
+def _clear_pending(key):
+    p = _load_pending()
+    if key in p:
+        p.pop(key, None)
+        _save_pending(p)
+
+
+def _run_conference_extraction():
+    """会议提取 + 去重子进程封装。返回是否全部成功；超时抛 TimeoutExpired。
+
+    历史缺陷：timeout=300s 对全量 lite 过小且超时/失败仅 WARN 即跳过
+    （永久丢失）。两层修复（2026-09-30）：
+    1. 提取脚本改为增量模式（--since-days，默认 14 天）——全量重扫 68k 条
+       在任何合理预算内都不可能完成（历史实测 300s/900s 全部超时）；
+    2. 超时上限 CONF_EXTRACT_TIMEOUT（默认 900s），去重 CONF_DEDUP_TIMEOUT
+       （默认 300s）。超时/失败进入待重试，由收尾流程补跑。"""
+    conf_timeout = int(os.environ.get("CONF_EXTRACT_TIMEOUT", "900"))
+    conf_since = int(os.environ.get("CONF_SINCE_DAYS", "14"))
+    dedup_timeout = int(os.environ.get("CONF_DEDUP_TIMEOUT", "300"))
+    ok = True
+    r1 = subprocess.run(
+        [sys.executable, os.path.join(REPO, "scripts", "extract_conferences.py"),
+         "--since-days", str(conf_since)],
+        capture_output=True, text=True, cwd=REPO_ROOT, timeout=conf_timeout)
+    if r1.returncode == 0:
+        tail = [l for l in (r1.stdout or "").strip().split("\n") if l.strip()]
+        log("  " + (tail[-1] if tail else "ok"))
+    else:
+        ok = False
+        log(f"  [WARN] 会议提取失败: {(r1.stderr or r1.stdout or '')[-200:]}")
+    r2 = subprocess.run(
+        [sys.executable, os.path.join(REPO, "scripts", "dedup_conferences.py")],
+        capture_output=True, text=True, cwd=REPO_ROOT, timeout=dedup_timeout)
+    if r2.returncode == 0:
+        tail = [l for l in (r2.stdout or "").strip().split("\n") if l.strip()]
+        log("  " + (tail[-1] if tail else "ok"))
+    else:
+        ok = False
+        log(f"  [WARN] 会议去重失败: {(r2.stderr or r2.stdout or '')[-200:]}")
+    return ok
+
+
+def _retry_pending_tasks():
+    """重试上次失败/超时的聚类与会议提取（收尾流程每轮调用）。
+    返回是否全部待办都已收敛（成功或确认无意义）。"""
+    p = _load_pending()
+    if not p:
+        return True
+    ok = True
+    if p.get("cluster"):
+        if os.environ.get("SKIP_CLUSTER"):
+            log("  [retry] SKIP_CLUSTER 已设置——聚类待办保留，下轮继续")
+        else:
+            log("  [retry] 待重试：增量聚类…")
+            try:
+                with open(LITE_PATH) as f:
+                    lite = json.load(f)
+                keys = set((p.get("cluster") or {}).get("keys") or [])
+                if keys:
+                    positions = [i for i, r in enumerate(lite) if _record_key(r) in keys]
+                    if not positions:
+                        log("  [retry] 聚类目标记录已不在 lite 中，清除待办")
+                        _clear_pending("cluster")
+                    else:
+                        incremental_cluster(min(positions), len(lite))
+                        _clear_pending("cluster")
+                        log("  [retry] 增量聚类补跑完成")
+                else:
+                    incremental_cluster(0, len(lite))
+                    _clear_pending("cluster")
+                    log("  [retry] 增量聚类补跑完成（全量增量口径）")
+            except Exception as ce:
+                ok = False
+                log(f"  [retry] 增量聚类仍失败（待办保留，下轮继续）: {ce}")
+    if p.get("conferences"):
+        log("  [retry] 待重试：会议提取…")
+        try:
+            if _run_conference_extraction():
+                _clear_pending("conferences")
+                log("  [retry] 会议提取补跑完成")
+            else:
+                ok = False
+                log("  [retry] 会议提取仍失败（待办保留，下轮继续）")
+        except subprocess.TimeoutExpired:
+            ok = False
+            log("  [retry] 会议提取仍超时（待办保留，下轮继续）")
+        except Exception as ce:
+            ok = False
+            log(f"  [retry] 会议提取仍失败（待办保留，下轮继续）: {ce}")
+    return ok
+
+
+# ── 收尾维护（2026-09-30 修复）──
+# 历史缺陷：无新文件/无新记录/全重复分支提前 return，跳过 QA 索引同步、
+# 日报周报补跑与失败任务重试——上一轮的失败被永久搁置。现在 Step 10/11
+# 逻辑收拢为 run_maintenance()：happy path 与全部提前分支都调用它。
+def run_maintenance():
+    """失败任务重试 + QA 索引同步（Step 10）+ 日报/周报/月报补跑（Step 11）。
+    返回是否全部成功（调用方据此决定退出码 0/3）。"""
+    ok = True
+
+    if not _retry_pending_tasks():
+        ok = False
+
+    # Step 10: 问答索引同步（发布视图 → canonical-qa 增量索引）
+    # 旧实现（本仓库 qa-backend/ 下重建 BM25/向量索引）已随 tech-db 迁出
+    # 而失效；现在通过 scripts/sync_qa_index.py（仓库根）把发布分片差异推送
+    # 进 canonical-qa 的增量索引（/api/index/upsert 契约，幂等、断点续推）。
+    # 失败非致命：下一轮管线自动补推（水印只在全部批次成功后落盘）。
+    sync_script = os.path.join(REPO_ROOT, "scripts", "sync_qa_index.py")
+    sync_python = os.path.join(REPO, ".venv", "bin", "python")
+    if not os.path.exists(sync_python):
+        sync_python = sys.executable
+    if os.environ.get("SKIP_QA_INDEX_SYNC"):
+        log("Step 10: SKIPPED (SKIP_QA_INDEX_SYNC env var set)")
+    elif not os.path.exists(sync_script):
+        ok = False
+        log(f"Step 10: MISSING ({sync_script}) — 配置错误，须修复")
+    else:
+        log("Step 10: Syncing published records into canonical-qa index...")
+        try:
+            sync_result = subprocess.run(
+                [sync_python, sync_script],
+                capture_output=True, text=True, cwd=REPO_ROOT, timeout=28800,
+                env={**os.environ, "TECHDB_QA_SYNC_URL": os.environ.get("TECHDB_QA_SYNC_URL", "http://127.0.0.1:8767")},
+            )
+            output_tail = [l for l in (sync_result.stdout or "").strip().split("\n") if l.strip()]
+            for line in output_tail[-4:]:
+                log(f"  {line}")
+            if sync_result.returncode != 0:
+                ok = False
+                log(f"  [WARN] QA index sync failed (non-fatal, retried next run): "
+                    f"{(sync_result.stderr or '')[-200:]}")
+            else:
+                log("  QA index sync complete.")
+        except subprocess.TimeoutExpired:
+            ok = False
+            log("  [WARN] QA index sync timeout (8h) — retried next run")
+        except Exception as sync_exc:
+            ok = False
+            log(f"  [WARN] QA index sync error (non-fatal): {sync_exc}")
+
+    # Step 11: Reports — 补跑制：每次运行用 --all 补齐所有缺失周期。
+    # generate_reports.generate_all 以「完整周期已过」为界枚举日期，
+    # 已存在且非空的报告自动跳过 → 幂等；上次 GLM 失败/超时留下的缺口
+    # 本轮自动补上（失败非致命，缺口下轮继续补）。无新情报的日期按
+    # "no records" 跳过（真实语义：该日无精选/预警级情报可成稿）。
+    log("Step 11: Generating reports (catch-up all)...")
+    report_failed = False
+    try:
+        venv_python = os.path.join(REPO, ".venv", "bin", "python")
+        report_scripts = os.path.join(REPO, "scripts", "generate_reports.py")
+        if not os.path.exists(report_scripts):
+            ok = False
+            log(f"  MISSING {report_scripts} — 配置错误，须修复")
+        else:
+            # 日报 catch-up 实测需 300s+（首次补稿 46 天 × ~6.5s/天），300s 预算
+            # 恰好杀在半途（2026-09-30 实测）。日报默认 1200s，环境变量可覆盖。
+            for rtype, timeout_s in (
+                    ("daily", int(os.environ.get("REPORT_TIMEOUT_DAILY", "1200"))),
+                    ("weekly", int(os.environ.get("REPORT_TIMEOUT_WEEKLY", "600"))),
+                    ("monthly", int(os.environ.get("REPORT_TIMEOUT_MONTHLY", "600")))):
+                log(f"  11/{rtype}: catch-up...")
+                try:
+                    result = subprocess.run(
+                        [venv_python, report_scripts, "--type", rtype, "--all"],
+                        capture_output=True, text=True, cwd=REPO_ROOT, timeout=timeout_s)
+                    if result.returncode == 0:
+                        tail = [l for l in result.stdout.strip().split("\n") if l.strip()]
+                        log("  " + (tail[-1] if tail else "ok"))
+                    else:
+                        report_failed = True
+                        log(f"  [WARN] {rtype} report failed: {(result.stderr or result.stdout)[:200]}")
+                except subprocess.TimeoutExpired:
+                    report_failed = True
+                    log(f"  [WARN] {rtype} report timeout ({timeout_s}s) — catch-up retries next run")
+
+            # 11d: Publish reports to breadth（无 GitHub；本地安装即时生效）
+            log("  11d: Publishing reports...")
+            if not publish_to_boundary():
+                report_failed = True
+                log("  [WARN] report publish failed — retried next run")
+
+            log("Step 11 complete." + (" (with failures — catch-up next run)" if report_failed else ""))
+    except Exception as rep_err:
+        report_failed = True
+        log(f"  [WARN] Report generation failed (non-fatal): {rep_err}")
+    if report_failed:
+        ok = False
+    return ok
+
+
 # ── 主流程 ──
 def main():
     lock_fd = acquire_lock()
@@ -1168,12 +1485,16 @@ def main():
 
     # Step 1: Check for new files (does NOT save state)
     log("Step 1: Checking source repos...")
-    has_new, new_per_source, current, n_failed = check_new_files()
+    has_new, new_per_source, current, n_failed, sha_map = check_new_files()
 
+    # 退出码：0=成功 1=发布失败 2=全部源失败 3=部分成功（见模块 docstring）
     if n_failed == len(SOURCES):
         log(f"[ERROR] All {n_failed} source API calls failed. Aborting (will retry next run).")
-        return
-    if n_failed:
+        # 收尾维护照跑：待办重试/QA 索引同步/报告补跑均不依赖数据源
+        run_maintenance()
+        sys.exit(2)
+    partial = bool(n_failed)
+    if partial:
         log(f"  [WARN] {n_failed}/{len(SOURCES)} source(s) API failed — proceeding with partial data.")
     if not has_new:
         # 2026-08-16 fix: no new source files ≠ nothing to do — a previous
@@ -1185,16 +1506,38 @@ def main():
             log(f"  [self-heal] snapshot rebuilt ({shard_count} shards)")
             if not publish_to_boundary():
                 log("  [WARN] self-heal publish failed — retried next run")
-        log("No new files. Done.")
-        return
+        # 2026-09-30 fix: 无新文件不再跳过收尾维护（QA 索引同步、报告补跑、
+        # 失败任务重试每轮必跑——上一轮的失败不能被永久搁置）。
+        log("No new files. Running maintenance before exit...")
+        if not run_maintenance():
+            partial = True
+        sys.exit(3 if partial else 0)
 
     try:
         # Step 2: Download and parse new CSVs
         log("Step 2: Downloading new data...")
-        new_records, successfully_downloaded, failed_files = download_new_csvs(new_per_source)
+        new_records, successfully_downloaded, failed_files, roll_changed, roll_deleted = download_new_csvs(new_per_source)
         log(f"  Parsed {len(new_records)} new records from CSVs")
         if failed_files:
+            partial = True
             log(f"  [WARN] {len(failed_files)} files failed to download: {[f[1] for f in failed_files]}")
+
+        # Step 2b: 源内容更新/删除接入（先于 Step 3 去重：旧版本先移除，
+        # 修订行才不会被 title/body/url 去重误判为重复而丢弃）
+        if roll_changed or roll_deleted:
+            if os.path.exists(LITE_PATH):
+                log("Step 2b: Apply source updates/deletes...")
+                with open(LITE_PATH) as f:
+                    lite_now = json.load(f)
+                lite_now, n_upd, n_del = upsert_records(lite_now, roll_changed, roll_deleted)
+                if n_upd or n_del:
+                    build_snapshot(lite_now)
+                    log(f"  [upsert] 移除旧版本 {n_upd} 条、已删除 {n_del} 条"
+                        f"（非保护记录；新版本随后走正常入库链）")
+                else:
+                    log("  [upsert] 无可应用的变更")
+            else:
+                log("Step 2b: SKIPPED (cold-start — no lite yet)")
 
         # 即使没有新记录（全是重复或下载失败），也只 commit 成功下载的文件
         if not new_records:
@@ -1202,8 +1545,11 @@ def main():
             if not publish_to_boundary():
                 log("[FATAL] Publish failed — state NOT committed.")
                 sys.exit(1)
-            commit_state(current, successfully_downloaded)
-            return
+            commit_state(current, successfully_downloaded, sha_map)
+            log("No new records. Running maintenance before exit...")
+            if not run_maintenance():
+                partial = True
+            sys.exit(3 if partial else 0)
 
         # Step 3: Dedup against existing
         log("Step 3: Dedup check...")
@@ -1223,8 +1569,11 @@ def main():
             if not publish_to_boundary():
                 log("[FATAL] Publish failed — state NOT committed.")
                 sys.exit(1)
-            commit_state(current, successfully_downloaded)
-            return
+            commit_state(current, successfully_downloaded, sha_map)
+            log("All duplicates. Running maintenance before exit...")
+            if not run_maintenance():
+                partial = True
+            sys.exit(3 if partial else 0)
 
         # Step 4: Translate titles + Classify + Score
         log("Step 4: Translate titles + Classify + Score...")
@@ -1251,13 +1600,17 @@ def main():
         # Skip if caller sets SKIP_CLUSTER (clustering loads heavy embedding model → OOM risk)
         if merged_count > 0 and not os.environ.get("SKIP_CLUSTER"):
             log("Step 6b: Incremental clustering...")
+            # 先标记待办再执行：进程崩溃也不丢重试（成功后清除）
+            _mark_pending("cluster", {"keys": [_record_key(r) for r in unique]})
             try:
                 cluster_count = incremental_cluster(start_index, total_after_merge)
+                _clear_pending("cluster")
             except Exception as ce:
-                log(f"  [WARN] 增量聚类失败，跳过: {ce}")
+                log(f"  [WARN] 增量聚类失败——已记入待重试，下轮收尾补跑: {ce}")
                 cluster_count = 0
         elif merged_count > 0:
-            log("Step 6b: SKIPPED (SKIP_CLUSTER env var set)")
+            log("Step 6b: SKIPPED (SKIP_CLUSTER env var set — 下轮收尾补跑)")
+            _mark_pending("cluster", {"keys": [_record_key(r) for r in unique]})
             cluster_count = 0
 
         # Step 6c: Extract conferences + dedup —— 与聚类解耦：
@@ -1265,32 +1618,15 @@ def main():
         # 会议提取永不执行。现在只要本批有合并记录就执行。
         if merged_count > 0:
             log("Step 6c: Extract conferences...")
+            _mark_pending("conferences", True)
             try:
-                conf_result = subprocess.run(
-                    [sys.executable, os.path.join(REPO, "scripts", "extract_conferences.py")],
-                    capture_output=True, text=True, cwd=REPO, timeout=300
-                )
-                if conf_result.returncode == 0:
-                    log("  " + conf_result.stdout.strip().split('\n')[-1])
-                else:
-                    log(f"  [WARN] 会议提取失败: {conf_result.stderr[:200]}")
+                if _run_conference_extraction():
+                    _clear_pending("conferences")
             except subprocess.TimeoutExpired:
-                log("  [WARN] 会议提取超时，跳过")
+                log(f"  [WARN] 会议提取超时（CONF_EXTRACT_TIMEOUT="
+                    f"{os.environ.get('CONF_EXTRACT_TIMEOUT', '900')}s）——已记入待重试，下轮收尾补跑")
             except Exception as ce:
-                log(f"  [WARN] 会议提取异常: {ce}")
-
-            log("Step 6c.2: Dedup conferences...")
-            try:
-                dedup_result = subprocess.run(
-                    [sys.executable, os.path.join(REPO, "scripts", "dedup_conferences.py")],
-                    capture_output=True, text=True, cwd=REPO, timeout=120
-                )
-                if dedup_result.returncode == 0:
-                    log("  " + dedup_result.stdout.strip().split('\n')[-1])
-                else:
-                    log(f"  [WARN] 会议去重失败: {dedup_result.stderr[:200]}")
-            except Exception as ce:
-                log(f"  [WARN] 会议去重异常: {ce}")
+                log(f"  [WARN] 会议提取异常——已记入待重试: {ce}")
 
         # Step 6d: self-heal 未分类 backlog (incl. any from THIS run's
         # failed classification batches — bounded to keep the run fast).
@@ -1325,83 +1661,23 @@ def main():
 
         # Step 9: Commit state ONLY after successful publish（本地文件，无需上传）
         log("Step 9: Commit state...")
-        commit_state(current, successfully_downloaded)
+        commit_state(current, successfully_downloaded, sha_map)
 
-
-        # Step 10: 问答索引同步（发布视图 → canonical-qa 增量索引）
-        # 旧实现（本仓库 qa-backend/ 下重建 BM25/向量索引）已随 tech-db 迁出
-        # 而失效；现在通过 scripts/sync_qa_index.py 把发布分片差异推送进
-        # canonical-qa 的增量索引（/api/index/upsert 契约，幂等、断点续推）。
-        # 失败非致命：下一轮管线自动补推（水印只在全部批次成功后落盘）。
-        sync_script = os.path.join(REPO, "scripts", "sync_qa_index.py")
-        sync_python = os.path.join(REPO, "pipeline", ".venv", "bin", "python")
-        if not os.path.exists(sync_python):
-            sync_python = sys.executable
-        if os.environ.get("SKIP_QA_INDEX_SYNC"):
-            log("Step 10: SKIPPED (SKIP_QA_INDEX_SYNC env var set)")
-        elif not os.path.exists(sync_script):
-            log("Step 10: SKIPPED (scripts/sync_qa_index.py not found)")
-        else:
-            log("Step 10: Syncing published records into canonical-qa index...")
-            try:
-                sync_result = subprocess.run(
-                    [sync_python, sync_script],
-                    capture_output=True, text=True, cwd=REPO, timeout=28800,
-                    env={**os.environ, "TECHDB_QA_SYNC_URL": os.environ.get("TECHDB_QA_SYNC_URL", "http://127.0.0.1:8767")},
-                )
-                output_tail = [l for l in (sync_result.stdout or "").strip().split("\n") if l.strip()]
-                for line in output_tail[-4:]:
-                    log(f"  {line}")
-                if sync_result.returncode != 0:
-                    log(f"  [WARN] QA index sync failed (non-fatal, retried next run): "
-                        f"{(sync_result.stderr or '')[-200:]}")
-                else:
-                    log("  QA index sync complete.")
-            except subprocess.TimeoutExpired:
-                log("  [WARN] QA index sync timeout (8h) — retried next run")
-            except Exception as sync_exc:
-                log(f"  [WARN] QA index sync error (non-fatal): {sync_exc}")
-
+        # Step 10（QA 索引同步）/ Step 11（报告补跑）+ 失败任务重试收拢为
+        # 收尾维护 run_maintenance()：happy path 与全部提前分支共用同一实现，
+        # 消除「无新数据提前 return 跳过维护」的历史缺陷。
+        # Step 10: 问答索引同步——通过仓库根 scripts/sync_qa_index.py 把发布
+        # 分片差异推送进 canonical-qa 增量索引（幂等、断点续推）；失败非致命，
+        # 下一轮收尾自动补推（水印只在全部批次成功后落盘）。
+        # Step 11: 日报/周报/月报补跑（--all 幂等），失败缺口下轮自动补上。
         # 10c: Knowledge graph — graph-export.json 由独立图谱管线重建并
-        # 发布到 services/canonical-qa/graph-live/（bind mount 即时生效），
-        # 见 Step 8/发布段；此处不再重复构建。
-
-        # Step 11: Reports — 补跑制：每次运行用 --all 补齐所有缺失周期。
-        # generate_reports.generate_all 以「完整周期已过」为界枚举日期，
-        # 已存在且非空的报告自动跳过 → 幂等；上次 GLM 失败/超时留下的缺口
-        # 本轮自动补上（失败非致命，缺口下轮继续补）。无新情报的日期按
-        # "no records" 跳过（真实语义：该日无精选/预警级情报可成稿）。
-        log("Step 11: Generating reports (catch-up all)...")
-        try:
-            venv_python = os.path.join(REPO, ".venv", "bin", "python")
-            report_scripts = os.path.join(REPO, "pipeline", "scripts", "generate_reports.py")
-            report_failed = False
-            for rtype, timeout_s in (("daily", 300), ("weekly", 600), ("monthly", 600)):
-                log(f"  11/{rtype}: catch-up...")
-                try:
-                    result = subprocess.run(
-                        [venv_python, report_scripts, "--type", rtype, "--all"],
-                        capture_output=True, text=True, cwd=REPO, timeout=timeout_s)
-                    if result.returncode == 0:
-                        tail = [l for l in result.stdout.strip().split("\n") if l.strip()]
-                        log("  " + (tail[-1] if tail else "ok"))
-                    else:
-                        report_failed = True
-                        log(f"  [WARN] {rtype} report failed: {(result.stderr or result.stdout)[:200]}")
-                except subprocess.TimeoutExpired:
-                    report_failed = True
-                    log(f"  [WARN] {rtype} report timeout ({timeout_s}s) — catch-up retries next run")
-
-            # 11d: Publish reports to breadth（无 GitHub；本地安装即时生效）
-            log("  11d: Publishing reports...")
-            if not publish_to_boundary():
-                log("  [WARN] report publish failed — retried next run")
-
-            log("Step 11 complete." + (" (with failures — catch-up next run)" if report_failed else ""))
-        except Exception as re:
-            log(f"  [WARN] Report generation failed (non-fatal): {re}")
+        # 发布到 services/canonical-qa/graph-live/（bind mount 即时生效）。
+        maint_ok = run_maintenance()
 
         log(f"Pipeline complete: +{merged_count} records")
+        if not maint_ok:
+            partial = True
+        sys.exit(3 if partial else 0)
     except Exception as e:
         log(f"[ERROR] Pipeline failed: {e}")
         log("State NOT committed — files will be retried next run.")

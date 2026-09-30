@@ -11,10 +11,16 @@ Scans all records for conference announcements and extracts:
 Outputs to data/processed/conferences.json
 
 Usage:
-  python3 scripts/extract_conferences.py
+  python3 scripts/extract_conferences.py                    # 全量（重扫 lite 全历史）
+  python3 scripts/extract_conferences.py --since-days 14    # 增量：只扫近 N 天记录，
+                                                            # 与既有 conferences.json 合并
+                                                            # （2026-09-30 新增——历史缺陷：
+                                                            # 每轮全量重扫 68k 条 → LLM 批次
+                                                            # 数小时，300s/900s 预算必然超时，
+                                                            # 会议提取自上线起从未成功过）
 """
 from __future__ import annotations
-import json, os, sys, re
+import argparse, json, os, sys, re
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -87,13 +93,81 @@ def extract_batch(items: list[dict]) -> list[dict]:
     return results
 
 
+def merge_conferences(carry: list[dict], fresh: list[dict]) -> list[dict]:
+    """增量合并：既有条目保留；同名（大小写不敏感）以新提取为准做并集——
+    sources 按 url 去重合并，start_date 取最早，缺失字段用新值补全。
+    （增量模式只扫近 N 天，若直接覆盖会丢掉全历史会议——189 条。）"""
+    by_key: dict[str, dict] = {}
+    no_name: list[dict] = []
+    for c in carry:
+        key = str(c.get("name", "")).lower().strip()
+        if not key:
+            no_name.append(c)
+        else:
+            by_key.setdefault(key, c)
+    for c in fresh:
+        key = str(c.get("name", "")).lower().strip()
+        old = by_key.get(key)
+        if not old:
+            by_key[key] = c
+            continue
+        seen_urls = {s.get("url") for s in old.get("sources", []) if s.get("url")}
+        for s in c.get("sources", []):
+            u = s.get("url")
+            if u and u not in seen_urls:
+                old.setdefault("sources", []).append(s)
+                seen_urls.add(u)
+            elif not u:
+                old.setdefault("sources", []).append(s)
+        if c.get("start_date") and (not old.get("start_date")
+                                    or c["start_date"] < old["start_date"]):
+            old["start_date"] = c["start_date"]
+        for f in ("end_date", "location", "organizer"):
+            if c.get(f) and not old.get(f):
+                old[f] = c[f]
+    merged = no_name + list(by_key.values())
+    merged.sort(key=lambda c: c.get("start_date", ""))
+    return merged
+
+
 def main():
+    parser = argparse.ArgumentParser(description="Extract conferences from intelligence records")
+    parser.add_argument("--since-days", type=int, default=0,
+                        help=">0：增量模式，只扫描最近 N 天的记录并与既有 "
+                             "conferences.json 合并；0（默认）全量重扫并覆盖输出")
+    args = parser.parse_args()
+
     print("Loading data...", flush=True)
     data = json.loads(LITE_PATH.read_text("utf-8"))
     print(f"  {len(data)} total records", flush=True)
 
     candidates = find_conference_candidates(data)
     print(f"  {len(candidates)} conference candidates (pre-filter)", flush=True)
+
+    carry: list[dict] = []
+    if args.since_days > 0:
+        floor = (datetime.now() - timedelta(days=args.since_days)).strftime("%Y-%m-%d")
+        recent = []
+        for item in candidates:
+            r = item[1]
+            try:
+                if r.get("d", "") >= floor:
+                    recent.append(item)
+            except (TypeError, ValueError):
+                continue  # 无日期/日期不合规的记录增量模式下无法判定新旧，跳过
+        if OUTPUT_PATH.exists():
+            try:
+                loaded = json.loads(OUTPUT_PATH.read_text("utf-8"))
+                if isinstance(loaded, list):
+                    carry = loaded
+            except (ValueError, TypeError):
+                carry = []  # 既有产物损坏时按空处理（全量重扫可修复）
+        print(f"  增量模式：{len(recent)} 个候选（>= {floor}），既有 {len(carry)} 条会议",
+              flush=True)
+        candidates = recent
+        if not candidates:
+            print("No recent candidates — conferences.json unchanged", flush=True)
+            return
 
     if not candidates:
         print("No candidates found.", flush=True)
@@ -164,6 +238,10 @@ def main():
 
     # Sort by start_date
     deduped.sort(key=lambda c: c.get("start_date", ""))
+
+    if carry:
+        deduped = merge_conferences(carry, deduped)
+        print(f"增量合并既有 {len(carry)} 条 → 共 {len(deduped)} 条", flush=True)
 
     print(f"\nTotal unique conferences: {len(deduped)}", flush=True)
     OUTPUT_PATH.write_text(json.dumps(deduped, ensure_ascii=False, indent=2), "utf-8")

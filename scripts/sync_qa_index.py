@@ -62,6 +62,18 @@ MAX_CHUNK_CHARS = 500        # 单 chunk 正文截断（摘要在前；实测 CP
 UPSERT_TIMEOUT = 2400  # 单批嵌入+BM25 重建预算（40 分钟）
 
 
+def stable_record_id(rec: dict) -> str:
+    """与 scripts/rebuild_qa_base_index.py 同源的确定性 uuid5 身份。
+
+    URL 稳定则 ID 稳定（无 URL 记录用 t|d|a 派生）——统一身份键：
+    管线增量 chunk、离线基础索引、（未来）导入链都以它对齐同一记录。"""
+    import uuid
+    url = str(rec.get("u", "") or "").strip()
+    identity = f"url:{url}" if url else (
+        f"tda:{rec.get('t', '')}|{rec.get('d', '')}|{rec.get('a', '')}")
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, identity))
+
+
 def log(msg: str) -> None:
     print(f"[qa-sync {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
 
@@ -165,6 +177,10 @@ def build_payload(records: list[dict], data_version: str, batch_no: int) -> dict
                 "source": "pipeline-sync",
                 "score": rec.get("sc"),
                 "record_key_sha": key_digest(record_key(rec)),
+                # 统一身份（2026-09-30）：与基础索引重建同源的 uuid5
+                # （URL 稳定则 ID 稳定）→ server 端 dedup/版本替换以同一
+                # 身份对齐增量 chunk 与基础记录，跨基线不再重复召回。
+                "record_id": stable_record_id(rec),
             },
         })
     return {
@@ -190,6 +206,28 @@ def post_upsert(payload: dict, qa_url: str, token: str) -> dict:
         headers={"Content-Type": "application/json", **({"X-TechDB-Index-Token": token} if token else {})},
     )
     with urllib.request.urlopen(req, timeout=UPSERT_TIMEOUT) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+RECORD_OPS_TIMEOUT = 120  # record 变更只做内存过滤+墓碑落盘，预算远小于嵌入
+
+
+def post_record_ops(ops: list[tuple[str, dict]], qa_url: str, token: str) -> dict:
+    """把 record 级 UPDATE/DELETE 提交给服务端。
+
+    服务端职责（/api/index/record-mutate，2026-09-30 新增）：
+      - update：删除该 record_key_sha 的既有增量 chunk，并对基础索引中的
+        同键记录做「新版本替换」遮蔽（推送侧随后以普通 ADD 批次上送新版本）
+      - delete：删除增量 chunk，并把 record_key_sha 写入持久化墓碑，
+        向量/BM25/图谱/引用/会话证据全链路屏蔽
+    """
+    body = json.dumps({"ops": [{"record_key_sha": kh, **op} for kh, op in ops]},
+                      ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        f"{qa_url.rstrip('/')}/api/index/record-mutate", data=body, method="POST",
+        headers={"Content-Type": "application/json", **({"X-TechDB-Index-Token": token} if token else {})},
+    )
+    with urllib.request.urlopen(req, timeout=RECORD_OPS_TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -225,14 +263,20 @@ def main(argv: list[str] | None = None) -> int:
     log(f"管线 lite：{len(records)} 条 / data_version={data_version}")
 
     state = load_state()
-    if not args.reset_baseline and state.get("data_version") == data_version:
+    if (not args.reset_baseline and state.get("data_version") == data_version
+            and not state.get("pending_record_ops")):
+        # 幂等退出；但有待重试的 record 变更时必须继续——服务端镜像升级后
+        # （2026-09-30 实测：404 → 端点可用）靠这一轮把欠账补上并推进基线
         log("data_version 未变化 —— 已是最新，退出（幂等）")
         return 0
 
     baseline = {} if args.reset_baseline else baseline_key_hashes()
     log(f"基线条目：{len(baseline)}")
+    # ── 全量差异：ADD / UPDATE / DELETE（2026-09-30 修复：旧实现只认新增、
+    # 忽略内容更新、不处理删除，却照样推进基线 → 源修订/删除永远进不了问答
+    # 索引，且基线声明与索引实际内容脱节）──
     fresh: dict[str, dict] = {}
-    changed = 0
+    changed: dict[str, dict] = {}
     for rec in records:
         kh = key_digest(record_key(rec))
         rd = record_digest(rec)
@@ -240,11 +284,13 @@ def main(argv: list[str] | None = None) -> int:
         if prev is None:
             fresh[kh] = rec
         elif prev != rd:
-            changed += 1
-            # 内容更新不重推：基础索引持有全文版本（实测 66,858 个共同键
-            # 中仅 1 个正文变化），增量嵌入必须截断正文，重推反而以弱换强。
-            # 历史全量刷新走离线基础索引重建。
-    log(f"差异：新增 {len(fresh)} 条（另有 {changed} 条内容更新保留基础索引版本，不重推）")
+            changed[kh] = rec
+    published_keys = {key_digest(record_key(r)) for r in records}
+    deleted_keys = [kh for kh in baseline if kh not in published_keys]
+    if not args.reset_baseline:
+        log(f"差异：新增 {len(fresh)} / 内容更新 {len(changed)} / 删除 {len(deleted_keys)}")
+        for kh in deleted_keys[:5]:
+            log(f"  [del] {kh[:12]}…")
     if args.reset_baseline:
         SYNC_DIR.mkdir(parents=True, exist_ok=True)
         STATE_PATH.write_text(json.dumps({
@@ -255,19 +301,17 @@ def main(argv: list[str] | None = None) -> int:
         }, ensure_ascii=False), "utf-8")
         log(f"基线已重置：{STATE_PATH}")
         return 0
-    if not fresh:
-        SYNC_DIR.mkdir(parents=True, exist_ok=True)
-        STATE_PATH.write_text(json.dumps({
-            "data_version": data_version,
-            "key_hashes": {key_digest(record_key(r)): record_digest(r) for r in records},
-            "synced_at": datetime.now(timezone.utc).isoformat(),
-            "records": len(records),
-        }, ensure_ascii=False), "utf-8")
-        log("无新增记录 —— 状态已对齐，退出")
+    if not fresh and not changed and not deleted_keys:
+        log("发布视图与基线一致 —— 无需变更（只读退出，不落 state）")
         return 0
 
+    # ── dry-run：严格只读（2026-09-30 修复：旧实现 no-new 分支在本检查
+    # 之前就写 state，--dry-run 会推进基线）──
     if args.dry_run:
-        log(f"[dry-run] 将推送 {len(fresh)} 条 → {args.qa_url}")
+        log(f"[dry-run] 目标 {args.qa_url}：ADD {len(fresh)} / UPDATE {len(changed)} "
+            f"/ DELETE {len(deleted_keys)}；不落任何 state")
+        for kh, rec in list(fresh.items())[:3]:
+            log(f"  [add] {str(rec.get('t', ''))[:40]}")
         return 0
 
     state_partial = load_state()
@@ -277,7 +321,48 @@ def main(argv: list[str] | None = None) -> int:
         token_file = SYNC_DIR / "token"  # chmod 600，不入 git（runtime/）
         if token_file.exists():
             token = token_file.read_text("utf-8").strip()
+
+    # ── record 级变更（UPDATE/DELETE）走 /api/index/record-mutate（服务端
+    # 删除旧 chunk + 对基础版本做替换遮蔽/删除墓碑，检索侧全链路生效）。
+    # 服务端不支持（404）或失败时：变更记入 pending_record_ops 且【不推进
+    # 这些键的基线】——宁可下轮重做，不可把未生效的更新/删除谎报为已同步。
+    # ADD 批次推送契约不变（document 整体替换语义，幂等）。──
+    pending_ops = state_partial.get("pending_record_ops") or {}
+    record_ops: dict[str, dict] = {}
+    for kh in changed:
+        record_ops[kh] = {"op": "update"}
+    for kh in deleted_keys:
+        record_ops[kh] = {"op": "delete"}
+    for kh, op in pending_ops.items():
+        record_ops.setdefault(kh, op)
+    if record_ops:
+        t0 = time.time()
+        try:
+            result = post_record_ops(sorted(record_ops.items()), args.qa_url, token)
+            log(f"record 变更：update {len(changed)} + delete {len(deleted_keys)} + "
+                f"pending {len(pending_ops)} → ok={result.get('updated')}（{time.time() - t0:.1f}s）")
+            record_ops_ok = True
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                log("[WARN] 服务端不支持 /api/index/record-mutate（镜像未升级）——"
+                    "变更保留在 pending_record_ops，这些键的基线不推进")
+            else:
+                log(f"[ERROR] record-mutate HTTP {exc.code}：{exc.read()[:200]}")
+            record_ops_ok = False
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            log(f"[ERROR] record-mutate 失败：{exc}")
+            record_ops_ok = False
+    else:
+        record_ops_ok = True
+
     items = list(fresh.items())
+    # 内容更新的记录在 record-mutate 成功后必须随 ADD 批次上送新版本——
+    # 服务端 update 只删旧增量 chunk + 遮蔽基础旧版本；新版本不随批上送
+    # 的话该记录会从索引彻底消失（旧被遮、新未至，2026-09-30 端到端实测
+    # 发现）。record 变更失败（record_ops_ok=False）时不上送：服务端未
+    # 删旧版本，重推会以弱索引覆盖基础索引全文版本（见模块头注释）。
+    if record_ops_ok:
+        items += list(changed.items())
     total_batches = (len(items) + BATCH_RECORDS - 1) // BATCH_RECORDS
     synced = 0
     for batch_no in range(total_batches):
@@ -305,16 +390,31 @@ def main(argv: list[str] | None = None) -> int:
         SYNC_DIR.mkdir(parents=True, exist_ok=True)
         STATE_PATH.write_text(json.dumps(state_partial, ensure_ascii=False), "utf-8")
 
-    SYNC_DIR.mkdir(parents=True, exist_ok=True)
-    STATE_PATH.write_text(json.dumps({
+    # ── 基线推进：ADD 批次全部成功；record 变更成功 → 完整基线；
+    # record 变更未成功 → 这些键按操作前基线回填并留在 pending_record_ops
+    # （update：保留旧 digest；delete：键回填旧 digest），下轮重试。──
+    new_key_hashes = {key_digest(record_key(r)): record_digest(r) for r in records}
+    if not record_ops_ok:
+        for kh in record_ops:
+            if kh in baseline:
+                new_key_hashes[kh] = baseline[kh]
+    final_state = {
         "data_version": data_version,
-        "key_hashes": {key_digest(record_key(r)): record_digest(r) for r in records},
+        "key_hashes": new_key_hashes,
         "synced_at": datetime.now(timezone.utc).isoformat(),
         "records": len(records),
         "last_pushed": synced,
         "pushed_doc_ids": [],
-    }, ensure_ascii=False), "utf-8")
-    log(f"同步完成：{synced} 条入索引；状态已落盘 {STATE_PATH}")
+    }
+    if not record_ops_ok:
+        final_state["pending_record_ops"] = record_ops
+    SYNC_DIR.mkdir(parents=True, exist_ok=True)
+    STATE_PATH.write_text(json.dumps(final_state, ensure_ascii=False), "utf-8")
+    if not record_ops_ok:
+        log(f"同步部分完成：ADD {synced} 条入索引；{len(record_ops)} 条 update/delete "
+            f"待服务端支持后重试；状态已落盘 {STATE_PATH}")
+        return 3
+    log(f"同步完成：ADD {synced} / UPDATE+DELETE {len(record_ops)} 条；状态已落盘 {STATE_PATH}")
     return 0
 
 

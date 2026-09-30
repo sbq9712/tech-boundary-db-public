@@ -229,6 +229,43 @@ class IncrementalIndex:
                 self.bm25 = next_bm25
         return removed
 
+    async def remove_chunks_by_record_keys(self, record_key_shas: list[str]) -> int:
+        """按 record_key_sha 删除增量 chunk（record 级 UPDATE/DELETE 用，
+        2026-09-30）。同 document 的其他 chunk 不受影响；返回删除数。"""
+        keys = {str(k) for k in record_key_shas if k}
+        if not keys or not self.record_count:
+            return 0
+        async with self._lock:
+            with self._state_lock:
+                kept = []
+                removed = 0
+                for vector, meta, tokens in zip(
+                        self.embeddings, self.meta, self.corpus_tokens):
+                    md = meta.get("chunk_metadata") or {}
+                    ksha = str(md.get("record_key_sha") or "")
+                    if ksha and ksha in keys:
+                        removed += 1
+                        continue
+                    kept.append((vector, meta, tokens))
+                if not removed:
+                    return 0
+                if kept:
+                    next_embeddings = np.asarray([item[0] for item in kept], dtype=np.float32)
+                    next_meta = [item[1] for item in kept]
+                    next_corpus = [item[2] for item in kept]
+                    next_bm25 = BM25Okapi(next_corpus)
+                else:
+                    next_embeddings = np.empty((0, 1024), dtype=np.float32)
+                    next_meta = []
+                    next_corpus = []
+                    next_bm25 = None
+                self._persist(next_embeddings, next_meta, next_corpus)
+                self.embeddings = next_embeddings
+                self.meta = next_meta
+                self.corpus_tokens = next_corpus
+                self.bm25 = next_bm25
+        return removed
+
     def vector_search(self, query_vector: np.ndarray, top_k: int) -> list[dict[str, Any]]:
         with self._state_lock:
             if not self.record_count:

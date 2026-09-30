@@ -21,9 +21,10 @@ import pickle
 import asyncio
 import re
 import secrets
+import time
 from collections import defaultdict
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
 # Add paths
@@ -62,6 +63,213 @@ _records = None       # full records from all-records-lite.json
 _index_mapping_status = None
 _incremental_index = IncrementalIndex(INCREMENTAL_INDEX_FILE, embedding_func)
 
+# ── record 级版本/删除治理（2026-09-30，第二节 2.1/2.3）──
+# 统一身份：record_key_sha = sha256(json([t,d,u]))（与 scripts/sync_qa_index.py
+# 同公式）。基础索引记录在加载后由此式补算；增量 chunk 携带在
+# chunk_metadata.record_key_sha。能力：
+#   DELETE → 持久化墓碑（tombstones），向量/BM25/图谱扩展/引用全链路屏蔽
+#   UPDATE → 删除旧增量 chunk；基础索引同键版本被「已存在更新版本」遮蔽
+#            （新版本由 sync 随后以普通 ADD 批次上送）
+RECORD_OPS_STATE_FILE = Path(os.getenv(
+    "TECHDB_QA_RECORD_OPS_STATE",
+    str(INCREMENTAL_INDEX_FILE.parent / "record-ops-state.json")))
+
+_BASE_KEY_SHA: list = []            # 基础索引 meta 位置 → record_key_sha
+_SUPERSADED_BASE: set = set()       # 被更新版本遮蔽的基础索引位置
+
+
+def _record_key_sha_of(t: str, d: str, u: str) -> str:
+    import hashlib as _hl
+    return _hl.sha256(json.dumps([str(t or ""), str(d or ""), str(u or "")],
+                                 ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _base_key_shas() -> list:
+    """基础索引每条 meta 的 record_key_sha（懒计算 + 缓存）。
+
+    覆盖 vector（_index_meta）与 BM25（_bm25_meta）两套 meta：同一发布记录
+    在两边位置一致（同一重建管线），共享一份 sha 序列即可。"""
+    global _BASE_KEY_SHA
+    if _BASE_KEY_SHA:
+        return _BASE_KEY_SHA
+    source = _index_meta if _index_meta else _bm25_meta
+    _BASE_KEY_SHA = [
+        _record_key_sha_of(meta.get("t", ""), meta.get("d", ""), meta.get("u", ""))
+        for meta in (source or [])
+    ]
+    return _BASE_KEY_SHA
+
+
+class RecordOpsStore:
+    """持久化墓碑 + 基础版本替换遮蔽集合；供检索链与 /api/index/record-mutate
+    使用（2026-09-30 重构：遮蔽以 record_key_sha 为身份并持久化）。
+
+    状态模型：
+    - tombstones[ksha]：DELETE 已生效——该记录全链路屏蔽（持久化）；
+    - superseded_key_shas：UPDATE 已删旧增量 chunk、基础版本等待新版本
+      ADD 批次——基础记录暂时屏蔽（持久化）。清除时机（任一）：
+      a) /api/index/upsert 收到携带该 record_key_sha 的 chunk（新版本落地，
+         取代完成——基础版本永久让位给增量新版本）；
+      b) 显式 unblock 操作（纠错通道：误遮蔽的立即恢复）。
+    """
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.tombstones: dict[str, dict] = {}
+        self.superseded_key_shas: set[str] = set()
+        self.loaded = False
+
+    def load(self) -> None:
+        if self.loaded:
+            return
+        self.loaded = True
+        if not self.path.exists():
+            return
+        try:
+            data = json.loads(self.path.read_text("utf-8"))
+            self.tombstones = dict(data.get("tombstones") or {})
+            self.superseded_key_shas = {
+                str(s) for s in (data.get("superseded_key_shas") or [])}
+            print(f"[startup] Record ops state loaded: {len(self.tombstones)} tombstones, "
+                  f"{len(self.superseded_key_shas)} superseded", flush=True)
+        except Exception as exc:
+            print(f"[startup] WARNING: record-ops state ignored: {exc}", flush=True)
+
+    def _persist(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(
+            {"tombstones": self.tombstones,
+             "superseded_key_shas": sorted(self.superseded_key_shas)},
+            ensure_ascii=False), "utf-8")
+        os.replace(tmp, self.path)
+
+    def clear_superseded_by_chunks(self, key_shas: list[str]) -> int:
+        """upsert 落地新版本 chunk 后调用：取代完成，解除基础版本遮蔽。"""
+        n = 0
+        for ksha in key_shas:
+            if ksha and ksha in self.superseded_key_shas:
+                self.superseded_key_shas.discard(ksha)
+                n += 1
+        if n:
+            self._persist()
+        return n
+
+    async def apply_async(self, ops: list[dict]) -> int:
+        """执行 record 级变更：删除既有增量 chunk + 基础版本遮蔽/墓碑。
+
+        （2026-09-30 修复：remove_chunks_by_record_keys 是 async——原同步
+        apply() 裸调用产生 coroutine 从未 await，chunk 实际未删，已从
+        实测日志 RuntimeWarning 捕获。）"""
+        shas_by_meta = _base_key_shas()
+
+        # 1) 增量 chunk（含旧 pipeline-sync 版本）按 record_key_sha 删除
+        #    （unblock 不删任何东西）
+        to_delete_keys = [str(op.get("record_key_sha")) for op in ops
+                          if op.get("record_key_sha") and op.get("op") != "unblock"]
+        removed = await _incremental_index.remove_chunks_by_record_keys(to_delete_keys)
+
+        # 2) 终态更新（delete → 墓碑；update → 等新版本遮蔽；unblock → 清除）
+        new_tomb: set = set()
+        new_sup: set = set()
+        for op in ops:
+            ksha = str(op.get("record_key_sha") or "")
+            if not ksha:
+                continue
+            if op.get("op") == "delete":
+                self.tombstones[ksha] = {
+                    "deleted_at": datetime.now(timezone.utc).isoformat(),
+                    "reason": str(op.get("reason") or "pipeline-delete"),
+                }
+                self.superseded_key_shas.discard(ksha)
+                new_tomb.add(ksha)
+            elif op.get("op") == "update":
+                self.tombstones.pop(ksha, None)
+                self.superseded_key_shas.add(ksha)
+                new_sup.add(ksha)
+            elif op.get("op") == "unblock":
+                self.tombstones.pop(ksha, None)
+                self.superseded_key_shas.discard(ksha)
+        self._persist()
+        self.restore_persisted()
+        mark_fragment_dirty()  # chunk 被移除 → 图谱碎片重推（二.5）
+        print(f"[record-ops] applied {len(ops)} ops: incremental chunks removed="
+              f"{removed}, superseded total={len(self.superseded_key_shas)}, "
+              f"tombstones total={len(self.tombstones)}", flush=True)
+        return len(ops)
+
+    def restore_persisted(self) -> None:
+        """从持久化 sha 集合重算基础索引遮蔽位置（每次 apply 后与启动时调用；
+        position 现算——基础索引 meta 在进程生命周期内不变，重算幂等）。"""
+        shas_by_meta = _base_key_shas()
+        positions: set = set()
+        sup_positions: set = set()
+        for idx, s in enumerate(shas_by_meta):
+            if s in self.tombstones:
+                positions.add(idx)
+            elif s in self.superseded_key_shas:
+                sup_positions.add(idx)
+        self.deleted_base_positions = positions
+        self.superseded_base_positions = sup_positions
+
+    def is_deleted_key(self, key_sha: str) -> bool:
+        return key_sha in self.tombstones
+
+
+_record_ops_store = RecordOpsStore(RECORD_OPS_STATE_FILE)
+_record_ops_store.superseded_base_positions = set()
+_record_ops_store.deleted_base_positions = set()
+
+
+def _meta_record_key_sha(meta: dict) -> str:
+    """增量 chunk 的身份：优先 chunk_metadata.record_key_sha，否则按 t/d/u 补算。"""
+    md = meta.get("chunk_metadata") or {}
+    ksha = str(md.get("record_key_sha") or "")
+    if ksha:
+        return ksha
+    return _record_key_sha_of(meta.get("t", ""), meta.get("d", ""), meta.get("u", ""))
+
+
+def _result_allowed(meta: dict, is_base: bool) -> bool:
+    """检索链统一门控：墓碑记录一律屏蔽；被新版本替换的基础记录屏蔽
+    （增量侧新版本随正常检索返回）。
+
+    基础记录身份优先取 meta["idx"] 位置（vector 与 BM25 两套 meta 的 idx
+    经 remap_index_metadata 对齐到同一发布记录；BM25 meta 无 u 字段，
+    按 t/d/u 重算会失配）；无 idx 时退回 t/d/u 计算。"""
+    if is_base:
+        idx = meta.get("idx")
+        if isinstance(idx, int) and idx < len(_base_key_shas()):
+            ksha = _base_key_shas()[idx]
+        else:
+            ksha = _record_key_sha_of(meta.get("t", ""), meta.get("d", ""), meta.get("u", ""))
+    else:
+        ksha = _meta_record_key_sha(meta)
+    if not ksha:
+        return True
+    if ksha in _record_ops_store.tombstones:
+        return False
+    if is_base:
+        # 替换遮蔽：按持久化 sha 判定（superseded_base_positions 由
+        # restore_persisted 从 sha 集合现算，勿直接依赖陈旧位置集）
+        if ksha in _record_ops_store.superseded_key_shas:
+            return False
+    return True
+
+
+_SHA_POSITIONS: dict = {}
+
+
+def _base_sha_positions() -> dict:
+    """record_key_sha → [基础索引位置]（懒构建）。"""
+    if _SHA_POSITIONS:
+        return _SHA_POSITIONS
+    mapping: dict = {}
+    for idx, s in enumerate(_base_key_shas()):
+        mapping.setdefault(s, []).append(idx)
+    _SHA_POSITIONS.update(mapping)
+    return _SHA_POSITIONS
+
 # ── RRF parameters ──
 RRF_K = 60          # RRF constant (1/(rank+k))
 RETRIEVAL_TOP_K = 50  # candidates per route
@@ -88,33 +296,131 @@ from retrieval_pipeline import (
 )
 
 FLAGS = _pipeline_flags()  # 进程级一次读取；测试可 reload 模块覆盖
+
+# ── 五.1（2026-09-30）：legacy_hybrid 答案侧真实核验链 ─────────────────
+# epistemic 分类/提示词注入 + fail-safe 事实核验 + claim→引用映射 +
+# 引用证据原文定位 + 数值核验 + 有界修复 + 状态机定案 + 校准弃权。
+# 简化的标记计数 _pl_check_claims/_pl_answer_status 保留为降级路径
+# （answer_chain 导入失败时照常服务——核验永不断链）。
+try:
+    import answer_chain as _answer_chain
+except Exception as _ac_exc:  # noqa: BLE001
+    print(f"[answer-chain] 模块导入失败，降级为标记计数核验: {_ac_exc}", flush=True)
+    _answer_chain = None  # type: ignore[assignment]
 _GRAPH_CACHE: dict = {"loaded": False, "labels": [], "adjacency": {}}
+
+# ── 增量记录图谱碎片（二.5，2026-09-30）────────────────────────────
+# 导入/上传记录此前从不进入图谱（graph-export.json 只由管线发布）。
+# 碎片由增量索引存活 meta 实时推导：chunk 被 record-mutate / index-delete
+# 物理移除后实体贡献自动消失。dirty 标志在全部索引变异点置位。
+import graph_fragment as _gfrag
+
+_FRAGMENT_CACHE: dict = {"dirty": True, "sig": "", "data": {"nodes": [], "edges": []},
+                         "labels": [], "adjacency": {}}
+
+
+def mark_fragment_dirty() -> None:
+    _FRAGMENT_CACHE["dirty"] = True
+
+
+def _fragment() -> dict:
+    if not _FRAGMENT_CACHE["dirty"]:
+        return _FRAGMENT_CACHE["data"]
+    rows = list(_incremental_index.meta)
+    data = _gfrag.build_fragment(rows)
+    labels: list[tuple[str, str, int]] = []
+    adjacency: dict[str, list[tuple[str, str]]] = {}
+    for n in data["nodes"]:
+        labels.append((str(n["id"]), str(n["label"]), int(n.get("degree") or 0)))
+    for e in data["edges"]:
+        src, dst = str(e["source"]), str(e["target"])
+        rel = str(e.get("label") or "")
+        adjacency.setdefault(src, []).append((dst, rel))
+        adjacency.setdefault(dst, []).append((src, rel))
+    _FRAGMENT_CACHE.update({"data": data, "labels": labels, "adjacency": adjacency,
+                            "sig": _gfrag.fragment_signature(rows), "dirty": False})
+    return data
+
+
+def _merged_graph() -> tuple[list, dict]:
+    """静态 graph-export 标签/邻接 ∪ 增量碎片（SEMANTIC_GRAPH 召回用）。"""
+    s_labels, s_adj = _graph_index()
+    frag = _fragment()
+    if not frag["nodes"]:
+        return s_labels, s_adj
+    f_labels, f_adj = _FRAGMENT_CACHE["labels"], _FRAGMENT_CACHE["adjacency"]
+    merged_adj = {k: list(v) for k, v in s_adj.items()}
+    label_map = {lab: (nid, deg) for nid, lab, deg in s_labels}
+    for nid, lab, deg in f_labels:
+        if lab in label_map:
+            old_nid, old_deg = label_map[lab]
+            label_map[lab] = (old_nid, old_deg + deg)
+        else:
+            label_map[lab] = (nid, deg)
+    for src, lst in f_adj.items():
+        merged_adj.setdefault(src, []).extend(lst)
+    merged_labels = [(nid, lab, deg) for lab, (nid, deg) in label_map.items()]
+    merged_labels.sort(key=lambda item: item[2], reverse=True)
+    return merged_labels, merged_adj
 
 
 def _graph_index() -> tuple[list, dict]:
-    """懒加载 graph-export.json：节点标签（按 degree 降序）+ 邻接表。"""
-    if _GRAPH_CACHE["loaded"]:
+    """懒加载 graph-export.json：节点标签（按 degree 降序）+ 邻接表。
+
+    版本安全刷新（三.2，2026-09-30）：管线每轮发布都会原地截断重写这个
+    单文件 bind mount（inode 稳定），旧实现加载一次后永久复用——图谱
+    永远停在容器启动时的版本。现按 (mtime_ns, size) 指纹检测新版本并
+    重建索引；截断写窗口内读到半文件（JSON 解析失败或节点数骤降 >50%）
+    时保留旧版本重试，直到下一轮指纹变化——读取侧永远拿到完整一致的
+    图谱版本。"""
+    graph_file = WORKING_DIR / "graph-export.json"
+    try:
+        st = graph_file.stat()
+        fingerprint = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        fingerprint = None
+    if _GRAPH_CACHE["loaded"] and _GRAPH_CACHE.get("fp") == fingerprint:
         return _GRAPH_CACHE["labels"], _GRAPH_CACHE["adjacency"]
+
     labels: list[tuple[str, str, int]] = []
     adjacency: dict[str, list[tuple[str, str]]] = {}
+    loaded_fp = None
     try:
-        graph_file = WORKING_DIR / "graph-export.json"
-        if graph_file.exists():
-            data = json.loads(graph_file.read_text("utf-8"))
-            nodes = data.get("nodes", []) or []
-            labels = [(str(n.get("id")), str(n.get("label") or ""), int(n.get("degree") or 0))
-                      for n in nodes if n.get("label")]
-            id2label = {nid: lab for nid, lab, _ in labels}
-            for edge in data.get("edges", []) or []:
-                src, dst = str(edge.get("source")), str(edge.get("target"))
-                rel = str(edge.get("label") or "")
-                # 邻接表存邻居"标签"（图谱关系直接作为 BM25 词项参与召回）
-                adjacency.setdefault(src, []).append((id2label.get(dst, dst), rel))
-                adjacency.setdefault(dst, []).append((id2label.get(src, src), rel))
+        if fingerprint is not None:
+            prev_count = len(_GRAPH_CACHE.get("labels") or [])
+            for attempt in range(3):
+                try:
+                    data = json.loads(graph_file.read_text("utf-8"))
+                except (ValueError, OSError):
+                    data = None  # 半文件：发布方截断写进行中
+                nodes = (data or {}).get("nodes") or []
+                if data is not None and (not prev_count
+                                         or len(nodes) >= prev_count * 0.5):
+                    labels = [(str(n.get("id")), str(n.get("label") or ""),
+                               int(n.get("degree") or 0))
+                              for n in nodes if n.get("label")]
+                    id2label = {nid: lab for nid, lab, _ in labels}
+                    adjacency = {}
+                    for edge in (data or {}).get("edges") or []:
+                        src, dst = str(edge.get("source")), str(edge.get("target"))
+                        rel = str(edge.get("label") or "")
+                        # 邻接表存邻居"标签"（图谱关系直接作为 BM25 词项参与召回）
+                        adjacency.setdefault(src, []).append((id2label.get(dst, dst), rel))
+                        adjacency.setdefault(dst, []).append((id2label.get(src, src), rel))
+                    loaded_fp = fingerprint
+                    break
+                time.sleep(0.5 * (attempt + 1))  # 等发布方写完下一窗
+            else:
+                print("[graph-index] file busy/incomplete — keeping previous version",
+                      flush=True)
     except Exception as exc:
         print(f"[graph-index] load failed, semantic graph disabled: {exc}", flush=True)
         labels, adjacency = [], {}
-    _GRAPH_CACHE.update({"loaded": True, "labels": labels, "adjacency": adjacency})
+    if _GRAPH_CACHE["loaded"] and loaded_fp is None:
+        # 新指纹但三次都读不到完整文件：保留旧数据与旧指纹（下轮再试）
+        return _GRAPH_CACHE["labels"], _GRAPH_CACHE["adjacency"]
+    _GRAPH_CACHE.update({"loaded": True, "labels": labels, "adjacency": adjacency,
+                         "fp": loaded_fp})
     return labels, adjacency
 
 # Generic follow-up language adds noise to BM25 and can overpower the domain
@@ -280,12 +586,19 @@ async def vector_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
     if _vector_index is not None:
         # Cosine similarity (embeddings are pre-normalized)
         scores = _vector_index @ query_vec
-        top_indices = np.argsort(scores)[::-1][:top_k]
-        results.extend(
-            {"meta": _index_meta[int(idx)], "score": float(scores[int(idx)])}
-            for idx in top_indices
-        )
-    results.extend(_incremental_index.vector_search(query_vec, top_k))
+        top_indices = np.argsort(scores)[::-1]
+        # 候选池取 3 倍再过滤：墓碑/被替换版本剔除后仍够 top_k
+        kept = 0
+        for idx in top_indices:
+            if kept >= top_k:
+                break
+            meta = _index_meta[int(idx)]
+            if not _result_allowed(meta, is_base=True):
+                continue
+            results.append({"meta": meta, "score": float(scores[int(idx)])})
+            kept += 1
+    inc_results = _incremental_index.vector_search(query_vec, top_k * 3)
+    results.extend(r for r in inc_results if _result_allowed(r["meta"], is_base=False))
     return sorted(results, key=lambda item: item["score"], reverse=True)[:top_k]
 
 
@@ -298,13 +611,19 @@ def bm25_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
     base_results = []
     if _bm25_index is not None and tokens:
         scores = _bm25_index.get_scores(tokens)
-        top_indices = np.argsort(scores)[::-1][:top_k]
-        base_results.extend(
-            {"meta": _bm25_meta[int(idx)], "score": float(scores[int(idx)])}
-            for idx in top_indices
-            if float(scores[int(idx)]) > 0
-        )
-    incremental_results = _incremental_index.bm25_search(" ".join(tokens), top_k) if tokens else []
+        top_indices = np.argsort(scores)[::-1][:top_k * 3]
+        for idx in top_indices:
+            if float(scores[int(idx)]) <= 0:
+                continue
+            meta = _bm25_meta[int(idx)]
+            if not _result_allowed(meta, is_base=True):
+                continue  # 墓碑/被新版本替换的基础记录不入候选
+            base_results.append({"meta": meta, "score": float(scores[int(idx)])})
+            if len(base_results) >= top_k:
+                break
+    incremental_results = _incremental_index.bm25_search(" ".join(tokens), top_k * 3) if tokens else []
+    incremental_results = [r for r in incremental_results
+                           if _result_allowed(r["meta"], is_base=False)]
     # BM25 scores from separately built corpora are not numerically comparable.
     # Interleave their ranked lists before the outer RRF fusion.
     results = []
@@ -471,7 +790,7 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
         #    邻居标签补充检索（图谱真实参与召回，而非仅可视化）
         graph_extra: list = []
         if FLAGS.get("SEMANTIC_GRAPH_ENABLED"):
-            labels, adjacency = _graph_index()
+            labels, adjacency = _merged_graph()
             entities = _pl_match_entities(base, labels) if FLAGS.get("ENTITY_RESOLUTION_ENABLED") else []
             trace["graph_entities"] = [e["label"] for e in entities]
             if entities:
@@ -687,6 +1006,14 @@ async def lifespan(app: FastAPI):
     mapping_status = remap_index_metadata()
     print(f"[startup] Index metadata mapped: {mapping_status}", flush=True)
     _incremental_index.load()
+    # record 级墓碑/遮蔽状态（第二节 2.3：删除在全链路生效、更新替换旧版本）
+    _record_ops_store.load()
+    # 预热基础索引身份序列 + 反查表（首次检索免冷启动），并从墓碑恢复
+    # 基础记录遮蔽（重启后删除仍然生效）
+    _base_sha_positions()
+    _record_ops_store.restore_persisted()
+    print(f"[startup] Record identities warmed: {len(_BASE_KEY_SHA)} base key_shas, "
+          f"{len(_record_ops_store.tombstones)} tombstones", flush=True)
 
     # Load jieba custom dictionary for query tokenization
     if JIEBA_DICT.exists():
@@ -799,6 +1126,12 @@ async def index_upsert(
     except Exception as exc:
         print(f"[index] upsert failed for {req.document_id}: {exc}", flush=True)
         raise HTTPException(status_code=503, detail="embedding index is unavailable") from exc
+    # 新版本 chunk 落地 → 对应 record 的「等待新版本」遮蔽解除（取代完成，
+    # 检索从此返回增量新版本；基础旧版本仍被 record_key_sha 永久让位）。
+    _record_ops_store.clear_superseded_by_chunks(
+        [str((chunk.metadata or {}).get("record_key_sha") or "")
+         for chunk in req.chunks])
+    mark_fragment_dirty()  # 导入记录进入图谱碎片（二.5）
     return {"status": "ready", **result}
 
 
@@ -818,7 +1151,54 @@ async def index_delete(
     except Exception as exc:
         print(f"[index] delete failed for {req.document_id}: {exc}", flush=True)
         raise HTTPException(status_code=503, detail="embedding index is unavailable") from exc
+    mark_fragment_dirty()  # 删除记录离开图谱碎片（二.5）
     return {"status": "ok", "document_id": req.document_id, "removed_chunks": removed}
+
+
+class RecordMutateOp(BaseModel):
+    record_key_sha: str = Field(min_length=8)
+    op: str = Field(pattern="^(update|delete|unblock)$")
+    reason: str | None = None
+
+
+class RecordMutateRequest(BaseModel):
+    ops: list[RecordMutateOp] = Field(min_length=1)
+
+
+@app.post("/api/index/record-mutate")
+async def index_record_mutate(
+    req: RecordMutateRequest,
+    x_techdb_index_token: str | None = Header(default=None),
+):
+    """record 级 UPDATE/DELETE（2026-09-30，第二节 2.1/2.3）。
+
+    update：删除该记录的既有增量 chunk；基础索引同键记录被遮蔽
+            （新版本随后经 /api/index/upsert 进入，检索只返回新版本）。
+    delete：删除增量 chunk；record_key_sha 写入持久化墓碑，向量/BM25/
+            图谱扩展/引用全链路屏蔽（含基础索引版本）。
+    """
+    _check_index_token(x_techdb_index_token)
+    try:
+        _record_ops_store.load()
+        applied = await _record_ops_store.apply_async([op.model_dump() for op in req.ops])
+    except Exception as exc:
+        print(f"[index] record-mutate failed: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail="record-mutate unavailable") from exc
+    return {"status": "ok", "updated": applied}
+
+
+@app.get("/api/index/record-ops-state")
+async def index_record_ops_state(
+    x_techdb_index_token: str | None = Header(default=None),
+):
+    """运维检查：墓碑数量与（脱敏）身份列表。"""
+    _check_index_token(x_techdb_index_token)
+    _record_ops_store.load()
+    return {
+        "tombstone_count": len(_record_ops_store.tombstones),
+        "tombstones": list(_record_ops_store.tombstones.keys())[:50],
+        "superseded_base": len(_record_ops_store.superseded_key_shas),
+    }
 
 
 @app.post("/api/chat/stream")
@@ -900,6 +1280,14 @@ async def chat_stream(req: ChatRequest):
 来源列表：
 {source_list}"""
 
+            # ── 五.1（2026-09-30）：旧系统生成前的认识论分类 + 提示词注入。
+            # 分类是增强不是关键路径：超时/LLM 故障 → 空元数据照常生成。──
+            claim_metadata = []
+            if FLAGS.get("EPISTEMIC_ENABLED", True):
+                claim_metadata = await _answer_chain.classify_or_empty(
+                    req.query, search_results)
+            system_prompt = _answer_chain.epistemic_prompt(system_prompt, claim_metadata)
+
             # Build conversation history for LLM
             llm_history = []
             for msg in req.history[-6:]:
@@ -939,33 +1327,108 @@ async def chat_stream(req: ChatRequest):
                     })}
                     return
 
-            # ── 答案侧核验（legacy_hybrid 答案 flags 的等价实现）────────
-            # CITATION_GROUNDING/CLAIM_MAPPING：标注核验 + claim→引用映射；
-            # ANSWER_STATUS；KNOWLEDGE_BOUNDARY；CONTENT_SAFETY 泄密面扫描。
-            # 全部 FAIL_SAFE：核验失败不影响答案本身下发。
-            answer_status = "partial"
+            # ── 答案侧真实核验链（五.1/五.2，2026-09-30）────────────────
+            # epistemic 事实核验（fail-safe）+ claim→引用映射 + 引用证据
+            # 原文定位 + 数值核验 + 有界修复 + 状态机定案（唯一状态权威）+
+            # 校准弃权 + 泄密面扫描。全链 FAIL_SAFE：任一步失败只降级为
+            # UNVERIFIED/缺省字段，绝不阻断答案下发。
+            # （降级路径：answer_chain 导入失败时回落到旧的标记计数实现。）
             boundary = None
             safety_hits: list = []
             claim_check: dict = {}
-            try:
-                if FLAGS.get("CITATION_GROUNDING_ENABLED") or FLAGS.get("CLAIM_MAPPING_ENABLED"):
-                    claim_check = _pl_check_claims(full_answer, len(citations))
-                used_count = len({m for m in claim_check.get("claim_citation_map", [])
-                                  if m.get("citation")})
-                answer_status = _pl_answer_status(
-                    used_count, evidence.get("status", "unknown"), claim_check, len(citations)
-                ) if FLAGS.get("ANSWER_STATUS_ENABLED") else "unassessed"
-                if FLAGS.get("KNOWLEDGE_BOUNDARY_ENABLED"):
-                    boundary = _pl_boundary_note(answer_status, evidence.get("status", "unknown"))
-                if FLAGS.get("CONTENT_SAFETY_ENABLED"):
-                    safety_hits = _pl_safety_scan(full_answer)
-            except Exception as exc:
-                print(f"[answer-check] degraded: {exc.__class__.__name__}", flush=True)
+            answer_status = "unassessed"
+            chain_report: dict = {}
+            if _answer_chain is not None:
+                def _resolve_record(cit: dict):
+                    """引用 → 原始记录（grounding/数值核验/溯源用）。
+
+                    基础索引引用的 record_id 就是 records 下标；增量 chunk
+                    引用（上传/管线同步）的 record_id 是 document_id，但
+                    citation 自带 chunk_text——以 chunk_text 构造同 lite 字段
+                    形态的伪记录参与核验。"""
+                    try:
+                        rid = cit.get("record_id")
+                        recs = load_records()
+                        if isinstance(rid, int) and not isinstance(rid, bool) \
+                                and 0 <= rid < len(recs):
+                            return recs[rid]
+                        chunk_text = cit.get("chunk_text") or ""
+                        if chunk_text:
+                            return {"fb": "", "b": chunk_text, "as": "",
+                                    "t": cit.get("title", ""),
+                                    "a": cit.get("source", ""),
+                                    "tg": cit.get("tag", "")}
+                        return None
+                    except Exception:
+                        return None
+
+                async def _llm_rewrite(answer: str, drop_ids=None,
+                                       claims=None, issues=None) -> str:
+                    """RT-026 修复改写闭包（五.1 修复能力，与 backend 链同语义）。
+
+                    只修问题句、不新增事实；失败返回空串（放弃改写走降级）。"""
+                    try:
+                        prompt = _answer_chain.build_rewrite_prompt(
+                            req.query, answer, claims=claims, issues=issues,
+                            drop_ids=drop_ids)
+                        return str(await asyncio.wait_for(llm_model_func(
+                            prompt,
+                            system_prompt="你是事实核查修复助手。只输出修正后的完整回答，不要输出任何解释。",
+                            temperature=0.0, max_tokens=8192), timeout=60)) or ""
+                    except Exception:
+                        return ""
+
+                chain_report = await _answer_chain.run_answer_verification(
+                    req.query, full_answer, citations,
+                    claim_metadata=claim_metadata,
+                    records_resolver=_resolve_record,
+                    has_results=bool(citations),
+                    is_relevant=evidence.get("status") != "insufficient",
+                    evidence_status=evidence.get("status", "unknown"),
+                    flags=FLAGS,
+                    safety_scan=_pl_safety_scan if FLAGS.get("CONTENT_SAFETY_ENABLED") else None,
+                    llm_rewrite=_llm_rewrite if FLAGS.get("ANSWER_REPAIR_ENABLED", True) else None,
+                )
+                # 修复链改写了答案 ⇒ SSE replace（与 agent 链同语义事件）
+                if chain_report.get("answer") and chain_report["answer"] != full_answer:
+                    full_answer = chain_report["answer"]
+                    yield {"event": "replace", "data": json.dumps({"content": full_answer})}
+                answer_status = chain_report.get("answer_status", "UNVERIFIED")
+                boundary = chain_report.get("boundary_message") or None
+                safety_hits = chain_report.get("safety_hits", [])
+                claim_check = _answer_chain.compact_for_payload(chain_report)
+            else:
+                # ── 降级：旧的标记计数核验（保留可用性）──
+                claim_check = {}
+                try:
+                    if FLAGS.get("CITATION_GROUNDING_ENABLED") or FLAGS.get("CLAIM_MAPPING_ENABLED"):
+                        claim_check = _pl_check_claims(full_answer, len(citations))
+                    used_count = len({m for m in claim_check.get("claim_citation_map", [])
+                                      if m.get("citation")})
+                    answer_status = _pl_answer_status(
+                        used_count, evidence.get("status", "unknown"), claim_check, len(citations)
+                    ) if FLAGS.get("ANSWER_STATUS_ENABLED") else "unassessed"
+                    if FLAGS.get("KNOWLEDGE_BOUNDARY_ENABLED"):
+                        boundary = _pl_boundary_note(answer_status, evidence.get("status", "unknown"))
+                    if FLAGS.get("CONTENT_SAFETY_ENABLED"):
+                        safety_hits = _pl_safety_scan(full_answer)
+                except Exception as exc:
+                    print(f"[answer-check] degraded: {exc.__class__.__name__}", flush=True)
+                print(f"[chain-audit] {json.dumps(claim_check, ensure_ascii=False)[:2000]}", flush=True)
+                chain_report = {}
+
+            if _answer_chain is not None:
+                print(f"[chain-audit] {json.dumps(claim_check, ensure_ascii=False)[:2000]}", flush=True)
 
             yield {"event": "done", "data": json.dumps({
                 "answer": full_answer,
                 "citations": citations,
+                # 四态词汇（旧系统 AnswerStatus）：SUPPORTED /
+                # PARTIALLY_SUPPORTED / UNSUPPORTED / UNVERIFIED。
+                # 五.2：拒答 ⇒ UNSUPPORTED（evidence.status 独立透传），
+                # 不再出现「拒答却 verified」。
                 "answer_status": answer_status,
+                "stop_reason": chain_report.get("stop_reason", ""),
                 "knowledge_boundary": boundary,
                 "claim_check": claim_check,
                 "safety_hits": safety_hits,
@@ -983,30 +1446,31 @@ async def chat_stream(req: ChatRequest):
 
 @app.get("/api/graph")
 async def get_graph(limit: int = 300):
-    """Get knowledge graph data for visualization."""
-    graph_file = WORKING_DIR / "graph-export.json"
-    if graph_file.exists():
-        data = json.loads(graph_file.read_text("utf-8"))
-        nodes = sorted(data.get("nodes", []), key=lambda n: n.get("degree", 0), reverse=True)
-        if limit and len(nodes) > limit:
-            top_node_ids = {n["id"] for n in nodes[:limit]}
-            nodes = nodes[:limit]
-            edges = [e for e in data.get("edges", [])
-                     if e["source"] in top_node_ids and e["target"] in top_node_ids]
-        else:
-            edges = data.get("edges", [])
-        return {
-            "nodes": nodes,
-            "edges": edges,
-            "total_nodes": len(data.get("nodes", [])),
-            "total_edges": len(data.get("edges", [])),
-        }
+    """Get knowledge graph data for visualization.
+
+    2026-09-30（二.5）：静态 graph-export.json（管线发布）∪ 增量记录图谱
+    碎片（上传/ZIP/逐行导入，实时推导）——同名实体节点合并 degree 与
+    描述；碎片节点附 records 证据定位（标题/链接/日期/统一记录身份）。"""
+    static = _gfrag.load_static_graph(WORKING_DIR)
+    frag = _fragment()
+    if static:
+        data = _gfrag.merge_into_static(static, frag)
+    else:
+        data = frag
+    nodes = sorted(data.get("nodes", []), key=lambda n: n.get("degree", 0), reverse=True)
+    if limit and len(nodes) > limit:
+        top_node_ids = {n["id"] for n in nodes[:limit]}
+        nodes = nodes[:limit]
+        edges = [e for e in data.get("edges", [])
+                 if e["source"] in top_node_ids and e["target"] in top_node_ids]
+    else:
+        edges = data.get("edges", [])
     return {
-        "nodes": [],
-        "edges": [],
-        "total_nodes": 0,
-        "total_edges": 0,
-        "message": "Graph not yet built."
+        "nodes": nodes,
+        "edges": edges,
+        "total_nodes": len(data.get("nodes", [])),
+        "total_edges": len(data.get("edges", [])),
+        "fragment_nodes": len(frag.get("nodes", [])),
     }
 
 

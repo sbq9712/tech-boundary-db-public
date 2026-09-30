@@ -43,6 +43,12 @@ SHIPPED_FLAG_NAMES = (
     "FAIL_SAFE_VERIFY_ENABLED", "CONTENT_SAFETY_ENABLED",
     "CITATION_GROUNDING_ENABLED", "CLAIM_MAPPING_ENABLED",
     "ANSWER_STATUS_ENABLED", "KNOWLEDGE_BOUNDARY_ENABLED",
+    # 五.1（2026-09-30）：答案侧真实核验链的两个开关。EPISTEMIC 在旧系统
+    # 无 flag、legacy 路径恒开（仅预算熔断）；ANSWER_REPAIR 对应旧仓库
+    # answer_repair.BoundedRepairLoop（RT-026）——legacy_hybrid 生产路径
+    # 不改写答案，此处按五.1「修复/降级能力」要求接入，默认开但严格有界
+    # （1 轮、确定性策略优先、失败即降级），QA_ANSWER_REPAIR_ENABLED=0 可关。
+    "EPISTEMIC_ENABLED", "ANSWER_REPAIR_ENABLED",
 )
 EXPERIMENTAL_FLAG_NAMES = (
     "EXACT_GROUNDING_ENABLED", "TERMINAL_RENDERER_ENABLED",

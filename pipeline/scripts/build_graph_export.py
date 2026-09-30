@@ -7,7 +7,7 @@
 Extracts entity mentions from titles, summaries, and key params.
 Much faster than full LightRAG ingest (seconds vs hours).
 """
-import json, re, sys
+import json, os, re, sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -152,7 +152,12 @@ def build_graph():
     }
     
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(json.dumps(graph, ensure_ascii=False), "utf-8")
+    # 先落临时文件再一次性替换：OUTPUT 目录是目录级发布区（管线侧），
+    # os.replace 原子；服务端 graph-live 单文件 bind mount 由发布步原地
+    # 拷贝（三.2 服务端按 mtime+size 指纹刷新 + 半文件重试）。
+    tmp = OUTPUT.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(graph, ensure_ascii=False), "utf-8")
+    os.replace(tmp, OUTPUT)
     
     print(f"\nDone!", flush=True)
     print(f"  Nodes: {len(nodes)}", flush=True)
