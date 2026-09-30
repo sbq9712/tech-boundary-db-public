@@ -136,26 +136,42 @@ class IncrementalIndex:
         # 一.2 幂等：同 (record_key_sha, content_sha) 的 chunk 已在其他文档
         # 存活（前一轮同步已落地）时先剔除——重试/超时重发/断点恢复不产生
         # 重复召回，也不再重复付费嵌入。全被剔除则直接返回已就绪回执。
-        existing_pairs = {
-            (str((m.get("chunk_metadata") or {}).get("record_key_sha") or ""),
-             str((m.get("chunk_metadata") or {}).get("content_sha") or ""))
-            for m in self.meta
-            if str(m.get("document_id") or "") != document_id}
+        # 二.2 迟到旧版本拒绝：同身份已有更高 source_rev 的 chunk 时，旧
+        # 修订号的 upsert 整体拒收（worker 认领协议下旧任务迟到的副作用）。
+        existing_pairs: set[tuple[str, str]] = set()
+        ksha_max_rev: dict[str, int] = {}
+        for m in self.meta:
+            if str(m.get("document_id") or "") == document_id:
+                continue
+            md = m.get("chunk_metadata") or {}
+            existing_pairs.add((str(md.get("record_key_sha") or ""),
+                                str(md.get("content_sha") or "")))
+            k = str(md.get("record_key_sha") or "")
+            rv = md.get("source_rev")
+            if k and isinstance(rv, int):
+                if rv > ksha_max_rev.get(k, -1):
+                    ksha_max_rev[k] = rv
         deduped = []
+        rejected_stale = 0
         for chunk, text in zip(chunks, texts):
             md = chunk.get("metadata") or {}
             pair = (str(md.get("record_key_sha") or ""),
                     str(md.get("content_sha") or ""))
             if pair[0] and pair[1] and pair in existing_pairs:
                 continue
+            rv = md.get("source_rev")
+            if (pair[0] and isinstance(rv, int) and pair[0] in ksha_max_rev
+                    and rv < ksha_max_rev[pair[0]]):
+                rejected_stale += 1
+                continue
             deduped.append((chunk, text))
         skipped_dup = len(chunks) - len(deduped)
-        if skipped_dup:
-            print(f"[index] upsert {document_id}: skipped {skipped_dup} duplicate "
-                  f"(record_key_sha, content_sha) chunks", flush=True)
+        if skipped_dup or rejected_stale:
+            print(f"[index] upsert {document_id}: skipped {skipped_dup} duplicate, "
+                  f"rejected {rejected_stale} stale-rev chunks", flush=True)
         if not deduped:
             return {"documents": 0, "chunks": 0, "skipped_duplicate_chunks": skipped_dup,
-                    "status": "ready"}
+                    "rejected_stale_rev_chunks": rejected_stale, "status": "ready"}
         chunks, texts = [c for c, _ in deduped], [t for _, t in deduped]
 
         async with self._lock:
@@ -171,6 +187,7 @@ class IncrementalIndex:
                 for vector, meta, tokens in zip(self.embeddings, self.meta, self.corpus_tokens)
                 if str(meta.get("document_id")) != document_id
             ]
+            new_meta: list[dict[str, Any]] = []
             for index, (chunk, text) in enumerate(zip(chunks, texts)):
                 # chunk 级覆盖（管线快照一条记录一个 chunk 时，引用卡直接
                 # 显示该记录的标题/日期/来源/链接，而非合成文档标题）；
@@ -220,7 +237,10 @@ class IncrementalIndex:
                 self.corpus_tokens = next_corpus
                 self.bm25 = next_bm25
 
-        return {"document_id": document_id, "chunk_count": len(texts), "total_chunks": self.record_count}
+        return {"document_id": document_id, "chunk_count": len(texts),
+                "total_chunks": self.record_count,
+                "skipped_duplicate_chunks": skipped_dup,
+                "rejected_stale_rev_chunks": rejected_stale}
 
     async def remove_document(self, document_id: str) -> int:
         """Remove every chunk belonging to one uploaded document; return the count removed."""

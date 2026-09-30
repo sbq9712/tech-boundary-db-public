@@ -219,6 +219,64 @@ def test_vector_bm25_reload_and_delete_preserve_docling_provenance(tmp_path):
     assert not restored.bm25_search("battery", 5)
 
 
+def test_incremental_index_rejects_stale_source_rev(tmp_path):
+    """二.2 迟到旧版本拒绝：同 record_key_sha 已有更高 source_rev 时，旧
+    修订号的 upsert chunk 被拒收（旧 worker 迟到副作用不覆盖新状态）；
+    同 rev 与无 rev 的 chunk 不受影响；去重计数随回执透出。"""
+    import asyncio
+    import importlib.util
+    import uuid as _uuid
+
+    import numpy as np
+
+    module_path = None
+    for base in Path(__file__).resolve().parents:
+        cand = base / "services/canonical-qa/qa-backend/incremental_index.py"
+        if cand.exists():
+            module_path = cand
+            break
+    if module_path is None:
+        pytest.skip("canonical-qa incremental_index.py not reachable from this layout")
+    spec = importlib.util.spec_from_file_location(
+        "stale_rev_incremental", module_path
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    async def embed(texts):
+        return np.ones((len(texts), 1024), dtype=np.float32)
+
+    ksha = "ksha-stale-test"
+    new_doc, old_doc = str(_uuid.uuid4()), str(_uuid.uuid4())
+
+    def _chunk(doc_id, rev, text):
+        return {
+            "chunk_id": f"c-{doc_id[:8]}-{rev}",
+            "text": text,
+            "metadata": {"document_id": doc_id, "record_key_sha": ksha,
+                         "content_sha": f"csha-{rev}", "source_rev": rev},
+        }
+
+    index = module.IncrementalIndex(tmp_path / "index.pkl", embed)
+    base = dict(filename="a.pdf", title="T", primary_category="未分类",
+                secondary_categories=[], confidentiality="内部", source_type="其他",
+                checksum_sha256="a" * 64, created_at=None)
+    # 先落地 rev=2（新版本）
+    r1 = asyncio.run(index.upsert(document_id=new_doc, chunks=[_chunk(new_doc, 2, "rev2")], **base))
+    assert r1["chunk_count"] == 1 and r1["rejected_stale_rev_chunks"] == 0
+    # 旧 worker 携带 rev=1 迟到 → 整体拒收，不落地、不覆盖
+    r2 = asyncio.run(index.upsert(document_id=old_doc, chunks=[_chunk(old_doc, 1, "rev1")], **base))
+    assert r2["rejected_stale_rev_chunks"] == 1
+    assert r2["status"] == "ready" and r2["chunks"] == 0  # 全拒收：无 chunk 落地
+    assert index.record_count == 1  # rev1 未进入索引
+    # 无 rev 的普通 chunk（如文件上传链）不受影响
+    plain = {"chunk_id": "c-plain", "text": "plain chunk",
+             "metadata": {"document_id": old_doc}}
+    r3 = asyncio.run(index.upsert(document_id=old_doc, chunks=[plain], **base))
+    assert r3["chunk_count"] == 1 and r3["rejected_stale_rev_chunks"] == 0
+    assert index.record_count == 2
+
+
 def test_ingestion_index_failure_preserves_assets_for_retry(monkeypatch, tmp_path):
     from app.services import upload_ingestion
 
