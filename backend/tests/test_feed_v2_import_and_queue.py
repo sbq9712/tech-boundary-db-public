@@ -469,37 +469,87 @@ def test_queue_retry_and_backoff(monkeypatch, tmp_path):
 def test_table_rows_csv_mapping_and_dedup(tmp_path, monkeypatch):
     from app.services.table_rows import import_rows, parse_table, validate_mapping
 
-    csv_data = "标题,日期,链接,等级,正文\n情报一,2026-09-28,https://t/1,2,正文一\n情报一,2026-09-28,https://t/1,2,正文一\n,2026-09-28,,0,空标题\n情报二,,,,无日期行\n".encode("utf-8")
+    csv_data = "标题,日期,链接,等级,正文\n情报一,2026-09-28,https://t/1,2,正文一\n情报一,2026-09-28,https://t/1,2,正文一\n,2026-09-28,,0,空标题\n情报二,,,,无日期行\n情报三,2026年13月45日,,0,非法日期\n".encode("utf-8")
     sheets = parse_table(csv_data, "t.csv")
     assert sheets[0].headers == ["标题", "日期", "链接", "等级", "正文"]
     mapping = validate_mapping({"title": "标题", "date": "日期", "url": "链接", "level": "等级", "body": "正文"})
     db = SessionLocal()
     try:
         upload = _mk_upload(db, checksum=hashlib.sha256(b"csv-1").hexdigest())
+        # 三.3：fallback_date 仅为兼容参数保留，逐行导入不再用文件日期静默兜底
         stats = import_rows(db, upload, sheets, mapping, fallback_date="2026-09-01", category_fallback=None)
-        assert stats["rows_total"] == 4
-        assert stats["imported"] == 2, stats      # 情报一/情报二（包内重复 1 条）
+        assert stats["rows_total"] == 5
+        assert stats["imported"] == 3, stats      # 情报一/情报二/情报三（包内重复 1 条）
         assert stats["skipped_duplicate"] == 1
         assert stats["skipped_empty"] == 1        # 空标题
+        assert stats["rows_missing_date"] == 1    # 情报二（日期列空白）
+        assert stats["rows_invalid_date"] == 1    # 情报三（有内容但无法解析）
         db.flush()  # autoflush=False：显式刷出 pending 的记录行与索引任务
         rows = db.execute(text(
             "SELECT title, document_date, url, level, source_ref FROM breadth_manual_records "
             "WHERE upload_id=:i ORDER BY title"
         ), {"i": str(upload.id)}).mappings().all()
-        assert len(rows) == 2
+        assert len(rows) == 3
         by_title = {r["title"]: r for r in rows}
         assert by_title["情报一"]["level"] == 2
-        assert by_title["情报二"]["document_date"] == "2026-09-01"  # 日期列缺失回退上传日期
-        assert by_title["情报一"]["source_ref"]["row"] == 2        # 行号溯源（数据第2行）
+        assert not by_title["情报二"]["document_date"]  # 三.3：空日期照常入库，不兜底
+        assert not by_title["情报三"]["document_date"]  # 三.3：非法日期照常入库并计数
+        assert by_title["情报一"]["source_ref"]["row"] == 1        # 行号溯源（工作表内首个数据行）
         # 索引任务
         tasks = db.execute(text(
             "SELECT count(*) FROM breadth_index_tasks WHERE upload_id=:i"
         ), {"i": str(upload.id)}).scalar()
-        assert tasks == 2
+        assert tasks == 3
+        # 三.1：默认进主导航广度列表（显式参数）
+        assert all(r["in_breadth_nav"] for r in db.execute(text(
+            "SELECT in_breadth_nav FROM breadth_manual_records WHERE upload_id=:i"
+        ), {"i": str(upload.id)}).mappings().all())
         # 再次导入同内容 → 全部去重（不重复入库）
         upload2 = _mk_upload(db, checksum=hashlib.sha256(b"csv-2").hexdigest())
         stats2 = import_rows(db, upload2, sheets, mapping, fallback_date="2026-09-01", category_fallback=None)
-        assert stats2["imported"] == 0 and stats2["skipped_duplicate"] == 3
+        assert stats2["imported"] == 0 and stats2["skipped_duplicate"] == 4
+    finally:
+        db.close()
+
+
+def test_table_rows_per_sheet_row_numbers_and_nav_flag(tmp_path, monkeypatch):
+    """三.2/三.3：多工作表行号逐表重算（不跨表累计）；in_breadth_nav 开关落地。"""
+    openpyxl = pytest.importorskip("openpyxl")
+    from app.services.table_rows import import_rows, parse_table, validate_mapping
+
+    wb = openpyxl.Workbook()
+    ws1 = wb.active
+    ws1.title = "表一"
+    ws1.append(["标题", "日期"])
+    ws1.append(["甲-行1", "2026-09-01"])
+    ws1.append(["甲-行2", "not-a-date"])
+    ws2 = wb.create_sheet("表二")
+    ws2.append(["标题", "日期"])
+    ws2.append(["乙-行1", "2026-09-02"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    sheets = parse_table(buf.getvalue(), "t.xlsx")
+    assert [s.name for s in sheets] == ["表一", "表二"]
+    mapping = validate_mapping({"title": "标题", "date": "日期"})
+    db = SessionLocal()
+    try:
+        upload = _mk_upload(db, checksum=hashlib.sha256(b"xlsx-nav").hexdigest())
+        stats = import_rows(db, upload, sheets, mapping, fallback_date=None,
+                            category_fallback=None, in_breadth_nav=False)
+        assert stats["imported"] == 3
+        assert stats["rows_invalid_date"] == 1  # 甲-行2
+        assert stats["rows_missing_date"] == 0
+        rows = db.execute(text(
+            "SELECT title, document_date, source_ref, in_breadth_nav FROM breadth_manual_records "
+            "WHERE upload_id=:i ORDER BY title"
+        ), {"i": str(upload.id)}).mappings().all()
+        by_title = {r["title"]: r for r in rows}
+        # 行号逐工作表从表头后重新计数（表二首条数据行 row=2，而不是累计 4）
+        assert by_title["甲-行1"]["source_ref"] == {"file": upload.original_filename, "sheet": "表一", "row": 1}
+        assert by_title["甲-行2"]["source_ref"]["sheet"] == "表一" and by_title["甲-行2"]["source_ref"]["row"] == 2
+        assert by_title["乙-行1"]["source_ref"] == {"file": upload.original_filename, "sheet": "表二", "row": 1}
+        # in_breadth_nav=False 落库
+        assert all(r["in_breadth_nav"] is False for r in rows)
     finally:
         db.close()
 

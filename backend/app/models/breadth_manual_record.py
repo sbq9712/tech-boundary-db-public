@@ -59,6 +59,12 @@ class BreadthManualRecord(Base):
     feed_key_digest: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     # 逐行表格导入的溯源（原文件/工作表/行号）；整包导入为空。
     source_ref: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 三.1：是否进入主导航广度列表。行业/ATSC 逐行导入默认 False——行记录
+    # 保留原栏目与门户检索，不进主导航；勾选 sync_upload_to_breadth 时为
+    # True（同时进广度，保持原栏目）。GitHub 增量包记录不受影响（True）。
+    in_breadth_nav: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", default=True
+    )
     # feed-pkg/v2 白名单记录全量 JSON：包往返不丢字段（cl/cp/cln/dp/hb/wr
     # 等无列字段随 JSON 保留，读取层优先透出），UPDATE 时整体替换。
     record_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

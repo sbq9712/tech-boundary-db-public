@@ -217,7 +217,7 @@ def row_to_record_fields(
     source_file: str,
     sheet_name: str,
     row_no: int,
-) -> dict | None:
+) -> tuple[dict, str] | None:
     """一行 → BreadthManualRecord 字段。空标题返回 None（调用方跳过计数）。
 
     每条记录带 source_ref（原文件/工作表/行号）满足溯源要求。日期列按
@@ -229,10 +229,17 @@ def row_to_record_fields(
     if not title:
         return None
     date = ""
+    # 三.3：空值（None/空白）与非法格式区分计数，不用文件日期静默兜底
+    date_state = "missing"
     if "date" in mapping:
-        date = normalize_date_cell(row.get(mapping["date"], ""))
-    if not date and fallback_date:
-        date = str(fallback_date)
+        raw_date = row.get(mapping["date"], "")
+        if raw_date is None or not str(raw_date).strip():
+            date_state = "missing"
+        else:
+            date_state = "invalid"
+            date = normalize_date_cell(raw_date)
+            if date:
+                date_state = "valid"
     url = str(row.get(mapping.get("url", ""), "") or "").strip() if "url" in mapping else ""
     body = str(row.get(mapping.get("body", ""), "") or "").strip() if "body" in mapping else ""
     summary = str(row.get(mapping.get("summary", ""), "") or "").strip() if "summary" in mapping else ""
@@ -271,7 +278,7 @@ def row_to_record_fields(
         source_version=1,
         content_hash=content_hash,
         source_ref={"file": source_file, "sheet": sheet_name, "row": row_no},
-    )
+    ), date_state
 
 
 def import_rows(
@@ -282,8 +289,14 @@ def import_rows(
     *,
     fallback_date: str | None,
     category_fallback: str | None,
+    in_breadth_nav: bool = True,
 ) -> dict:
     """逐行入库：去重（包内 + 撞库）→ breadth_manual_records + 索引任务。
+
+    in_breadth_nav（三.1，2026-09-30）：行业/ATSC 逐行导入默认 False——
+    行记录保留原栏目与门户检索，不进入主导航广度列表；勾选
+    sync_upload_to_breadth 时为 True（同时进广度，保持原栏目）。
+    GitHub 增量包通道不受影响（其记录默认 True）。
 
     不重复入库：同内容哈希的行（包内重复或库内已存在）跳过并计数。"""
     from app.models.breadth_manual_record import BreadthManualRecord
@@ -294,27 +307,33 @@ def import_rows(
     )
     seen_hashes: set[str] = set()
     created: list[BreadthManualRecord] = []
-    skipped_empty = skipped_duplicate = rows_missing_date = 0
-    row_no = 1
+    skipped_empty = skipped_duplicate = 0
+    rows_missing_date = rows_invalid_date = 0
     for sheet in sheets:
+        # 三.3：行号逐工作表对数据行从 1 重新计数（source_ref.row 不跨表累计）
+        row_no = 0
         for row in sheet.rows:
             row_no += 1
-            fields = row_to_record_fields(
+            packed = row_to_record_fields(
                 row, mapping,
                 upload_id=record.id, user_id=record.submitted_by,
                 fallback_date=fallback_date, category_fallback=category_fallback,
                 source_file=record.original_filename, sheet_name=sheet.name, row_no=row_no,
             )
-            if fields is None:
+            if packed is None:
                 skipped_empty += 1
                 continue
-            if not fields.get("document_date"):
-                rows_missing_date += 1  # 行日期缺失/不合法（照常入库，空日期）
+            fields, date_state = packed
+            if date_state == "missing":
+                rows_missing_date += 1  # 行日期为空（照常入库）
+            elif date_state == "invalid":
+                rows_invalid_date += 1  # 行日期有内容但无法解析（照常入库）
             digest = fields["content_hash"]
             if digest in seen_hashes or digest in existing_hashes:
                 skipped_duplicate += 1
                 continue
             seen_hashes.add(digest)
+            fields["in_breadth_nav"] = in_breadth_nav  # 三.1：主导航广度开关
             created.append(BreadthManualRecord(**fields))
     db.add_all(created)
     db.flush()
@@ -326,4 +345,5 @@ def import_rows(
         "skipped_empty": skipped_empty,
         "skipped_duplicate": skipped_duplicate,
         "rows_missing_date": rows_missing_date,
+        "rows_invalid_date": rows_invalid_date,
     }

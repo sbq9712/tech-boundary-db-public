@@ -59,6 +59,7 @@ def _serialize(record: BreadthManualRecord) -> dict:
         "topic": record.topic,
         "ai_picked": bool(record.ai_picked),
         "source_ref": record.source_ref,
+        "in_breadth_nav": bool(record.in_breadth_nav),
         "created_at": _iso(record.created_at),
         "updated_at": _iso(record.updated_at),
         # 广度总表短键（与 meta-part 记录字段逐字对齐）
@@ -93,18 +94,28 @@ def list_manual_records(
     level: int | None = Query(default=None, ge=0, le=3),
     limit: int = Query(default=500, ge=1, le=2000),
     offset: int = Query(default=0, ge=0),
+    # 三.1：nav=仅主导航广度列表（默认，隐藏行业/ATSC 未勾选同步的行记录）；
+    # all=资料库管理全量（含 in_breadth_nav=false 的行记录）。
+    visibility: Literal["nav", "all"] = Query(default="nav"),
     current_user: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
     stmt = select(BreadthManualRecord).order_by(
         BreadthManualRecord.created_at.desc(), BreadthManualRecord.id.desc()
     )
+    if visibility == "nav":
+        stmt = stmt.where(BreadthManualRecord.in_breadth_nav)  # 主导航默认过滤
     if level is not None:
         stmt = stmt.where(BreadthManualRecord.level == level)
     rows = db.scalars(stmt.limit(limit).offset(offset)).all()
-    total = db.scalar(select(func.count()).select_from(BreadthManualRecord)) or 0
-    level_counts: dict[str, int] = {}
-    all_rows = db.scalars(select(BreadthManualRecord.level)).all()
+    count_stmt = select(func.count()).select_from(BreadthManualRecord)
+    if visibility == "nav":
+        count_stmt = count_stmt.where(BreadthManualRecord.in_breadth_nav)
+    total = db.scalar(count_stmt) or 0
+    lv_stmt = select(BreadthManualRecord.level)
+    if visibility == "nav":
+        lv_stmt = lv_stmt.where(BreadthManualRecord.in_breadth_nav)
+    all_rows = db.scalars(lv_stmt).all()
     level_counts = {
         "curated": sum(1 for lv in all_rows if lv >= 1),
         "key": sum(1 for lv in all_rows if lv >= 2),

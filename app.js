@@ -2472,62 +2472,97 @@ function bindUpDateSegments(tr,f){
 function upIsTableRowFile(name){
   return /\.(xlsx|csv)$/i.test(name||"");
 }
-/* 表格逐行模式：拉预览 → 简易列映射（title 必填）→ 记录到文件条目上 */
-async function upPrepareRowMapping(f){
+/* 表格逐行模式（三.2，2026-10-01 重构）：预览/导入方式/工作表/列映射全部
+   按文件独立——此前所有表格文件共享 #upRowMapWrap 且固定读 sheets[0]，
+   多文件相互覆盖配置、无法选用非首个工作表。配置状态保存在各自文件条目：
+   f._previewSheets（全部工作表）、f.rowMode、f.rowSheet、f.rowMapping；
+   提交时逐文件使用自己的配置。 */
+function upGuessMapping(headers){
+  const aliases={title:["标题","题目","title","名称"],date:["日期","date","时间"],url:["链接","网址","url"],body:["正文","内容","body"],summary:["摘要","summary"],level:["等级","级别","level"],source:["来源","媒体","source"],category:["分类","类别","行业","category"]};
+  const m={};
+  for(const slot of Object.keys(aliases)){
+    for(const k of aliases[slot]){const hit=headers.find(h=>h.toLowerCase().includes(k));if(hit){m[slot]=hit;break;}}
+  }
+  if(!m.title)m.title=headers[0]||""; /* title 必映射：兜底取首列 */
+  return m;
+}
+async function upLoadRowPreview(f){
   const token=window.Auth&&typeof Auth.getToken==='function'?Auth.getToken():(localStorage.getItem('auth_token')||'');
   try{
     const fd=new FormData();fd.append("file",f);
     const resp=await fetch('/api/uploads/row-preview',{method:'POST',body:fd,headers:token?{'Authorization':'Bearer '+token}:{}});
-    if(!resp.ok){const j=await resp.json().catch(()=>({}));upShowResult("表格预览失败："+(j.detail||resp.status),"err");return;}
+    if(!resp.ok){const j=await resp.json().catch(()=>({}));f._previewError=(j.detail||resp.status);upRenderList();upShowResult("表格预览失败："+(j.detail||resp.status),"err");return;}
     const data=await resp.json();
-    const sheet=data.sheets&&data.sheets[0];if(!sheet){upShowResult("表格中没有可用工作表","err");return;}
-    const headers=sheet.headers||[];
-    const slotOptions=(slot)=>'<option value="">（不映射）</option>'+headers.map(h=>`<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join("");
-    const guess=(slots)=>{for(const s of slots){const hit=headers.find(h=>h.toLowerCase().includes(s));if(hit)return hit;}return "";};
-    const wrap=document.getElementById("upRowMapWrap");if(!wrap)return;
-    wrap.hidden=false;
-    /* 四.1（2026-09-30）：表格文件可选拆分模式——每行一个情报（默认，列映射 +
-       行级日期）或整个文件一个情报（保留 Docling 文档理解与分块，走通用文件
-       路径、可用文件级资料日期）。切换时行内日期输入同步启用/禁用。 */
+    if(!data.sheets||!data.sheets.length){f._previewError="没有可用工作表";upRenderList();upShowResult("表格中没有可用工作表","err");return;}
+    f._previewSheets=data.sheets;delete f._previewError;
     f.rowMode=f.rowMode||"row";
-    wrap.innerHTML=`<label style="display:flex;gap:10px;align-items:center;font-size:13px;margin-bottom:6px;">
-      导入方式：
-      <label><input type="radio" name="upRowMode" value="row" ${f.rowMode==="row"?"checked":""}> 每行一个情报</label>
-      <label><input type="radio" name="upRowMode" value="file" ${f.rowMode==="file"?"checked":""}> 整个文件一个情报</label>
-      <span id="upRowModeHint" style="color:var(--text-secondary,#475467);font-size:12px;">${f.rowMode==="row"?"逐行：列映射 + 行级日期（无需文件级日期）":"整文件：AI 文档理解 + 分块；可选文件级资料日期"}</span></label>
-    <div id="upRowMapBody"><div class="lib-upload-tablewrap"><table class="lib-upload-table"><thead><tr><th>语义槽位</th><th>表格列（必映射：标题）</th></tr></thead><tbody>
-      <tr><td>标题 *</td><td><select data-slot="title">${slotOptions()}</select></td></tr>
-      <tr><td>日期</td><td><select data-slot="date">${slotOptions()}</select></td></tr>
-      <tr><td>链接</td><td><select data-slot="url">${slotOptions()}</select></td></tr>
-      <tr><td>正文</td><td><select data-slot="body">${slotOptions()}</select></td></tr>
-      <tr><td>摘要</td><td><select data-slot="summary">${slotOptions()}</select></td></tr>
-      <tr><td>等级</td><td><select data-slot="level">${slotOptions()}</select></td></tr>
-      <tr><td>来源</td><td><select data-slot="source">${slotOptions()}</select></td></tr>
-      <tr><td>分类</td><td><select data-slot="category">${slotOptions()}</select></td></tr>
-    </tbody></table></div>
-    <div style="font-size:12px;margin-top:4px;color:var(--text-secondary,#475467);">工作表：${escapeHtml(sheet.name)} · 共 ${sheet.total_rows} 行 · 预览前 ${(sheet.rows||[]).length} 行（每行一个情报；不要求文件级日期）</div></div>`;
-    const setSel=(slot,val)=>{const el=wrap.querySelector(`[data-slot="${slot}"]`);if(el&&val)el.value=val;};
-    setSel("title",guess(["标题","title","名称"]));
-    setSel("date",guess(["日期","date"]));
-    setSel("url",guess(["链接","url","网址"]));
-    setSel("body",guess(["正文","内容","body"]));
-    setSel("summary",guess(["摘要","summary"]));
-    setSel("level",guess(["等级","level"]));
-    setSel("source",guess(["来源","source"]));
-    setSel("category",guess(["分类","类目","category"]));
-    const collect=()=>{const m={};wrap.querySelectorAll("[data-slot]").forEach(sel=>{if(sel.value)m[sel.dataset.slot]=sel.value;});return m;};
-    f.rowSheet=sheet.name;
-    f.rowMapping=collect();
-    wrap.querySelectorAll("[data-slot]").forEach(sel=>sel.addEventListener("change",()=>{f.rowMapping=collect();}));
-    wrap.querySelectorAll('input[name="upRowMode"]').forEach(radio=>radio.addEventListener("change",()=>{
-      f.rowMode=wrap.querySelector('input[name="upRowMode"]:checked').value;
-      const body=wrap.querySelector("#upRowMapBody");
-      if(body)body.hidden=f.rowMode!=="row";
-      const hint=wrap.querySelector("#upRowModeHint");
-      if(hint)hint.textContent=f.rowMode==="row"?"逐行：列映射 + 行级日期（无需文件级日期）":"整文件：AI 文档理解 + 分块；可选文件级资料日期";
-      upRenderList();
-    }));
-  }catch(e){upShowResult("表格预览失败："+e,"err");}
+    f.rowSheet=f.rowSheet||data.sheets[0].name;
+    f.rowMapping=f.rowMapping||upGuessMapping(data.sheets[0].headers||[]);
+    upRenderList();
+  }catch(e){f._previewError=String(e);upRenderList();upShowResult("表格预览失败："+e,"err");}
+}
+/* 单个表格文件的独立配置弹窗（三.2）：工作表下拉（含非首个工作表）+
+   导入方式 + 语义槽位列映射，全部读写该文件条目自身的状态。 */
+function upOpenRowCfg(idx){
+  const f=upPending[idx];if(!f)return;
+  if(!f._previewSheets){upLoadRowPreview(f).then(()=>{if(f._previewSheets)upOpenRowCfg(idx);});return;}
+  const sheets=f._previewSheets;
+  document.getElementById("upRowCfgOverlay")?.remove();
+  const ov=document.createElement("div");
+  ov.id="upRowCfgOverlay";
+  ov.style.cssText="position:fixed;inset:0;z-index:1010;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:24px 16px;";
+  const slotRows=(headers)=>["title","date","url","body","summary","level","source","category"].map(slot=>{
+    const label={title:"标题 *",date:"日期",url:"链接",body:"正文",summary:"摘要",level:"等级",source:"来源",category:"分类"}[slot];
+    const opts='<option value="">（不映射）</option>'+headers.map(h=>`<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join("");
+    const cur=(f.rowMapping||{})[slot]||"";
+    return `<tr><td>${label}</td><td><select data-slot="${slot}">${opts}</select></td></tr>`;
+  }).join("");
+  const renderBody=(sheetName)=>{
+    const sheet=sheets.find(s=>s.name===sheetName)||sheets[0];
+    const headers=sheet.headers||[];
+    return `<div style="margin-bottom:10px;"><label style="font-size:13px;">工作表：
+      <select id="upCfgSheet" style="margin-left:6px;">${sheets.map(s=>`<option value="${escapeHtml(s.name)}" ${s.name===sheet.name?"selected":""}>${escapeHtml(s.name)}（${s.total_rows??(s.rows||[]).length} 行）</option>`).join("")}</select></label></div>
+      <div style="margin-bottom:10px;font-size:13px;">导入方式：
+      <label style="margin-right:14px;"><input type="radio" name="upCfgMode" value="row" ${(f.rowMode||"row")==="row"?"checked":""}> 每行一个情报</label>
+      <label><input type="radio" name="upCfgMode" value="file" ${f.rowMode==="file"?"checked":""}> 整个文件一个情报</label></div>
+      <div class="lib-upload-tablewrap" style="max-height:300px;overflow:auto;"><table class="lib-upload-table"><thead><tr><th>语义槽位</th><th>表格列（必映射：标题）</th></tr></thead><tbody>${slotRows(headers)}</tbody></table></div>`;
+  };
+  ov.innerHTML=`<div class="lib-upload-dialog" role="dialog" aria-modal="true" aria-label="表格导入配置" style="margin:auto;max-width:560px;width:100%;">
+    <div class="lib-upload-head"><h2>表格导入配置：${escapeHtml(f.name)}</h2><button class="lib-upload-close" id="upCfgClose" type="button" aria-label="关闭">✕</button></div>
+    <div class="lib-upload-body" id="upCfgBody">${renderBody(f.rowSheet)}</div>
+    <div class="lib-upload-actions"><button class="secondary-btn" id="upCfgCancel" type="button">取消</button><button class="primary-btn" id="upCfgSave" type="button">保存配置</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const bindBody=()=>{
+    ov.querySelector("#upCfgSheet").addEventListener("change",(e)=>{
+      const ns=e.target.value;const sheet=sheets.find(s=>s.name===ns);
+      /* 换工作表：保留在新表头中仍存在的已选列，缺失槽位重新猜测 */
+      const headers=sheet.headers||[];const old=f.rowMapping||{};
+      const kept={};for(const k of Object.keys(old)){if(headers.includes(old[k]))kept[k]=old[k];}
+      f.rowSheet=ns;
+      f.rowMapping=Object.assign(upGuessMapping(headers),kept);
+      ov.querySelector("#upCfgBody").innerHTML=renderBody(ns);
+      const sel=ov.querySelector("#upCfgBody");
+      for(const slot of Object.keys(f.rowMapping)){const el=sel.querySelector(`[data-slot="${slot}"]`);if(el&&f.rowMapping[slot])el.value=f.rowMapping[slot];}
+      bindBody();
+    });
+  };
+  for(const slot of Object.keys(f.rowMapping||{})){const el=ov.querySelector(`[data-slot="${slot}"]`);if(el&&f.rowMapping[slot])el.value=f.rowMapping[slot];}
+  bindBody();
+  ov.querySelector("#upCfgClose").onclick=()=>ov.remove();
+  ov.querySelector("#upCfgCancel").onclick=()=>ov.remove();
+  ov.querySelector("#upCfgSave").onclick=()=>{
+    f.rowMode=ov.querySelector('input[name="upCfgMode"]:checked').value;
+    f.rowSheet=ov.querySelector("#upCfgSheet").value;
+    const m={};ov.querySelectorAll("[data-slot]").forEach(sel=>{if(sel.value)m[sel.dataset.slot]=sel.value;});
+    f.rowMapping=m;
+    ov.remove();upRenderList();
+  };
+}
+function upRowCfgLabel(f){
+  if(f._previewError)return "预览失败";
+  if(!f._previewSheets)return "读取中…";
+  return f.rowMode==="file"?"整文件导入":(f.rowSheet||"配置映射");
 }
 function upAddFiles(fileList){
   const duplicated=[];
@@ -2535,7 +2570,7 @@ function upAddFiles(fileList){
 
     if(upPending.some(x=>x.name===f.name&&x.size===f.size)){duplicated.push(f.name);continue;}
     upPending.push(f);
-    if(upIsTableRowFile(f.name))upPrepareRowMapping(f);
+    if(upIsTableRowFile(f.name))upLoadRowPreview(f);
   }
   if(duplicated.length)upShowResult("已添加过（未重复加入）："+duplicated.join("、"),"");
   upRenderList();
@@ -2570,7 +2605,7 @@ function upRenderList(){
       </div></td>
       <td><select class="lib-upload-input lib-up-cat" aria-label="行业图景节点">${upTaxonomy?upTaxonomyOptions():'<option value="">不指定，通过AI自动识别</option>'}</select></td>
       <td><input class="lib-upload-input lib-up-note" type="text" placeholder="选填" aria-label="备注" value="${escapeHtml(f.upNote||"")}"></td>
-      <td class="lib-up-op"><span class="lib-up-state">${escapeHtml(meta.text)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
+      <td class="lib-up-op">${upIsTableRowFile(f.name)?`<button class="lib-upload-rm" type="button" data-up-cfg="${i}" title="导入方式 / 工作表 / 列映射">${escapeHtml(upRowCfgLabel(f))}</button>`:""}<span class="lib-up-state">${escapeHtml(meta.text)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
     </tr>`;}).join("");
   /* 已选分类回显（value 不能直接内联在 select 上） */
   list.querySelectorAll("[data-up-row]").forEach(tr=>{
@@ -2578,6 +2613,7 @@ function upRenderList(){
     if(f&&f.upCat){const sel=tr.querySelector(".lib-up-cat");if(sel)sel.value=f.upCat;}
   });
   list.querySelectorAll("button[data-up-rm]").forEach(b=>b.onclick=()=>{upPending.splice(Number(b.dataset.upRm),1);upRenderList();});
+  list.querySelectorAll("button[data-up-cfg]").forEach(b=>b.onclick=()=>upOpenRowCfg(Number(b.dataset.upCfg)));
   upBindRowInputs();
   const submit=document.getElementById("upSubmit");
   if(submit)submit.disabled=upPending.length===0;
@@ -2653,13 +2689,15 @@ async function upSubmit(){
       if(f.upNote)fd.append("note",f.upNote);
       if(upSection)fd.append("primary_section",upSection);
       if(upSection==="breadth"&&upSub)fd.append("breadth_source",upSub);
-      /* 不提交文件级日期：行日期缺失时行内为空，不静默替代（四.2） */
+      /* 三.1：行业/ATSC 逐行分支此前漏传同步开关——勾选后行记录须同时进主导航广度 */
+      if(syncBreadth&&(upSection==="industry"||upSection==="atsc"))fd.append("sync_upload_to_breadth","true");
+      /* 不提交文件级日期：行日期缺失时行内为空，不静默替代（四.2/三.3） */
       f.upState="uploading";f.upMsg="";
       upRenderList();
       try{
         const r=await apiFetch("/api/uploads",{method:"POST",body:fd});
         if(r&&r.ok){ok++;const j=await r.json().catch(()=>({}));const st=j.row_import||{};
-          f.upState="done";f.upMsg=`✓ ${st.imported??0} 行`+(st.skipped_duplicate?` 去重${st.skipped_duplicate}`:"")+(st.skipped_empty?` 空行${st.skipped_empty}`:"");}
+          f.upState="done";f.upMsg=`✓ ${st.imported??0} 行`+(st.skipped_duplicate?` 去重${st.skipped_duplicate}`:"")+(st.skipped_empty?` 空行${st.skipped_empty}`:"")+(st.rows_missing_date?` 空日期${st.rows_missing_date}`:"")+(st.rows_invalid_date?` 非法日期${st.rows_invalid_date}`:"");}
         else{fail++;const j=r?await r.json().catch(()=>({})):{};f.upState="err";f.upMsg="✗ "+(j.detail||("HTTP "+(r?r.status:"")));}
       }catch(e){fail++;f.upState="err";f.upMsg="✗ 网络错误";}
       upRenderList();

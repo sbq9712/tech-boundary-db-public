@@ -481,15 +481,21 @@ async def upload_files(
             db.add(record)
             db.commit()
             db.refresh(record)
+            # 三.1：industry/atsc 逐行分支此前漏传 sync_upload_to_breadth——
+            # 勾选"同步上传到广度"时行记录须同时进主导航广度列表（保持原栏目）。
             stats = import_rows(
                 db, record, sheets, mapping,
-                fallback_date=document_date,
+                fallback_date=None,
                 category_fallback=manual_category,
+                in_breadth_nav=sync_upload_to_breadth,
             )
+            # 三.3：空日期与非法日期分开计数（行日期不再用文件日期静默兜底）
             record.note = (
                 f"逐行导入 {stats['imported']} 条"
                 + (f" · 空标题跳过 {stats['skipped_empty']}" if stats["skipped_empty"] else "")
                 + (f" · 去重跳过 {stats['skipped_duplicate']}" if stats["skipped_duplicate"] else "")
+                + (f" · 空日期 {stats['rows_missing_date']}" if stats["rows_missing_date"] else "")
+                + (f" · 非法日期 {stats['rows_invalid_date']}" if stats["rows_invalid_date"] else "")
             )
             db.commit()
             db.refresh(record)
