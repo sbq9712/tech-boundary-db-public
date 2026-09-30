@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 from app.document_ingestion import metadata, runner, service, storage
 
 
@@ -104,8 +105,9 @@ def test_bundle_cache_checks_every_file_and_fingerprint(tmp_path):
 
 
 def test_registry_and_mime_cover_native_formats():
-    from app.document_ingestion.parser import input_suffix, supported_formats
     from docling.datamodel.base_models import FormatToExtensions
+
+    from app.document_ingestion.parser import input_suffix, supported_formats
 
     registry = supported_formats()
     assert set(registry["formats"]) == {fmt.value for fmt in FormatToExtensions}
@@ -120,10 +122,11 @@ def test_registry_and_mime_cover_native_formats():
 
 
 def test_hybrid_heading_token_boundary_and_stability(monkeypatch):
-    from app.document_ingestion import chunker
     from docling.chunking import HybridChunker
     from docling_core.transforms.chunker.tokenizer.base import BaseTokenizer
     from docling_core.types.doc import DocItemLabel, DoclingDocument
+
+    from app.document_ingestion import chunker
 
     class FixtureTokenizer(BaseTokenizer):
         """Deterministic tokenizer substitute, NOT a bge-m3 model validation."""
@@ -258,9 +261,11 @@ def test_incremental_index_rejects_stale_source_rev(tmp_path):
         }
 
     index = module.IncrementalIndex(tmp_path / "index.pkl", embed)
-    base = dict(filename="a.pdf", title="T", primary_category="未分类",
-                secondary_categories=[], confidentiality="内部", source_type="其他",
-                checksum_sha256="a" * 64, created_at=None)
+    base = {
+        "filename": "a.pdf", "title": "T", "primary_category": "未分类",
+        "secondary_categories": [], "confidentiality": "内部", "source_type": "其他",
+        "checksum_sha256": "a" * 64, "created_at": None,
+    }
     # 先落地 rev=2（新版本）
     r1 = asyncio.run(index.upsert(document_id=new_doc, chunks=[_chunk(new_doc, 2, "rev2")], **base))
     assert r1["chunk_count"] == 1 and r1["rejected_stale_rev_chunks"] == 0
@@ -461,8 +466,9 @@ def test_local_start_prepares_docling_models_before_starting_api():
 
 @pytest.mark.parametrize("configured, expected", [(None, False), ("false", False), ("true", True)])
 def test_formula_enrichment_is_opt_in_without_disabling_structure(monkeypatch, configured, expected):
-    from app.document_ingestion import docling_processor
     from docling.datamodel.base_models import InputFormat
+
+    from app.document_ingestion import docling_processor
 
     monkeypatch.delenv("TECHDB_DOCLING_BACKEND_OPTIONS_FILE", raising=False)
     if configured is None:
