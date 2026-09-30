@@ -7,7 +7,7 @@ const path = require('node:path');
 const elements = new Map();
 function element(id) {
   if (!elements.has(id)) elements.set(id, {value:'', style:{}, hidden:false,
-    innerHTML:'', scrollTop:0, scrollHeight:100, focus(){}, addEventListener(){}});
+    dataset:{}, innerHTML:'', scrollTop:0, scrollHeight:100, focus(){}, addEventListener(){}});
   return elements.get(id);
 }
 const streams = [];
@@ -34,7 +34,7 @@ const context = vm.createContext({
 const source = fs.readFileSync(path.join(__dirname,'../app.js'),'utf8');
 vm.runInContext(source,context);
 const run = code => vm.runInContext(code,context);
-run("loadConversations=async()=>{}; bindEvents=()=>{}; shell=()=>''; loadAssistantModels=()=>{}; loadHomeBoundaries=()=>{}; loadAlertIntel=()=>{}; loadKnowledgeGraph=()=>{}; closeUploadModal=()=>{}; loadDashboards=()=>{};");
+run("loadConversations=async()=>{}; bindEvents=()=>{}; shell=()=>''; loadAssistantModels=()=>{}; loadHomeBoundaries=()=>{}; loadAlertIntel=()=>{}; loadKnowledgeGraph=()=>{}; closeUploadModal=()=>{}; closeAccountMenu=()=>{}; libClassifyClose=null; window.Auth={}; Auth={requireAuth:()=>{}}; loadDashboards=()=>{};");
 const tick = () => new Promise(resolve=>setImmediate(resolve));
 function event(index,type,data) {
   streams[index].output.enqueue(new TextEncoder().encode(

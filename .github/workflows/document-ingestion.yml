@@ -2,6 +2,8 @@ name: Document ingestion contracts
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
     paths:
       - 'backend/**'
       - 'services/canonical-qa/**'

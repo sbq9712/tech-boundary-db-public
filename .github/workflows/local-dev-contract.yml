@@ -3,6 +3,8 @@ name: Local development contracts
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
     paths:
       - "start_with_local_ai.sh"
       - "web/Dockerfile"

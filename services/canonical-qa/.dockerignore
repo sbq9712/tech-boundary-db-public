@@ -20,8 +20,12 @@ qa-backend/*
 !qa-backend/provenance.py
 !qa-backend/evidence_metadata.py
 !qa-backend/runtime_safety.py
+!qa-backend/record_ops.py
 !qa-backend/check_assets.py
 !qa-backend/qa-assets-manifest.json
+!qa-backend/test_retrieval_pipeline.py
+!qa-backend/tests/
+!qa-backend/tests/**
 !qa-backend/Dockerfile.release
 !qa-backend/Dockerfile.incremental
 !data/

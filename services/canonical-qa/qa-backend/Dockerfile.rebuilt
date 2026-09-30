@@ -5,15 +5,22 @@ ARG QA_BASE_IMAGE=techdb-canonical-qa:0801-base
 FROM ${QA_BASE_IMAGE}
 
 USER root
+# 七.1：逐模块白名单新增 record_ops.py（记录级版本/删除治理，二.1 起
+# server 硬依赖）——新增模块必须同步登记，否则镜像内 server 无法启动
+# （隔离重建验收 七.2 会拦住）。
 COPY --chown=qa:qa qa-backend/config.py qa-backend/server.py \
     qa-backend/incremental_index.py qa-backend/retrieval_pipeline.py \
-    qa-backend/graph_fragment.py qa-backend/answer_chain.py \
+    qa-backend/graph_fragment.py qa-backend/record_ops.py \
+    qa-backend/answer_chain.py \
     qa-backend/epistemic.py qa-backend/verifier.py qa-backend/claim_mapping.py \
     qa-backend/citation_grounding.py qa-backend/numeric_facts.py \
     qa-backend/primary_evidence.py qa-backend/answer_status.py \
     qa-backend/knowledge_boundary.py qa-backend/answer_repair.py \
     qa-backend/provenance.py qa-backend/evidence_metadata.py \
     qa-backend/runtime_safety.py /app/qa-backend/
+# 合同测试随镜像分发（容器内可直接 pytest 验收）
+COPY --chown=qa:qa qa-backend/test_retrieval_pipeline.py /app/qa-backend/
+COPY --chown=qa:qa qa-backend/tests/ /app/qa-backend/tests/
 COPY --chown=qa:qa qa-backend/qa-assets-manifest.json /app/qa-backend/qa-assets-manifest.json
 COPY --chown=qa:qa data/lightrag/vector_index_v2.pkl data/lightrag/bm25_index.pkl \
     data/lightrag/jieba_custom_dict.txt data/lightrag/graph-export.json /app/data/lightrag/

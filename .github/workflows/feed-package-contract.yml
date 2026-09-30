@@ -3,6 +3,8 @@ name: Feed package contracts
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
     paths:
       - "scripts/build_feed_package.py"
       - "scripts/validate_feed_package.py"
