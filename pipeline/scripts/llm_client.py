@@ -68,6 +68,15 @@ def call_glm_batch(prompt, items, batch_size=10, timeout=120, max_workers=5,
       - progress logging every `progress_every` completed batches
     Returns: list of parsed JSON dicts from all completed batches
     """
+    # 八：离线隔离验收用——缺 key/不可达时每批退避 155s × 多步 ≈ 单轮 10+ 分钟。
+    # TECHDB_GLM_BACKOFF_DELAYS=0 让无 key 场景快速如实失败（默认值不变）。
+    if os.environ.get("TECHDB_GLM_BACKOFF_DELAYS"):
+        try:
+            backoff_delays = tuple(float(x) for x in
+                                   os.environ["TECHDB_GLM_BACKOFF_DELAYS"].split(","))
+        except ValueError:
+            pass
+
     def call(batch):
         full_prompt = prompt + json.dumps(batch, ensure_ascii=False)
         for attempt, delay in enumerate(backoff_delays):

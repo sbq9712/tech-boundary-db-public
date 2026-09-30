@@ -83,6 +83,16 @@ SOURCES = {
     "wechat": {"repo": "wodewoping-png/wechat-daily-news-csv", "path": "csv", "prefix": ""},
 }
 
+# 八（2026-10-01）：源仓库端点隔离覆盖——设置
+# TECHDB_PIPELINE_GITHUB_API_BASE / TECHDB_PIPELINE_RAW_BASE 后，
+# 文件列表与内容下载指向替代源（本地/隔离环境的固定小样本源站），
+# 未设置时行为与原先完全一致（仍用 api.github.com /
+# raw.githubusercontent.com）。用于三个源头的隔离小样本验收与演练。
+GITHUB_API_BASE = os.environ.get("TECHDB_PIPELINE_GITHUB_API_BASE",
+                                 "https://api.github.com").rstrip("/")
+RAW_BASE = os.environ.get("TECHDB_PIPELINE_RAW_BASE",
+                          "https://raw.githubusercontent.com").rstrip("/")
+
 def log(msg):
     ts = datetime.now(timezone(timedelta(hours=8))).strftime("%H:%M:%S")
     print(f"[{ts}] {msg}", flush=True)
@@ -103,7 +113,7 @@ def acquire_lock():
 def gh_api(url):
     """GitHub API call with proper authentication."""
     try:
-        cmd = ["curl", "-4", "-sL", f"https://api.github.com/repos/{url}"]
+        cmd = ["curl", "-4", "-sL", f"{GITHUB_API_BASE}/repos/{url}"]
         if TOKEN:
             cmd += ["-H", f"Authorization: Bearer {TOKEN}"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -324,7 +334,7 @@ def download_new_csvs(new_per_source):
         successfully_downloaded[name] = []
 
         for fname in new_files:
-            url = f"https://raw.githubusercontent.com/{info['repo']}/main/{info['path']}/{fname}"
+            url = f"{RAW_BASE}/{info['repo']}/main/{info['path']}/{fname}"
             local_path = f"/tmp/techdb_{name}_{fname}"
             # Never accept a stale file left by an earlier failed run.
             try:
@@ -350,7 +360,7 @@ def download_new_csvs(new_per_source):
                     ok = True
                     break
                 # raw.githubusercontent.com may be unreachable; fall back to API raw endpoint
-                api_url = f"https://api.github.com/repos/{info['repo']}/contents/{info['path']}/{fname}"
+                api_url = f"{GITHUB_API_BASE}/repos/{info['repo']}/contents/{info['path']}/{fname}"
                 try:
                     r = subprocess.run(
                         ["curl", "-4", "-sSL", "--fail", "-H", "Accept: application/vnd.github.v3.raw",
@@ -668,7 +678,15 @@ def translate_non_chinese_titles(records):
 
     def _do_batch(batch):
         full_prompt = TRANSLATE_PROMPT + json.dumps(batch, ensure_ascii=False)
-        for attempt, delay in enumerate((0, 5, 15, 45)):
+        # 八：TECHDB_GLM_BACKOFF_DELAYS=0 → 无 key 离线场景快速失败（默认 (0,5,15,45) 不变）
+        _t_backoff = (0, 5, 15, 45)
+        if os.environ.get("TECHDB_GLM_BACKOFF_DELAYS"):
+            try:
+                _t_backoff = tuple(float(x) for x in
+                                   os.environ["TECHDB_GLM_BACKOFF_DELAYS"].split(","))
+            except ValueError:
+                pass
+        for attempt, delay in enumerate(_t_backoff):
             if delay:
                 time.sleep(delay)
             try:
@@ -998,8 +1016,13 @@ def extract_key_params(records):
 # ── 合并 + 重建分片 ──
 def merge_and_rebuild(new_records):
     """Merge new records into lite, rebuild chunks. Returns (count, start_index)."""
-    with open(LITE_PATH) as f:
-        lite = json.load(f)
+    # 八.冷启动：首次部署/隔离环境 processed/ 为空时，基线视为空集而不是崩溃
+    if os.path.exists(LITE_PATH):
+        with open(LITE_PATH) as f:
+            lite = json.load(f)
+    else:
+        log("  冷启动：无既有 lite 基线，从空集开始")
+        lite = []
 
     unique, dupes = dedup_check(new_records, lite)
     log(f"  去重: {len(new_records)} → {len(unique)} ({dupes} duplicates)")

@@ -163,6 +163,11 @@ def merge_conferences(conf_list: list[dict]) -> dict:
 
 def main():
     print("Loading conferences...", flush=True)
+    # 八.冷启动：extract 首轮可能尚无产出（无候选 → "unchanged" 不写文件），
+    # 此时会议集为空，去重应如实空转而不是 FileNotFoundError。
+    if not INPUT_PATH.exists():
+        print("  conferences.json 不存在（冷启动且无会议候选）——0 条，空转完成", flush=True)
+        return
     conferences = json.loads(INPUT_PATH.read_text("utf-8"))
     print(f"  {len(conferences)} conferences loaded", flush=True)
 
