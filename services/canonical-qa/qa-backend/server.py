@@ -100,123 +100,15 @@ def _base_key_shas() -> list:
     return _BASE_KEY_SHA
 
 
-class RecordOpsStore:
-    """持久化墓碑 + 基础版本替换遮蔽集合；供检索链与 /api/index/record-mutate
-    使用（2026-09-30 重构：遮蔽以 record_key_sha 为身份并持久化）。
+from record_ops import RecordOpsStore as _RecordOpsStoreImpl
 
-    状态模型：
-    - tombstones[ksha]：DELETE 已生效——该记录全链路屏蔽（持久化）；
-    - superseded_key_shas：UPDATE 已删旧增量 chunk、基础版本等待新版本
-      ADD 批次——基础记录暂时屏蔽（持久化）。清除时机（任一）：
-      a) /api/index/upsert 收到携带该 record_key_sha 的 chunk（新版本落地，
-         取代完成——基础版本永久让位给增量新版本）；
-      b) 显式 unblock 操作（纠错通道：误遮蔽的立即恢复）。
-    """
-
-    def __init__(self, path: Path):
-        self.path = path
-        self.tombstones: dict[str, dict] = {}
-        self.superseded_key_shas: set[str] = set()
-        self.loaded = False
-
-    def load(self) -> None:
-        if self.loaded:
-            return
-        self.loaded = True
-        if not self.path.exists():
-            return
-        try:
-            data = json.loads(self.path.read_text("utf-8"))
-            self.tombstones = dict(data.get("tombstones") or {})
-            self.superseded_key_shas = {
-                str(s) for s in (data.get("superseded_key_shas") or [])}
-            print(f"[startup] Record ops state loaded: {len(self.tombstones)} tombstones, "
-                  f"{len(self.superseded_key_shas)} superseded", flush=True)
-        except Exception as exc:
-            print(f"[startup] WARNING: record-ops state ignored: {exc}", flush=True)
-
-    def _persist(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(
-            {"tombstones": self.tombstones,
-             "superseded_key_shas": sorted(self.superseded_key_shas)},
-            ensure_ascii=False), "utf-8")
-        os.replace(tmp, self.path)
-
-    def clear_superseded_by_chunks(self, key_shas: list[str]) -> int:
-        """upsert 落地新版本 chunk 后调用：取代完成，解除基础版本遮蔽。"""
-        n = 0
-        for ksha in key_shas:
-            if ksha and ksha in self.superseded_key_shas:
-                self.superseded_key_shas.discard(ksha)
-                n += 1
-        if n:
-            self._persist()
-        return n
-
-    async def apply_async(self, ops: list[dict]) -> int:
-        """执行 record 级变更：删除既有增量 chunk + 基础版本遮蔽/墓碑。
-
-        （2026-09-30 修复：remove_chunks_by_record_keys 是 async——原同步
-        apply() 裸调用产生 coroutine 从未 await，chunk 实际未删，已从
-        实测日志 RuntimeWarning 捕获。）"""
-        shas_by_meta = _base_key_shas()
-
-        # 1) 增量 chunk（含旧 pipeline-sync 版本）按 record_key_sha 删除
-        #    （unblock 不删任何东西）
-        to_delete_keys = [str(op.get("record_key_sha")) for op in ops
-                          if op.get("record_key_sha") and op.get("op") != "unblock"]
-        removed = await _incremental_index.remove_chunks_by_record_keys(to_delete_keys)
-
-        # 2) 终态更新（delete → 墓碑；update → 等新版本遮蔽；unblock → 清除）
-        new_tomb: set = set()
-        new_sup: set = set()
-        for op in ops:
-            ksha = str(op.get("record_key_sha") or "")
-            if not ksha:
-                continue
-            if op.get("op") == "delete":
-                self.tombstones[ksha] = {
-                    "deleted_at": datetime.now(timezone.utc).isoformat(),
-                    "reason": str(op.get("reason") or "pipeline-delete"),
-                }
-                self.superseded_key_shas.discard(ksha)
-                new_tomb.add(ksha)
-            elif op.get("op") == "update":
-                self.tombstones.pop(ksha, None)
-                self.superseded_key_shas.add(ksha)
-                new_sup.add(ksha)
-            elif op.get("op") == "unblock":
-                self.tombstones.pop(ksha, None)
-                self.superseded_key_shas.discard(ksha)
-        self._persist()
-        self.restore_persisted()
-        mark_fragment_dirty()  # chunk 被移除 → 图谱碎片重推（二.5）
-        print(f"[record-ops] applied {len(ops)} ops: incremental chunks removed="
-              f"{removed}, superseded total={len(self.superseded_key_shas)}, "
-              f"tombstones total={len(self.tombstones)}", flush=True)
-        return len(ops)
-
-    def restore_persisted(self) -> None:
-        """从持久化 sha 集合重算基础索引遮蔽位置（每次 apply 后与启动时调用；
-        position 现算——基础索引 meta 在进程生命周期内不变，重算幂等）。"""
-        shas_by_meta = _base_key_shas()
-        positions: set = set()
-        sup_positions: set = set()
-        for idx, s in enumerate(shas_by_meta):
-            if s in self.tombstones:
-                positions.add(idx)
-            elif s in self.superseded_key_shas:
-                sup_positions.add(idx)
-        self.deleted_base_positions = positions
-        self.superseded_base_positions = sup_positions
-
-    def is_deleted_key(self, key_sha: str) -> bool:
-        return key_sha in self.tombstones
-
-
-_record_ops_store = RecordOpsStore(RECORD_OPS_STATE_FILE)
+# 依赖注入：基础身份序列 + 增量 chunk 删除 + 图谱碎片重推（一.1，2026-09-30）
+_record_ops_store = _RecordOpsStoreImpl(
+    RECORD_OPS_STATE_FILE,
+    base_key_shas_fn=_base_key_shas,
+    remove_chunks_fn=_incremental_index.remove_chunks_by_record_keys,
+    on_change=lambda: mark_fragment_dirty(),  # 前向引用：调用期解析
+    count_chunks_with_content_fn=_incremental_index.count_chunks_with_content)
 _record_ops_store.superseded_base_positions = set()
 _record_ops_store.deleted_base_positions = set()
 
@@ -250,9 +142,9 @@ def _result_allowed(meta: dict, is_base: bool) -> bool:
     if ksha in _record_ops_store.tombstones:
         return False
     if is_base:
-        # 替换遮蔽：按持久化 sha 判定（superseded_base_positions 由
-        # restore_persisted 从 sha 集合现算，勿直接依赖陈旧位置集）
-        if ksha in _record_ops_store.superseded_key_shas:
+        # 替换遮蔽：pending（等待新版本落地）与 landed（新版本已落地、
+        # 基础旧版本永久失效）都屏蔽——一.1：落地后绝不解除基础遮蔽
+        if _record_ops_store.is_base_masked(ksha):
             return False
     return True
 
@@ -1012,8 +904,18 @@ async def lifespan(app: FastAPI):
     # 基础记录遮蔽（重启后删除仍然生效）
     _base_sha_positions()
     _record_ops_store.restore_persisted()
+    # 一.1 启动修复：旧版 clear_superseded_by_chunks 曾在新版本落地后错误
+    # 解除基础遮蔽——凡增量索引存活且与基础同身份的记录，补登 landed
+    # （幂等，一次持久化），保证升级后旧基础版本不再暴露。
+    _repaired = _record_ops_store.repair_landed_from_incremental(
+        _meta_record_key_sha(m) for m in list(_incremental_index.meta))
+    if _repaired:
+        print(f"[startup] repaired {_repaired} exposed base versions → landed",
+              flush=True)
     print(f"[startup] Record identities warmed: {len(_BASE_KEY_SHA)} base key_shas, "
-          f"{len(_record_ops_store.tombstones)} tombstones", flush=True)
+          f"{len(_record_ops_store.tombstones)} tombstones, "
+          f"{len(_record_ops_store.superseded_pending)} superseded-pending, "
+          f"{len(_record_ops_store.superseded_landed)} superseded-landed", flush=True)
 
     # Load jieba custom dictionary for query tokenization
     if JIEBA_DICT.exists():
@@ -1126,9 +1028,10 @@ async def index_upsert(
     except Exception as exc:
         print(f"[index] upsert failed for {req.document_id}: {exc}", flush=True)
         raise HTTPException(status_code=503, detail="embedding index is unavailable") from exc
-    # 新版本 chunk 落地 → 对应 record 的「等待新版本」遮蔽解除（取代完成，
-    # 检索从此返回增量新版本；基础旧版本仍被 record_key_sha 永久让位）。
-    _record_ops_store.clear_superseded_by_chunks(
+    # 新版本 chunk 落地 → pending 转 landed（一.1 修复：基础旧版本从
+    # 「等待落地」转「永久失效」，遮蔽保持不解除；导入链直接取代基础
+    # 同身份记录也在此登记）。后续 DELETE 由墓碑继续全链路屏蔽。
+    _record_ops_store.mark_superseded_landed(
         [str((chunk.metadata or {}).get("record_key_sha") or "")
          for chunk in req.chunks])
     mark_fragment_dirty()  # 导入记录进入图谱碎片（二.5）
@@ -1159,6 +1062,10 @@ class RecordMutateOp(BaseModel):
     record_key_sha: str = Field(min_length=8)
     op: str = Field(pattern="^(update|delete|unblock)$")
     reason: str | None = None
+    # 一.2 幂等更新协议：update 携带新版本内容哈希——服务端只删该记录
+    # 身份下内容不匹配的旧 chunk；新版本 chunk 已落地则直接登记 landed。
+    # 重发/超时重试不删除已落地的新版本（重试丢记录缺陷的根修）。
+    keep_content_sha: str | None = None
 
 
 class RecordMutateRequest(BaseModel):
@@ -1180,11 +1087,14 @@ async def index_record_mutate(
     _check_index_token(x_techdb_index_token)
     try:
         _record_ops_store.load()
-        applied = await _record_ops_store.apply_async([op.model_dump() for op in req.ops])
+        applied, details = await _record_ops_store.apply_async(
+            [op.model_dump() for op in req.ops])
     except Exception as exc:
         print(f"[index] record-mutate failed: {exc}", flush=True)
         raise HTTPException(status_code=503, detail="record-mutate unavailable") from exc
-    return {"status": "ok", "updated": applied}
+    # 一.2：逐 op 服务端终态回执——客户端据此推进基线（成功必须对应
+    # 索引实际内容，而非请求发出）。
+    return {"status": "ok", "updated": applied, "results": details}
 
 
 @app.get("/api/index/record-ops-state")
@@ -1197,6 +1107,8 @@ async def index_record_ops_state(
     return {
         "tombstone_count": len(_record_ops_store.tombstones),
         "tombstones": list(_record_ops_store.tombstones.keys())[:50],
+        "superseded_pending": len(_record_ops_store.superseded_pending),
+        "superseded_landed": len(_record_ops_store.superseded_landed),
         "superseded_base": len(_record_ops_store.superseded_key_shas),
     }
 

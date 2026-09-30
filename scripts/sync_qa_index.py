@@ -99,6 +99,32 @@ def load_state() -> dict:
     return {}
 
 
+def _write_state_atomic(state: dict) -> None:
+    """一.2：状态写入原子化——tmp + os.replace，进程中断不产生半写状态。"""
+    SYNC_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False), "utf-8")
+    os.replace(tmp, STATE_PATH)
+
+
+def _persist_in_flight(record_ops: dict, mutate_receipts: dict,
+                       batch_receipts: dict, confirmed_push: dict,
+                       data_version: str) -> None:
+    """批次失败时保留操作日志（mutate 回执 + 已成功批次），下轮重试据此
+    不再重复删除已成功的新版本、也不重复推送已确认内容。"""
+    state = load_state()
+    state["in_flight"] = {
+        "data_version": data_version,
+        "mutate_receipts": {k: {kk: vv for kk, vv in r.items() if kk != "chunks"}
+                            for k, r in mutate_receipts.items()},
+        "batch_receipts": batch_receipts,
+        "confirmed_push": confirmed_push,
+    }
+    _write_state_atomic(state)
+    log(f"操作日志已落盘（in_flight：mutate 回执 {len(mutate_receipts)}、"
+        f"批次回执 {len(batch_receipts)}）——下次运行按回执续传")
+
+
 def _js_array(path: Path) -> list:
     """解析 window.__X_PARTS__.push([...]) 分片为 JSON 数组。"""
     text = path.read_text("utf-8")
@@ -176,6 +202,11 @@ def build_payload(records: list[dict], data_version: str, batch_no: int) -> dict
                 "source_name": str(rec.get("a", "") or rec.get("s", "") or "pipeline"),
                 "source": "pipeline-sync",
                 "score": rec.get("sc"),
+                # 一.2 幂等更新协议：内容哈希随 chunk 落索引（与 mutate
+                # keep_content_sha / 基线 key_hashes 同源同值）——服务端
+                # update 按 keep_content_sha 保留新版本、upsert 按
+                # (record_key_sha, content_sha) 去重，重试/超时重发安全
+                "content_sha": record_digest(rec),
                 "record_key_sha": key_digest(record_key(rec)),
                 # 统一身份（2026-09-30）：与基础索引重建同源的 uuid5
                 # （URL 稳定则 ID 稳定）→ server 端 dedup/版本替换以同一
@@ -264,7 +295,8 @@ def main(argv: list[str] | None = None) -> int:
 
     state = load_state()
     if (not args.reset_baseline and state.get("data_version") == data_version
-            and not state.get("pending_record_ops")):
+            and not state.get("pending_record_ops")
+            and not state.get("in_flight")):
         # 幂等退出；但有待重试的 record 变更时必须继续——服务端镜像升级后
         # （2026-09-30 实测：404 → 端点可用）靠这一轮把欠账补上并推进基线
         log("data_version 未变化 —— 已是最新，退出（幂等）")
@@ -292,13 +324,12 @@ def main(argv: list[str] | None = None) -> int:
         for kh in deleted_keys[:5]:
             log(f"  [del] {kh[:12]}…")
     if args.reset_baseline:
-        SYNC_DIR.mkdir(parents=True, exist_ok=True)
-        STATE_PATH.write_text(json.dumps({
+        _write_state_atomic({
             "data_version": data_version,
             "key_hashes": {key_digest(record_key(r)): record_digest(r) for r in records},
             "synced_at": datetime.now(timezone.utc).isoformat(),
             "records": len(records), "reset": True,
-        }, ensure_ascii=False), "utf-8")
+        })
         log(f"基线已重置：{STATE_PATH}")
         return 0
     if not fresh and not changed and not deleted_keys:
@@ -316,32 +347,65 @@ def main(argv: list[str] | None = None) -> int:
 
     state_partial = load_state()
     pushed_doc_ids = set(state_partial.get("pushed_doc_ids") or [])
+    in_flight = state_partial.get("in_flight") or {}
+    # 一.2 操作日志：此前各批次的落盘回执 {doc_id: {keys, cshas, pushed_at}}
+    # ——重试据此判断「哪些键的新版本已确认在索引」，成功必须对应索引实际
+    # 内容，而非请求是否发出过。
+    prior_batch_receipts: dict[str, dict] = in_flight.get("batch_receipts") or {}
+    confirmed_push: dict[str, str] = {}   # kh → content_sha（已在索引确认）
+    for doc in prior_batch_receipts.values():
+        for kh, csha in (doc.get("cshas") or {}).items():
+            confirmed_push.setdefault(kh, str(csha))
     token = os.getenv("TECHDB_QA_INDEX_TOKEN", "").strip()
     if not token:
         token_file = SYNC_DIR / "token"  # chmod 600，不入 git（runtime/）
         if token_file.exists():
             token = token_file.read_text("utf-8").strip()
 
-    # ── record 级变更（UPDATE/DELETE）走 /api/index/record-mutate（服务端
-    # 删除旧 chunk + 对基础版本做替换遮蔽/删除墓碑，检索侧全链路生效）。
-    # 服务端不支持（404）或失败时：变更记入 pending_record_ops 且【不推进
-    # 这些键的基线】——宁可下轮重做，不可把未生效的更新/删除谎报为已同步。
-    # ADD 批次推送契约不变（document 整体替换语义，幂等）。──
+    # ── record 级变更（UPDATE/DELETE）走 /api/index/record-mutate。
+    # 一.2 幂等更新协议：update 携带 keep_content_sha=新版本内容哈希——
+    # 服务端只删该身份下内容不匹配的旧 chunk，新版本已落地则直接登记
+    # landed 并回执 surviving_new_chunks>0。因此【重试重发绝不删除已成功
+    # 的新版本】；多批、超时后服务端已成功、进程中断、同步期间发布视图
+    # 变化，全部安全（变更键按当前内容重发，服务端幂等收敛）。
+    # 服务端不支持（404）或整体失败时：变更保留 pending、【不推进这些键
+    # 的基线】——宁可下轮重做，不可把未生效的更新/删除谎报为已同步。──
     pending_ops = state_partial.get("pending_record_ops") or {}
     record_ops: dict[str, dict] = {}
+    kh_to_rec = {key_digest(record_key(r)): r for r in records}
     for kh in changed:
-        record_ops[kh] = {"op": "update"}
+        record_ops[kh] = {"op": "update",
+                          "keep_content_sha": record_digest(kh_to_rec[kh])}
     for kh in deleted_keys:
         record_ops[kh] = {"op": "delete"}
     for kh, op in pending_ops.items():
+        if kh in kh_to_rec:
+            op = {"op": "update", "keep_content_sha": record_digest(kh_to_rec[kh])}
         record_ops.setdefault(kh, op)
+    mutate_receipts: dict[str, dict] = {}   # kh → 服务端终态回执
+    record_ops_ok = True
     if record_ops:
         t0 = time.time()
         try:
-            result = post_record_ops(sorted(record_ops.items()), args.qa_url, token)
+            body = post_record_ops(sorted(record_ops.items()), args.qa_url, token)
+            results = {(r.get("record_key_sha") or ""): r
+                       for r in (body.get("results") or [])}
+            for kh, op in record_ops.items():
+                r = results.get(kh)
+                if r is None:
+                    # 旧版服务端（无逐 op 回执）：HTTP 200=已按旧语义应用；
+                    # delete 视为生效；update 旧语义无 keep 保护 → 不推进
+                    mutate_receipts[kh] = (
+                        {"final_state": "tombstoned"} if op["op"] == "delete"
+                        else {"final_state": "pending"})
+                else:
+                    mutate_receipts[kh] = r
             log(f"record 变更：update {len(changed)} + delete {len(deleted_keys)} + "
-                f"pending {len(pending_ops)} → ok={result.get('updated')}（{time.time() - t0:.1f}s）")
-            record_ops_ok = True
+                f"pending {len(pending_ops)} → ok={body.get('updated')}，终态 "
+                f"landed={sum(1 for r in mutate_receipts.values() if r.get('final_state') == 'landed')} "
+                f"tombstoned={sum(1 for r in mutate_receipts.values() if r.get('final_state') == 'tombstoned')} "
+                f"pending={sum(1 for r in mutate_receipts.values() if r.get('final_state') == 'pending')}"
+                f"（{time.time() - t0:.1f}s）")
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
                 log("[WARN] 服务端不支持 /api/index/record-mutate（镜像未升级）——"
@@ -352,52 +416,88 @@ def main(argv: list[str] | None = None) -> int:
         except (urllib.error.URLError, OSError, ValueError) as exc:
             log(f"[ERROR] record-mutate 失败：{exc}")
             record_ops_ok = False
-    else:
-        record_ops_ok = True
+        if not record_ops_ok:
+            # 整体失败：保守回执（全部 pending）——基线不推进，下轮重发
+            # （幂等协议保证安全）；changed 键的新版本仍可随批上送。
+            for kh, op in record_ops.items():
+                mutate_receipts.setdefault(kh, {"final_state": "pending"})
 
     items = list(fresh.items())
-    # 内容更新的记录在 record-mutate 成功后必须随 ADD 批次上送新版本——
-    # 服务端 update 只删旧增量 chunk + 遮蔽基础旧版本；新版本不随批上送
-    # 的话该记录会从索引彻底消失（旧被遮、新未至，2026-09-30 端到端实测
-    # 发现）。record 变更失败（record_ops_ok=False）时不上送：服务端未
-    # 删旧版本，重推会以弱索引覆盖基础索引全文版本（见模块头注释）。
-    if record_ops_ok:
-        items += list(changed.items())
+    # 内容更新的记录必须随 ADD 批次上送新版本——服务端 update 只删旧增量
+    # chunk + 遮蔽基础旧版本；新版本不随批上送的话该记录会从索引彻底消失
+    # （旧被遮、新未至，2026-09-30 端到端实测发现）。幂等协议下即使
+    # record-mutate 整体失败也上送（服务端 (ksha,csha) 去重防重复；
+    # 旧 chunk 由下轮 mutate 幂等清理）。
+    items += list(changed.items())
     total_batches = (len(items) + BATCH_RECORDS - 1) // BATCH_RECORDS
     synced = 0
     for batch_no in range(total_batches):
         doc_id = f"pipeline-lite-{data_version[:12]}-{batch_no}"
+        batch_pairs = items[batch_no * BATCH_RECORDS:(batch_no + 1) * BATCH_RECORDS]
+        batch = [rec for _, rec in batch_pairs]
+        batch_cshas = {kh: record_digest(rec) for kh, rec in batch_pairs}
         if doc_id in pushed_doc_ids:
+            # 同 data_version 断点续推；内容指纹入确认集（进程中断恢复）
+            for kh, csha in batch_cshas.items():
+                confirmed_push.setdefault(kh, csha)
             log(f"批次 {batch_no} 此前已成功（{doc_id}）——跳过")
-            synced += min(BATCH_RECORDS, len(items) - batch_no * BATCH_RECORDS)
+            synced += len(batch)
             continue
-        batch = [rec for _, rec in items[batch_no * BATCH_RECORDS:(batch_no + 1) * BATCH_RECORDS]]
         payload = build_payload(batch, data_version, batch_no)
         t0 = time.time()
         try:
             result = post_upsert(payload, args.qa_url, token)
         except urllib.error.HTTPError as exc:
             log(f"[ERROR] upsert 批次 {batch_no} HTTP {exc.code}：{exc.read()[:200]}")
+            _persist_in_flight(record_ops, mutate_receipts, prior_batch_receipts,
+                               confirmed_push, data_version)
             return 1
         except (urllib.error.URLError, OSError, ValueError) as exc:
             log(f"[ERROR] upsert 批次 {batch_no} 失败：{exc}")
+            _persist_in_flight(record_ops, mutate_receipts, prior_batch_receipts,
+                               confirmed_push, data_version)
             return 1
-        log(f"批次 {batch_no}/{total_batches - 1}：{len(batch)} 条 → {result.get('status')}（{time.time() - t0:.1f}s）")
+        log(f"批次 {batch_no}/{total_batches - 1}：{len(batch)} 条 → {result.get('status')}"
+            f"（{time.time() - t0:.1f}s，去重跳过 {result.get('skipped_duplicate_chunks', 0)}）")
         synced += len(batch)
-        # 每批成功即推进断点（下轮重跑只推缺失批）
+        for kh, csha in batch_cshas.items():
+            confirmed_push[kh] = csha
+        # 每批成功即原子落盘断点 + 回执（含键→内容指纹映射）
         state_partial.setdefault("pushed_doc_ids", []).append(doc_id)
         state_partial["partial_at"] = datetime.now(timezone.utc).isoformat()
-        SYNC_DIR.mkdir(parents=True, exist_ok=True)
-        STATE_PATH.write_text(json.dumps(state_partial, ensure_ascii=False), "utf-8")
+        prior_batch_receipts[doc_id] = {
+            "keys": [kh for kh, _ in batch_pairs],
+            "cshas": batch_cshas,
+            "pushed_at": datetime.now(timezone.utc).isoformat()}
+        state_partial["in_flight"] = {
+            "data_version": data_version,
+            "batch_receipts": prior_batch_receipts}
+        _write_state_atomic(state_partial)
 
-    # ── 基线推进：ADD 批次全部成功；record 变更成功 → 完整基线；
-    # record 变更未成功 → 这些键按操作前基线回填并留在 pending_record_ops
-    # （update：保留旧 digest；delete：键回填旧 digest），下轮重试。──
+    # ── 基线推进（一.2 核心）：只推进「服务端确认已落地」的键——
+    #   delete：mutate 回执 tombstoned（墓碑已全链路屏蔽）；
+    #   update：mutate 回执 landed（surviving_new_chunks>0）或本/前轮批次
+    #           回执确认同内容指纹已在索引；
+    #   其余键回填操作前 digest 留在 pending_record_ops，下轮幂等重试。
     new_key_hashes = {key_digest(record_key(r)): record_digest(r) for r in records}
-    if not record_ops_ok:
-        for kh in record_ops:
-            if kh in baseline:
-                new_key_hashes[kh] = baseline[kh]
+    deferred: dict[str, dict] = {}
+    for kh, op in record_ops.items():
+        receipt = mutate_receipts.get(kh) or {}
+        fin = str(receipt.get("final_state") or "pending")
+        if op["op"] == "delete" and fin == "tombstoned":
+            continue  # 已生效：基线不再含该键
+        if op["op"] == "update":
+            # 推进前提：mutate 已确认应用（record_ops_ok）——否则旧增量
+            # chunk 未删、基础未遮蔽，仅凭新版本批次回执推进会留下双版本
+            confirmed = (
+                fin == "landed"
+                or (record_ops_ok
+                    and confirmed_push.get(kh) == op.get("keep_content_sha")))
+            if confirmed:
+                continue
+        deferred[kh] = {"op": op["op"]}
+        if kh in baseline:
+            new_key_hashes[kh] = baseline[kh]
     final_state = {
         "data_version": data_version,
         "key_hashes": new_key_hashes,
@@ -406,13 +506,12 @@ def main(argv: list[str] | None = None) -> int:
         "last_pushed": synced,
         "pushed_doc_ids": [],
     }
-    if not record_ops_ok:
-        final_state["pending_record_ops"] = record_ops
-    SYNC_DIR.mkdir(parents=True, exist_ok=True)
-    STATE_PATH.write_text(json.dumps(final_state, ensure_ascii=False), "utf-8")
-    if not record_ops_ok:
-        log(f"同步部分完成：ADD {synced} 条入索引；{len(record_ops)} 条 update/delete "
-            f"待服务端支持后重试；状态已落盘 {STATE_PATH}")
+    if deferred:
+        final_state["pending_record_ops"] = deferred
+    _write_state_atomic(final_state)
+    if deferred:
+        log(f"同步部分完成：ADD/UPDATE {synced} 条入索引；{len(deferred)} 条 "
+            f"update/delete 待服务端确认后重试；状态已落盘 {STATE_PATH}")
         return 3
     log(f"同步完成：ADD {synced} / UPDATE+DELETE {len(record_ops)} 条；状态已落盘 {STATE_PATH}")
     return 0

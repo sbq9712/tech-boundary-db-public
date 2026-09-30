@@ -133,6 +133,31 @@ class IncrementalIndex:
                 raise ValueError("chunk text is empty")
             texts.append(text)
 
+        # 一.2 幂等：同 (record_key_sha, content_sha) 的 chunk 已在其他文档
+        # 存活（前一轮同步已落地）时先剔除——重试/超时重发/断点恢复不产生
+        # 重复召回，也不再重复付费嵌入。全被剔除则直接返回已就绪回执。
+        existing_pairs = {
+            (str((m.get("chunk_metadata") or {}).get("record_key_sha") or ""),
+             str((m.get("chunk_metadata") or {}).get("content_sha") or ""))
+            for m in self.meta
+            if str(m.get("document_id") or "") != document_id}
+        deduped = []
+        for chunk, text in zip(chunks, texts):
+            md = chunk.get("metadata") or {}
+            pair = (str(md.get("record_key_sha") or ""),
+                    str(md.get("content_sha") or ""))
+            if pair[0] and pair[1] and pair in existing_pairs:
+                continue
+            deduped.append((chunk, text))
+        skipped_dup = len(chunks) - len(deduped)
+        if skipped_dup:
+            print(f"[index] upsert {document_id}: skipped {skipped_dup} duplicate "
+                  f"(record_key_sha, content_sha) chunks", flush=True)
+        if not deduped:
+            return {"documents": 0, "chunks": 0, "skipped_duplicate_chunks": skipped_dup,
+                    "status": "ready"}
+        chunks, texts = [c for c, _ in deduped], [t for _, t in deduped]
+
         async with self._lock:
             raw_embeddings = await self.embedding_func(texts)
             vectors = np.asarray(raw_embeddings, dtype=np.float32)
@@ -146,7 +171,6 @@ class IncrementalIndex:
                 for vector, meta, tokens in zip(self.embeddings, self.meta, self.corpus_tokens)
                 if str(meta.get("document_id")) != document_id
             ]
-            new_meta: list[dict[str, Any]] = []
             for index, (chunk, text) in enumerate(zip(chunks, texts)):
                 # chunk 级覆盖（管线快照一条记录一个 chunk 时，引用卡直接
                 # 显示该记录的标题/日期/来源/链接，而非合成文档标题）；
@@ -229,12 +253,19 @@ class IncrementalIndex:
                 self.bm25 = next_bm25
         return removed
 
-    async def remove_chunks_by_record_keys(self, record_key_shas: list[str]) -> int:
+    async def remove_chunks_by_record_keys(
+            self, record_key_shas: list[str],
+            exclude_content_shas: set[str] | None = None) -> int:
         """按 record_key_sha 删除增量 chunk（record 级 UPDATE/DELETE 用，
-        2026-09-30）。同 document 的其他 chunk 不受影响；返回删除数。"""
+        2026-09-30）。同 document 的其他 chunk 不受影响；返回删除数。
+
+        一.2（2026-09-30 幂等更新协议）：exclude_content_shas 非空时保留
+        内容哈希命中的新版本 chunk——update 重发不再误删已落地的新版本，
+        客户端重试/超时重发/断点恢复全部安全。"""
         keys = {str(k) for k in record_key_shas if k}
         if not keys or not self.record_count:
             return 0
+        keep_cshas = {str(c) for c in (exclude_content_shas or set()) if c}
         async with self._lock:
             with self._state_lock:
                 kept = []
@@ -243,7 +274,8 @@ class IncrementalIndex:
                         self.embeddings, self.meta, self.corpus_tokens):
                     md = meta.get("chunk_metadata") or {}
                     ksha = str(md.get("record_key_sha") or "")
-                    if ksha and ksha in keys:
+                    csha = str(md.get("content_sha") or "")
+                    if ksha and ksha in keys and not (csha and csha in keep_cshas):
                         removed += 1
                         continue
                     kept.append((vector, meta, tokens))
@@ -265,6 +297,21 @@ class IncrementalIndex:
                 self.corpus_tokens = next_corpus
                 self.bm25 = next_bm25
         return removed
+
+    def count_chunks_with_content(self, record_key_sha: str, content_sha: str) -> int:
+        """指定记录身份下、内容哈希匹配的存活 chunk 数（一.2 幂等回执：
+        服务端据此回答「新版本是否已在索引」，客户端据此推进基线）。"""
+        ksha = str(record_key_sha or "")
+        csha = str(content_sha or "")
+        if not ksha or not csha:
+            return 0
+        n = 0
+        for meta in self.meta:
+            md = meta.get("chunk_metadata") or {}
+            if str(md.get("record_key_sha") or "") == ksha \
+                    and str(md.get("content_sha") or "") == csha:
+                n += 1
+        return n
 
     def vector_search(self, query_vector: np.ndarray, top_k: int) -> list[dict[str, Any]]:
         with self._state_lock:
