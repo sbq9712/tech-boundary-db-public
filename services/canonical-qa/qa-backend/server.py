@@ -234,9 +234,75 @@ def _fragment() -> dict:
     return data
 
 
+def _masked_key_shas() -> set:
+    """六.5：全量治理身份集合（持久化墓碑 ∪ 两级替换遮蔽）。"""
+    store = _record_ops_store
+    store.load()
+    return ({str(k) for k in (store.tombstones or {})}
+            | set(store.superseded_key_shas or set()))
+
+
+_STATIC_GOVERN_CACHE: dict = {"sig": None, "data": None}
+
+
+def _governed_static() -> dict:
+    """静态 graph-export 的版本/墓碑治理视图（六.5）。
+
+    读取侧把 entity_to_records（图构建时 lite 下标）绑定回
+    record_key_sha：墓碑/被替换记录的证据从静态节点剔除，证据全灭的
+    节点与关联边移除。记录-操作状态或图文件版本变化时重算（缓存，
+    避免每次请求重算全图 sha）；lite 记录不可用时原样返回并在调用方
+    说明（检索侧另有 _result_allowed 屏蔽兜底）。"""
+    try:
+        st = (WORKING_DIR / "graph-export.json").stat()
+    except OSError:
+        return {}
+    store = _record_ops_store
+    sig = ((st.st_mtime_ns, st.st_size),
+           len(store.tombstones or {}), len(store.superseded_pending or set()),
+           len(store.superseded_landed or set()),
+           len(_records) if isinstance(_records, list) else 0)
+    cached = _STATIC_GOVERN_CACHE.get("data")
+    if cached is not None and _STATIC_GOVERN_CACHE.get("sig") == sig:
+        return cached
+    static = _gfrag.load_static_graph(WORKING_DIR)
+    if not static or not static.get("nodes"):
+        return static
+    try:
+        records = load_records()
+    except (OSError, ValueError) as exc:
+        print(f"[graph-govern] lite records unavailable, skip pruning: {exc}",
+              flush=True)
+        return static
+    pruned = _gfrag.prune_static_by_ops(static, records, _record_key_sha_of,
+                                        _masked_key_shas())
+    gov = pruned.get("governance") or {}
+    if gov.get("dropped_nodes") or gov.get("trimmed_nodes"):
+        print(f"[graph-govern] static pruned: dropped={gov.get('dropped_nodes')} "
+              f"trimmed={gov.get('trimmed_nodes')} "
+              f"unbound={gov.get('unbound_nodes')}", flush=True)
+    _STATIC_GOVERN_CACHE.update({"sig": sig, "data": pruned})
+    return pruned
+
+
 def _merged_graph() -> tuple[list, dict]:
-    """静态 graph-export 标签/邻接 ∪ 增量碎片（SEMANTIC_GRAPH 召回用）。"""
+    """静态 graph-export 标签/邻接 ∪ 增量碎片（SEMANTIC_GRAPH 召回用）。
+
+    六.5：静态侧先过版本/墓碑治理——已删除/被替换记录的实体不再参与
+    实体匹配与邻居标签扩展（记录本身的屏蔽在 _result_allowed 已生效，
+    这里同步移除其图谱影响）。"""
     s_labels, s_adj = _graph_index()
+    try:
+        gov = _governed_static().get("governance") or {}
+        if gov.get("bound"):
+            drop_ids = set(gov.get("dropped_node_ids") or [])
+            drop_labels = set(gov.get("dropped_labels") or [])
+            if drop_ids:
+                s_labels = [t for t in s_labels if t[0] not in drop_ids]
+                s_adj = {k: [nb for nb in v if nb[0] not in drop_labels]
+                         for k, v in s_adj.items() if k not in drop_ids}
+    except Exception as exc:  # 治理失败不阻断召回
+        print(f"[graph-govern] merged-graph filter skipped: {exc}", flush=True)
     frag = _fragment()
     if not frag["nodes"]:
         return s_labels, s_adj
@@ -1376,8 +1442,11 @@ async def get_graph(limit: int = 300):
 
     2026-09-30（二.5）：静态 graph-export.json（管线发布）∪ 增量记录图谱
     碎片（上传/ZIP/逐行导入，实时推导）——同名实体节点合并 degree 与
-    描述；碎片节点附 records 证据定位（标题/链接/日期/统一记录身份）。"""
-    static = _gfrag.load_static_graph(WORKING_DIR)
+    描述；碎片节点附 records 证据定位（标题/链接/日期/统一记录身份）。
+    2026-10-01（六.5）：静态侧先按版本/墓碑治理——已删除/被替换记录的
+    实体节点与关联边在读取侧移除/降级（static_governance 透出计数），
+    静态节点附存活记录证据定位。"""
+    static = _governed_static()
     frag = _fragment()
     if static:
         data = _gfrag.merge_into_static(static, frag)
@@ -1397,6 +1466,7 @@ async def get_graph(limit: int = 300):
         "total_nodes": len(data.get("nodes", [])),
         "total_edges": len(data.get("edges", [])),
         "fragment_nodes": len(frag.get("nodes", [])),
+        "static_governance": static.get("governance"),
     }
 
 

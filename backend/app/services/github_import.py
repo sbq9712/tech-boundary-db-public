@@ -263,6 +263,110 @@ def _read_package(zip_path: Path) -> tuple[dict, list[dict], list[dict] | None]:
     return manifest, records, changes
 
 
+# 六.2（2026-10-01）嵌套字段/类型约束（白名单之外的深层校验）与公开来源准入。
+_FIELD_LIMITS = {
+    "t": ("str", 2000), "d": ("date", 10), "u": ("url", 1024), "c": ("str", 64),
+    "a": ("str", 512), "i": ("scalar", 4), "tg": ("str", 512), "tp": ("str", 512),
+    # sc/i 的历史契约容忍标量（int/float/短字符串，如 sc=7.0、i=1）——消费端
+    # str() 归一；六.2 校验按标量+限量约束而非硬性字符串。
+    "sc": ("scalar", 16), "as": ("str", 8000), "lv": ("str", 32), "wr": ("str", 512),
+    # cl/cln/dp 同为标量容忍（历史包中可为数值，如 dp=3 聚类深度）
+    "cl": ("scalar", 512), "cln": ("scalar", 512), "dp": ("scalar", 512),
+    "b": ("str", _BODY_CAP), "hb": ("int", 2), "aip": ("int", 1),
+}
+_INT_RANGES = {"hb": (1, 2), "aip": (0, 1)}
+_LIST_LIMITS = {"kp": (200, 512), "cp": (64, 512), "scd": (1, 64)}
+# 公开来源准入（六.2）：私有/内网定位符不得进入公开包记录。
+_PRIVATE_URL_RE = re.compile(
+    r"^(?!https?://)"                       # 仅接受 http(s)
+    r"|localhost|127\.0\.0\.1|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\."
+    r"|\.local\b|file://|/home/|/root/|C:\\\\Users",
+    re.IGNORECASE)
+
+
+def _check_public_url(u: str) -> None:
+    """公开来源资格：u 必须为空（no-url 占位）或公网 http(s) 定位符。"""
+    u = (u or "").strip()
+    if not u or u == "no-url" or u.startswith("sha256:"):
+        return  # 无 URL 记录以 t/d 为身份，不涉及内网泄露
+    if u.startswith("http://") or u.startswith("https://"):
+        rest = u.split("://", 1)[1].split("/", 1)[0]
+        host = rest.split("@")[-1].split(":")[0]
+        if ("localhost" == host or host.startswith("127.") or host.startswith("10.")
+                or host.startswith("192.168.") or host.endswith(".local")
+                or host == "0.0.0.0"
+                or re.fullmatch(r"172\.(1[6-9]|2\d|3[01])\..+", host)):
+            raise GitHubPackageError(f"记录引用非公开来源（内网/本机地址）：{u[:80]!r}")
+        return
+    raise GitHubPackageError(f"记录 u 必须为 http(s) URL（实际 {u[:60]!r}）")
+
+
+def _validate_record_shapes(records: list) -> None:
+    """六.2 嵌套字段/类型约束：顶层白名单之外，逐字段类型/长度/取值域校验，
+    嵌套结构（scd 五维 / kp / cp）限形限量——恶意/损坏包在入口拒绝，
+    不落库不落 record_json。"""
+    for i, rec in enumerate(records):
+        if not isinstance(rec, dict):
+            continue  # 结构校验由 _validate_changes 负责
+        for field, (kind, limit) in _FIELD_LIMITS.items():
+            if field not in rec or rec[field] is None:
+                continue
+            v = rec[field]
+            if kind == "str":
+                if not isinstance(v, str) or len(v) > limit:
+                    raise GitHubPackageError(
+                        f"records.json 第 {i} 项 {field} 必须为 ≤{limit} 字符的字符串")
+            elif kind == "scalar":
+                # 历史契约容忍 int/float/短字符串（消费端 str() 归一）
+                if isinstance(v, bool) or not isinstance(v, (str, int, float)) \
+                        or len(str(v)) > limit:
+                    raise GitHubPackageError(
+                        f"records.json 第 {i} 项 {field} 必须为 ≤{limit} 字符的标量")
+            elif kind == "date":
+                if not isinstance(v, str) or not _DATE_RE.fullmatch(v):
+                    raise GitHubPackageError(
+                        f"records.json 第 {i} 项 {field} 必须为 YYYY-MM-DD 日期")
+            elif kind == "url":
+                if not isinstance(v, str) or len(v) > limit:
+                    raise GitHubPackageError(
+                        f"records.json 第 {i} 项 {field} 必须为 ≤{limit} 字符的 URL")
+                _check_public_url(v)
+            elif kind == "int":
+                if not isinstance(v, int) or isinstance(v, bool):
+                    raise GitHubPackageError(f"records.json 第 {i} 项 {field} 必须为整数")
+                lo, hi = _INT_RANGES[field]
+                if not (lo <= v <= hi):
+                    raise GitHubPackageError(
+                        f"records.json 第 {i} 项 {field} 取值越界：{v!r}")
+        for field, (max_len, max_item) in _LIST_LIMITS.items():
+            if field not in rec or rec[field] is None:
+                continue
+            v = rec[field]
+            if field == "scd":
+                # 五维评分 dict：键受限、值必须为数值
+                if not isinstance(v, dict) or len(v) > max_len or not v:
+                    raise GitHubPackageError(
+                        f"records.json 第 {i} 项 scd 必须为非空对象（≤{max_len} 键）")
+                for k2, v2 in v.items():
+                    if not isinstance(k2, str) or len(k2) > 32:
+                        raise GitHubPackageError(f"records.json 第 {i} 项 scd 键非法")
+                    if not isinstance(v2, (int, float)) or isinstance(v2, bool):
+                        raise GitHubPackageError(
+                            f"records.json 第 {i} 项 scd[{k2!r}] 必须为数值")
+            else:
+                if not isinstance(v, list) or len(v) > max_len:
+                    raise GitHubPackageError(
+                        f"records.json 第 {i} 项 {field} 必须为 ≤{max_len} 元数组")
+                for item in v:
+                    # cp 历史包元素可为数值（如聚类编号 [1,2]）——标量容忍
+                    if isinstance(item, bool) or not isinstance(item, (str, int, float)) \
+                            or len(str(item)) > max_item:
+                        raise GitHubPackageError(
+                            f"records.json 第 {i} 项 {field} 元素必须为 ≤{max_item} 字符标量")
+        if "i" in rec and rec["i"] not in (None, "", "l", "n", 0, 1):
+            raise GitHubPackageError(f"records.json 第 {i} 项 i 取值非法：{rec['i']!r}")
+
+
 def _validate_changes(manifest: dict, records: list, changes: object) -> None:
     """嵌套结构校验：id 与 t|d|u 一致、op/v/key 合法、无重复键、计数对账。"""
     if not isinstance(changes, list):
@@ -280,6 +384,7 @@ def _validate_changes(manifest: dict, records: list, changes: object) -> None:
         if rid != expect:
             raise GitHubPackageError(f"records.json 第 {i} 项 id 与 t|d|u 不一致（记录被篡改）")
         rec_ids.add(rid)
+    _validate_record_shapes(records)  # 六.2：嵌套字段/类型 + 公开来源准入
     ops = {"ADD": 0, "UPDATE": 0, "DELETE": 0}
     seen_keys: set[str] = set()
     for i, ch in enumerate(changes):

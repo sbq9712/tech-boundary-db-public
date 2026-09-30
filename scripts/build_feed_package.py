@@ -106,13 +106,17 @@ def normalize(rec: dict, date: str) -> dict:
     """输出记录：正向字段白名单导出（v2）。
 
     - 白名单外交织字段（cm 评论 / fb 冗余全文 / sr/source 内部文件名等）不进公开包；
-    - u 为空时按契约占位（sha256:<16>）参与键；
+    - u 为空时按契约占位（"no-url" 常量）参与键——六.1（2026-10-01）：
+      原占位 sha256:<内容哈希> 使无 URL 记录的内容更新（重评分/摘要）
+      漂移身份（UPDATE 误判为 DELETE+ADD）；占位与内容解耦后身份稳定。
+      同 t+d 的不同无 URL 记录本就无法区分（v1 同语义），合并为同键。
+      旧水印键做一次性迁移（见 diff_against_watermark）。
     - id = t|d|u 规范键的稳定 ID。
     """
     out = dict(rec)
     out["d"] = date
     if not str(out.get("u", "")).strip():
-        out["u"] = "sha256:" + content_hash(rec)[:16]
+        out["u"] = "no-url"  # 六.1：身份占位与内容解耦（内容漂移修复）
     out["id"] = stable_id(str(out.get("t", "")).strip(), date, str(out.get("u", "")))
     # 正向白名单：只导出公开语义字段（dict/list 嵌套保留，如 scd 五维分）
     return {k: out[k] for k in PUBLIC_FIELDS
@@ -133,7 +137,8 @@ def load_watermark() -> dict:
                 return state
         except ValueError:
             pass
-    return {"hashes": {}, "versions": {}, "updated_at": None}
+    return {"hashes": {}, "versions": {}, "updated_at": None,
+            "sequence": 0, "chain": ""}
 
 
 def save_watermark(state: dict) -> None:
@@ -159,7 +164,24 @@ def diff_against_watermark(records: list[dict], wm: dict) -> dict:
         key = "|".join(dedup_key(norm))
         hashes[key] = content_hash(norm)
         by_key.setdefault(key, norm)
-    old: dict[str, str] = wm.get("hashes", {})
+    old: dict[str, str] = dict(wm.get("hashes", {}))
+    # 六.1 一次性迁移：旧无 URL 占位键（t|d|sha256:<内容>，占位含内容哈希，
+    # 内容更新即漂移）→ 新 t|d|no-url 键。占位哈希基于旧内容、无法由当前
+    # 记录复算——按 t|d 前缀匹配迁移（同 t+d 的无 URL 记录本就同键）。
+    new_no_url_prefixes = {}
+    for rec in records:
+        date = record_date(rec)
+        if not date:
+            continue
+        norm = normalize(rec, date)
+        if str(norm.get("u", "")) == "no-url":
+            new_no_url_prefixes[f"{norm.get('t', '')}|{date}|"] = \
+                "|".join(dedup_key(norm))
+    for lk in list(old.keys()):
+        for prefix, nk in new_no_url_prefixes.items():
+            if lk.startswith(prefix + "sha256:"):
+                old[nk] = old.pop(lk)
+                break
     added = [k for k in hashes if k not in old]
     updated = [k for k in hashes if k in old and old[k] != hashes[k]]
     deleted = [k for k in old if k not in hashes]
@@ -187,7 +209,9 @@ def build_changes_slice(records: list[dict], wm: dict) -> tuple[bytes, int, dict
         out_records.append(rec)
     for key in sorted(d["deleted"]):
         versions[key] = int(versions.get(key, 0)) + 1
-        changes.append({"op": "DELETE", "id": stable_id(*key.split("|")), "key": key,
+        # 六.1（2026-10-01）：标题可含 "|"，键必须从右侧按 | 切两段
+        # （日期/URL 不含裸 "|"）——原 split("|") 在含竖线标题上抛 TypeError。
+        changes.append({"op": "DELETE", "id": stable_id(*key.rsplit("|", 2)), "key": key,
                         "v": versions[key]})
     changes.sort(key=lambda c: c["key"])
     records_json = json.dumps(out_records, ensure_ascii=False, separators=(",", ":"))
@@ -203,7 +227,24 @@ def build_changes_slice(records: list[dict], wm: dict) -> tuple[bytes, int, dict
         "data_version": _DATA_VERSION,
         "generated_at": datetime.now(CST).isoformat(),
         "depends_on": "LATEST.json 全部先前包（漏包可按日期检测补齐）",
+        # 六.3（2026-10-01）机器可验证的发布序列：
+        #   sequence——单调自增（自 watermark.sequence+1），接收端按前驱
+        #     +1 校验，缺口/乱序/重复包即刻可判；
+        #   predecessor——上一包的 manifest_digest（空串为首包）；
+        #   manifest_digest——本包 manifest 规范 JSON 的 sha256（链节点）；
+        #   chain——sha256(prev_chain + manifest_digest) 哈希链头，任何
+        #     插包/删包/改包都会破坏后续 chain 验证。
+        "sequence": int(wm.get("sequence", 0)) + 1,
+        "predecessor": str(wm.get("chain", "")),
+        "manifest_digest": "",
+        "chain": "",
     }
+    # 六.3：链值计算（digest 基于除自引用字段外的 manifest 规范序列化）
+    canon = {k: v for k, v in manifest.items() if k not in ("manifest_digest", "chain")}
+    manifest["manifest_digest"] = hashlib.sha256(
+        json.dumps(canon, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+    manifest["chain"] = hashlib.sha256(
+        (str(manifest["predecessor"]) + manifest["manifest_digest"]).encode("utf-8")).hexdigest()
     buf = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
     buf.close()
     with zipfile.ZipFile(buf.name, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -213,7 +254,9 @@ def build_changes_slice(records: list[dict], wm: dict) -> tuple[bytes, int, dict
     data = Path(buf.name).read_bytes()
     os.unlink(buf.name)
     summary = {"added": len(d["added"]), "updated": len(d["updated"]),
-               "deleted": len(d["deleted"]), "hashes": d["hashes"], "versions": versions}
+               "deleted": len(d["deleted"]), "hashes": d["hashes"], "versions": versions,
+               "sequence": manifest["sequence"], "chain": manifest["chain"],
+               "manifest_date": manifest["date"]}
     return data, len(out_records), summary
 
 
@@ -260,7 +303,21 @@ def main_since_last(records: list[dict], no_push: bool) -> int:
 
     watermark 只在确认「本地包已写好且（若推送）推送成功」后提交——
     失败/中断不丢变化，下轮重跑自动补齐（漏跑补跑语义）。
+
+    六.4（2026-10-01）：整个 读水印→打包→推送→存水印 流程持独占文件锁
+    （watermark 同目录 .lock，flock）——并发发布两个进程会读同一水印、
+    各自产生 sequence N+1，推送后链分叉（后存者覆盖前者）。锁保证串行；
+    第二个进程读到前者已提交的水印，自然产出 N+2 或空变化。
     """
+    import fcntl
+    WATERMARK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = WATERMARK_PATH.with_suffix(".lock")
+    with open(lock_path, "w") as lock_fh:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX)
+        return _main_since_last_locked(records, no_push)
+
+
+def _main_since_last_locked(records: list[dict], no_push: bool) -> int:
     wm = load_watermark()
     data, count, summary = build_changes_slice(records, wm)
     n_changes = summary["added"] + summary["updated"] + summary["deleted"]
@@ -344,7 +401,8 @@ def main_since_last(records: list[dict], no_push: bool) -> int:
         if staged.returncode == 0:
             log("feed 仓库无变化（同数据重复生成，幂等跳过推送）")
             save_watermark({"hashes": summary["hashes"], "versions": summary["versions"],
-                            "updated_at": datetime.now(CST).isoformat()})
+                            "updated_at": datetime.now(CST).isoformat(),
+                            "sequence": summary["sequence"], "chain": summary["chain"]})
             return 0
         commit = subprocess.run(
             ["git", "-C", str(repo_dir), "commit", "-m",
@@ -372,7 +430,8 @@ def main_since_last(records: list[dict], no_push: bool) -> int:
                 return 1
         # 推送成功 → 才提交 watermark（失败重试不丢变化）
         save_watermark({"hashes": summary["hashes"], "versions": summary["versions"],
-                        "updated_at": datetime.now(CST).isoformat()})
+                        "updated_at": datetime.now(CST).isoformat(),
+                        "sequence": summary["sequence"], "chain": summary["chain"]})
         log(f"已推送 {FEED_REPO}: {target.name} (+{summary['added']} ~{summary['updated']} "
             f"-{summary['deleted']})")
         return 0
