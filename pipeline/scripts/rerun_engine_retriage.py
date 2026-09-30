@@ -7,7 +7,11 @@
   - 每批后原子重建快照并安装到 breadth/data（前端渐进可见，失败可续跑）
   - 人工/审核字段（lv/wr/cm/fb）与摘要/参数/聚类既有结果原样保留
   - 引擎判"不相关"的记录清空 AI 派生字段并终止其后续处理
-  - 断点续跑：checkpoint 记录已处理索引；--reset-checkpoint 从头再来
+  - 断点续跑：checkpoint 记录已处理记录（五.5，2026-10-01：改用稳定身份
+    t|d|u 的 sha256，语料重排/增删后不再错位；读取旧位置式 checkpoint 时
+    按当前语料一次性迁移）；--reset-checkpoint 从头再来
+  - 五.5 顺序修复：先原子落盘数据、后推进断点——断点先于数据写时崩溃
+    会把未持久化的批永久标成已处理（丢处理），数据先写则最坏只是重跑
 用法：
   .venv/bin/python scripts/rerun_engine_retriage.py [--batch 400] [--limit N] [--reset-checkpoint]
 环境：
@@ -19,6 +23,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -63,11 +68,27 @@ def main() -> int:
         CHECKPOINT.unlink()
 
     cp = load_checkpoint()
-    done: set[int] = set(cp["done_idx"])
-
     lite = json.loads(LITE_PATH.read_text(encoding="utf-8"))
+
+    def rec_key(i: int) -> str:
+        r = lite[i]
+        return hashlib.sha256("|".join([str(r.get("t") or ""), str(r.get("d") or ""),
+                                        str(r.get("u") or "")]).encode("utf-8")).hexdigest()
+
+    if cp.get("done_idx") is not None and not cp.get("done_keys"):
+        # 旧位置式 checkpoint 一次性迁移：按当前语料把位置翻译为稳定键。
+        # 语料若已变化则无法可靠翻译——只迁移可校验范围并告警。
+        legacy = set(cp["done_idx"])
+        migrated = {rec_key(i) for i in legacy if 0 <= i < len(lite)}
+        cp["done_keys"] = sorted(migrated)
+        cp.pop("done_idx", None)
+        save_checkpoint(cp)
+        print(f"[migrate] 位置式 checkpoint → 稳定键 {len(migrated)} 条"
+              f"（语料变化时旧位置可能错位，如需严格请 --reset-checkpoint）", flush=True)
+    done: set[str] = set(cp.get("done_keys") or [])
+
     total = len(lite)
-    todo = [i for i in range(total) if i not in done]
+    todo = [i for i in range(total) if rec_key(i) not in done]
     if args.limit:
         todo = todo[:args.limit]
     print(f"lite={total} done={len(done)} todo={len(todo)} batch={args.batch}", flush=True)
@@ -116,19 +137,21 @@ def main() -> int:
                         rec.pop(f, None)
                 lite[i] = rec
 
-            cp["done_idx"] = sorted(done | set(idxs))
-            done = set(cp["done_idx"])
+            # 五.5：先原子落盘数据、后推进断点——数据写失败时断点不动，
+            # 重跑只重做本批；反之（旧行为）会把未持久化记录永久跳过。
+            tmp = LITE_PATH.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(lite, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, LITE_PATH)
+
+            fresh_keys = sorted(done | {rec_key(i) for i in idxs})
+            cp["done_keys"] = fresh_keys
+            done = set(fresh_keys)
             cp["stats"]["ok"] += stats["matched"]
             cp["stats"]["irrelevant"] += stats["irrelevant"]
             cp["stats"]["scored"] += stats["scored"]
             cp["stats"]["featured"] += stats["featured"]
             cp["stats"]["carrier_switched"] += stats["carrier_switched"]
             save_checkpoint(cp)
-
-            # 落盘（每批原子写）；发布节流：每 PUBLISH_EVERY 批一次（68k 全量发布约分钟级）
-            tmp = LITE_PATH.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(lite, ensure_ascii=False), encoding="utf-8")
-            os.replace(tmp, LITE_PATH)
             pending_publish += 1
             if pending_publish >= PUBLISH_EVERY or idxs[-1] == todo[-1]:
                 pending_publish = 0

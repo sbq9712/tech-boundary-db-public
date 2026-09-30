@@ -1324,8 +1324,22 @@ async def chat_stream(req: ChatRequest):
                         boundary = _pl_boundary_note(answer_status, evidence.get("status", "unknown"))
                     if FLAGS.get("CONTENT_SAFETY_ENABLED"):
                         safety_hits = _pl_safety_scan(full_answer)
+                    # 四.5 fail-closed（2026-10-01）：降级路径的标记计数只是
+                    # 引用编号启发——验证链不可用（导入失败/开关关闭）时，
+                    # 启发式 "verified" 不能外泄为已核验，必须降级为
+                    # UNVERIFIED（缺失核验 ≠ 通过）。
+                    if str(answer_status).lower() in ("verified", "supported"):
+                        answer_status = "UNVERIFIED"
+                        claim_check["verification"] = {
+                            "status": "DEGRADED_HEURISTIC",
+                            "note": "验证链不可用（导入失败或开关关闭）——"
+                                    "引用编号启发不构成核验，fail-closed 降级 UNVERIFIED"}
+                        print("[answer-check] fail-closed: heuristic 'verified' → UNVERIFIED "
+                              "(verification chain unavailable)", flush=True)
                 except Exception as exc:
                     print(f"[answer-check] degraded: {exc.__class__.__name__}", flush=True)
+                    # 四.5：降级路径整体异常时同样不得输出已核验
+                    answer_status = "UNVERIFIED"
                 print(f"[chain-audit] {json.dumps(claim_check, ensure_ascii=False)[:2000]}", flush=True)
                 chain_report = {}
 

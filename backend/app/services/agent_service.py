@@ -874,16 +874,28 @@ async def stream_agent_response(
         logger.info("[chain-audit] %s", json.dumps(claim_check, ensure_ascii=False)[:2000])
     else:
         # ── 降级：标记计数启发式（qa_verification 不可用 / 状态开关关闭）──
+        # 四.5 fail-closed（2026-10-01）：引用编号启发不构成核验——启发式
+        # "verified" 一律降级 UNVERIFIED（缺失核验 ≠ 通过）；启发式整体
+        # 异常时同样输出 UNVERIFIED，绝不以未核验状态冒充已核验。
         try:
             claim_check = _claim_check(full_response, len(citations))
             used_count = len(_used_citations(full_response, citations))
-            answer_status = _compute_answer_status(
+            heuristic_status = _compute_answer_status(
                 used_count, evidence_status, claim_check, len(citations))
-            if answer_status != "verified":
-                knowledge_boundary = _boundary_note(answer_status, evidence_status)
+            if heuristic_status == "verified":
+                answer_status = "UNVERIFIED"
+                claim_check["verification"] = {
+                    "status": "DEGRADED_HEURISTIC",
+                    "note": "验证链不可用（导入失败或开关关闭）——"
+                            "引用编号启发不构成核验，fail-closed 降级 UNVERIFIED"}
+            else:
+                answer_status = heuristic_status
+            if heuristic_status != "verified":
+                knowledge_boundary = _boundary_note(heuristic_status, evidence_status)
             safety_hits = _safety_scan(full_response)
         except Exception:  # pragma: no cover - 核验失败不阻断答案
             logger.warning("answer-side verification degraded", exc_info=True)
+            answer_status = "UNVERIFIED"
     summary["claim_check"] = claim_check
     summary["answer_status"] = answer_status
     summary["safety_hits"] = safety_hits

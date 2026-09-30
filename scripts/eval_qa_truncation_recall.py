@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""五.5 截断召回退步回归（离线，复现 rebuild_qa_base_index 的检索层）。
+"""五.3 词条截断召回退步回归（离线，复现 rebuild_qa_base_index 的检索层）。
+
+【命名与口径澄清（2026-10-01，五.3）】本脚本评估的是 **BM25 词条文本的
+字数截断**（证据字段截到 200/600/800 字后 jieba 分词建索引），不是
+bge-m3 嵌入向量截断——历史上输出名"embed_200/600/800"具有误导性，
+现改名为 term_200/600/800；嵌入向量的截断等价性属五.2 审计范畴
+（见 docs/qa-acceptance/wu2-embed-audit.md：线上为混合截断产物，
+未验证等价性，本脚本不就此下结论）。
 
 回答授权边界内的问题：正文不足（b 缺失）、摘要兜底（as fallback）以及
 200/600/800 字截断是否造成不可接受的召回退步？需要时恢复有效分块或
@@ -7,7 +14,7 @@
 
 方法（不调用线上服务，不修改镜像/索引）：
 - 装载 runtime/qa-base-rebuild/all-records-lite.json（与当前索引同源语料）；
-- 对三档嵌入证据截断 {200, 600, 800}（BM25 恒 800，另一维 BM25 {200,800}）
+- 对三档证据【文本】截断 {200, 600, 800}（BM25 恒 800，另一维 BM25 {200,800}）
   各建一份 BM25Okapi 索引（jieba 分词与 rebuild 一致）；
 - 查询集：①每条记录的标题（title→self 应命中，天然 ground-truth）；
   ②人工构造的真实用户问题（含数值/缩写/口语化），期望命中人工指定记录；
@@ -156,7 +163,7 @@ def main(argv=None) -> int:
     results = {"corpus": str(args.corpus), "records": len(records),
                "b_missing": b_missing, "as_fallback": a_fallback, "variants": {}}
 
-    # 维度 1：嵌入证据截断 {200, 600, 800}。探针查询=正文片段（截断 200 时
+    # 维度 1：嵌入证据【文本】截断 {200, 600, 800}（BM25 词条层代理，非向量层）。探针查询=正文片段（截断 200 时
     # 片段可能整体落在被截掉的部分——这正是要测的退步），索引文本随 cap 变化。
     import jieba
     probes = body_probe_queries(records)
@@ -168,8 +175,8 @@ def main(argv=None) -> int:
         qtoks = [list(jieba.cut_for_search(frag)) for _, frag, _ in probes]
         m = eval_index(bm25, qtoks, probes)
         m["manual"] = eval_manual(bm25, custom, titles)
-        results["variants"][f"embed_{cap}"] = m
-        print(f"embed<={cap}: body_recall@10={m['body_recall@10']:.4f} "
+        results["variants"][f"term_{cap}"] = m
+        print(f"term<={cap}: body_recall@10={m['body_recall@10']:.4f} "
               f"body_recall@25={m['body_recall@25']:.4f} mrr={m['mrr@25']:.4f} "
               f"manual={m['manual']['manual_hit@10']:.2f}", flush=True)
         if cap == 800:
@@ -232,16 +239,16 @@ def main(argv=None) -> int:
     # ── 退步判定 ──
     verdicts = {}
     for cap in (600, 200):
-        m = results["variants"].get(f"embed_{cap}")
+        m = results["variants"].get(f"term_{cap}")
         if m and baseline:
             drop = baseline["body_recall@25"] - m["body_recall@25"]
-            verdicts[f"embed_{cap}_vs_800"] = {
+            verdicts[f"term_{cap}_vs_800"] = {
                 "delta_recall@25": round(-drop, 4),
                 "acceptable": drop <= args.threshold}
     results["verdicts"] = verdicts
     ok = all(v["acceptable"] for v in verdicts.values())
     results["overall"] = "PASS" if ok else "FAIL"
-    print("\n═══ 五.5 判定 ═══")
+    print("\n═══ 五.3 词条截断判定 ═══")
     for k, v in verdicts.items():
         print(f"{k}: Δrecall@25={v['delta_recall@25']:+.4f} → "
               f"{'可接受' if v['acceptable'] else '超容忍'}")
