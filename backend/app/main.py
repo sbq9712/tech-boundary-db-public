@@ -30,7 +30,13 @@ async def lifespan(_: FastAPI):
     try:
         db = SessionLocal()
         try:
-            seed_domains_if_empty(db)
+            # 域表种子（/data/domains.json 可选）失败不得阻断管理员引导：
+            # 隔离/最小化部署目录里没有 domains.json 时曾把 seed_users 一并跳过，
+            # 结果库中无任何用户、无人能登录（八 隔离复现）。
+            try:
+                seed_domains_if_empty(db)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("domain seed skipped: %s", exc)
             seed_users_if_empty(db)
         finally:
             db.close()

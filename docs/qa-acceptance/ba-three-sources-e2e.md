@@ -63,3 +63,25 @@
 - 生产态（真实 GitHub 源 + 真实 canonical-qa 8767）的 Step 10 同步未在本验收触碰，
   以免写入真实索引；生产时序依赖 breadth-pipeline.timer / breadth-feed-package.timer
   （既有 systemd 配置，已核对存在）。
+
+## 8.5 真实服务链多轮检索 + 期望证据 + 如实降级（隔离容器，2026-10-01 补充）
+
+对象：qa-iso-1001（techdb-canonical-qa:1001，隔离卷 qa_iso_*，端口 8768）；
+api-iso-1001（techdb-api:1001，空库隔离 pg，端口 8001）；agent-iso-1001（同镜像只读 agent，端口 8769）。
+
+- **统一检索（基础 68,523 + 增量 509）**：`GET /api/search` 多查询探针全部返回；
+  期望证据命中——上传文档《病毒通道视紫红质钙抑制的分子机制研究》
+  （94 chunks，kind=upload）在 `/api/chat/stream` 引用列表第 17 位（sim 0.016），
+  同主题基础文献 [23][24][25] 同列；容器内直查增量索引 cosine 0.62 排第一。
+- **如实降级（无 LLM key ≠ 伪造）**：`/api/chat/stream` 检索段完整（25 条 citations），
+  生成段错误信息明确：
+  `QA LLM API key is not configured; retrieval-only mode is available, but chat or
+  graph-ingest generation requires TECHDB_QA_LLM_API_KEY`——不产出编造回答。
+  第二轮（追问）同样检索成功 + 同一降级错误，服务无副作用。
+- **门户链（api→readonly-agent HTTP）**：`POST /api/assistant/query` →
+  `agent_connected`，agent 对空库如实返回"未在当前只读知识库或情报数据库中找到足够
+  匹配的信息"（空库诚实降级，非异常）。
+- **暴露并修复的缺陷（隔离复现）**：`backend/app/main.py` 启动引导中
+  `seed_domains_if_empty`（依赖可选 /data/domains.json）抛异常会把
+  `seed_users_if_empty` 一并跳过 → 库中无任何用户、无人能登录。已修复为域种子
+  独立容错；修复后隔离容器 admin 正常引导、登录/建会话/助手链路 200。
