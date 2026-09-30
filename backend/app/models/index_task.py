@@ -41,6 +41,13 @@ class IndexTask(Base):
     # "pending" | "processing" | "done" | "failed"
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 二.2 认领协议：rev=入队/覆盖自增修订号；claim_token=认领令牌；
+    # lease_expires_at=租约到期（恢复只回收过期租约）。
+    rev: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    claim_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lease_expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     not_before: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

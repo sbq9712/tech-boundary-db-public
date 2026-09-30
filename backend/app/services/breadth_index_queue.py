@@ -68,22 +68,47 @@ def _enqueue(db: Session, *, op: str, target_key: str, payload: dict, upload_id)
         db.add(
             IndexTask(
                 op=op, target_key=target_key, payload=payload,
-                upload_id=upload_id, status="pending",
+                upload_id=upload_id, status="pending", rev=1,
             )
         )
         return
-    # 同目标已有任务（可能还在退避等待）：覆盖为最新操作并立即回到待处理
+    # 同目标已有任务（可能还在退避等待）：覆盖为最新操作并立即回到待处理。
+    # 二.2：rev 自增 = 修订号——执行中的旧 worker 完成回写按 (rev, claim_token)
+    # 条件更新，被重新入队后旧回写作废，旧任务不能把新任务标记 done。
     existing.op = op
     existing.payload = payload
     existing.upload_id = upload_id or existing.upload_id
     existing.status = "pending"
     existing.not_before = None
     existing.last_error = None
+    existing.rev = (existing.rev or 0) + 1
+    existing.claim_token = None      # 旧认领即刻作废
+    existing.lease_expires_at = None
     if existing.attempts >= MAX_ATTEMPTS:
         existing.attempts = 0  # 显式重新入队视为人工/新数据触发，重置计数
 
 
-def _upsert_payload(rec: BreadthManualRecord) -> dict:
+def canonical_record_key_sha(title: str, document_date: str, url: str) -> str:
+    """一.3 统一身份：与 canonical-qa server._record_key_sha_of /
+    sync_qa_index.key_digest 同源同值——sha256(json([t,d,u]))。导入链的
+    增量 chunk 与基础索引记录以同一身份对齐（跨路径去重/替换遮蔽/删除
+    墓碑都按它生效），不再只靠数据库 UUID。"""
+    import hashlib as _hashlib
+    import json as _json
+    return _hashlib.sha256(_json.dumps(
+        [str(title or ""), str(document_date or ""), str(url or "")],
+        ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _rec_content_sha(rec: BreadthManualRecord) -> str:
+    """导入链内容指纹：content_hash 即入库时计算的 v2 哈希；缺失时按
+    正文派生（与记录修订判定一致的分母）。"""
+    import hashlib as _hashlib
+    return rec.content_hash or _hashlib.sha256(
+        f"{rec.title}|{rec.document_date}|{rec.body or ''}".encode("utf-8")).hexdigest()
+
+
+def _upsert_payload(rec: BreadthManualRecord, rev: int = 0) -> dict:
     text = "\n".join(
         part for part in (rec.title or "", rec.ai_summary or "", rec.body or "") if part
     ).strip()
@@ -113,6 +138,13 @@ def _upsert_payload(rec: BreadthManualRecord) -> dict:
                         "topic": rec.topic or "",
                         "ai_picked": bool(rec.ai_picked),
                         "source": "breadth-import",
+                        # 一.3/一.4：统一记录身份 + 内容指纹 + 队列修订号——
+                        # 服务端据此做同身份去重、基础旧版本替换遮蔽、
+                        # 迟到旧版本拒绝（source_rev 严格递减拒收）
+                        "record_key_sha": canonical_record_key_sha(
+                            rec.title, rec.document_date or "", rec.url or ""),
+                        "content_sha": _rec_content_sha(rec),
+                        "source_rev": int(rev),
                     },
                 }
             )
@@ -161,20 +193,54 @@ def _post_index_delete(document_id: str) -> None:
         return
     from app.services.upload_ingestion import request_incremental_index_delete
 
-    # 复用上传链路的幂等删除
+    # 复用上传链路的幂等删除（按 document_id 删增量文档）
     request_incremental_index_delete(document_id)
+
+
+def _post_record_mutate_delete(record_key_sha: str) -> None:
+    """一.4（2026-09-30）：源 DELETE 不能只删数据库 UUID 对应的增量文档——
+    同身份的基础索引旧版本必须被墓碑屏蔽（否则旧版本继续可召回）。
+    record-mutate delete 幂等：重复发送安全；404（旧镜像无此端点）容忍。"""
+    import os
+
+    base_url = os.getenv("TECHDB_QA_SERVICE_URL", "").strip().rstrip("/")
+    if not base_url:
+        return
+    token = os.getenv("TECHDB_QA_INDEX_TOKEN", "").strip()
+    headers = {"X-TechDB-Index-Token": token, "Content-Type": "application/json"}
+    timeout = float(os.getenv("TECHDB_QA_INDEX_TIMEOUT_SECONDS", "300"))
+    with httpx.Client(timeout=timeout) as client:
+        resp = client.post(
+            f"{base_url}/api/index/record-mutate", headers=headers,
+            json={"ops": [{"record_key_sha": record_key_sha, "op": "delete",
+                           "reason": "breadth-import-delete"}]})
+        if resp.status_code not in (200, 404):
+            resp.raise_for_status()
 
 
 def _execute(db: Session, task: IndexTask) -> None:
     document_id = str((task.payload or {}).get("document_id") or task.target_key)
     if task.op == "delete":
         _post_index_delete(document_id)
+        rec = None
+        try:
+            rec = db.get(BreadthManualRecord, _as_uuid(document_id))
+        except Exception:  # noqa: BLE001 — UUID 解析失败按无记录处理
+            rec = None
+        ksha = None
+        if rec is not None:
+            ksha = canonical_record_key_sha(
+                rec.title, rec.document_date or "", rec.url or "")
+        elif task.payload and task.payload.get("record_key_sha"):
+            ksha = str(task.payload["record_key_sha"])
+        if ksha:
+            _post_record_mutate_delete(ksha)  # 一.4：同身份基础旧版本一并屏蔽
         return
     rec = db.get(BreadthManualRecord, _as_uuid(document_id))
     if rec is None:
         # 目标记录已不存在（包重导/记录被删）：无需写入，视为完成
         return
-    payload = _upsert_payload(rec)
+    payload = _upsert_payload(rec, rev=task.rev or 0)
     if not payload["chunks"]:
         return
     _post_index_upsert(payload)
@@ -184,8 +250,19 @@ def _as_uuid(value: str) -> uuid.UUID:
     return uuid.UUID(str(value))
 
 
+LEASE_SECONDS = float(__import__("os").environ.get("TECHDB_INDEX_LEASE_SECONDS", "900"))
+
+
 def process_batch(db: Session | None = None) -> int:
-    """认领并执行一批到期任务。返回处理条数（供测试/单步驱动）。"""
+    """认领并执行一批到期任务。返回处理条数（供测试/单步驱动）。
+
+    二.2 认领协议：每任务认领时生成 claim_token + 租约（默认 15 分钟）；
+    完成/失败回写必须条件命中 (id, status=processing, claim_token, rev)——
+    执行期间被重新入队（rev/claim_token 变化）后旧 worker 的回写被拒绝，
+    旧任务不能把新任务标记 done。"""
+    import os as _os
+    import uuid as _uuid
+
     own = db is None
     db = db or SessionLocal()
     now = datetime.now(timezone.utc)
@@ -202,50 +279,91 @@ def process_batch(db: Session | None = None) -> int:
         ).all()
         if not ids:
             return 0
-        claimed = db.execute(
-            update(IndexTask)
-            .where(IndexTask.id.in_(ids), IndexTask.status == "pending")
-            .values(status="processing", attempts=IndexTask.attempts + 1)
-        )
+        # 逐任务认领：status 条件更新（pending→processing）+ claim token +
+        # 租约 + rev 自增，一次 update 完成条件竞争安全的认领
+        tokens: dict[str, str] = {}
+        for tid in ids:
+            token = str(_uuid.uuid4())
+            res = db.execute(
+                update(IndexTask)
+                .where(IndexTask.id == tid, IndexTask.status == "pending")
+                .values(status="processing", attempts=IndexTask.attempts + 1,
+                        rev=IndexTask.rev + 1, claim_token=token,
+                        lease_expires_at=now + timedelta(seconds=LEASE_SECONDS))
+                .execution_options(synchronize_session=False))
+            if res.rowcount:
+                tokens[str(tid)] = token
         db.commit()
-        if claimed.rowcount == 0:
+        if not tokens:
             return 0
         done = 0
-        for tid in ids:
+        for tid, token in tokens.items():
             task = db.get(IndexTask, tid)
-            if task is None or task.status != "processing":
-                continue
+            if task is None or task.status != "processing" \
+                    or task.claim_token != token:
+                continue  # 租约已被重新入队/其他 worker 接管
+            claimed_rev = task.rev
             try:
                 _execute(db, task)
             except Exception as exc:  # noqa: BLE001 — 单任务失败不拖垮整批
-                _mark_retry_or_failed(db, task, str(exc)[:2000])
+                _mark_retry_or_failed(db, task, str(exc)[:2000], token, claimed_rev)
             else:
-                task.status = "done"
-                task.last_error = None
-                task.not_before = None
+                # 条件完成：只完成自己认领的任务版本（token+rev 未变）
+                res = db.execute(
+                    update(IndexTask)
+                    .where(IndexTask.id == task.id,
+                           IndexTask.status == "processing",
+                           IndexTask.claim_token == token,
+                           IndexTask.rev == claimed_rev)
+                    .values(status="done", last_error=None, not_before=None,
+                            claim_token=None, lease_expires_at=None)
+                    .execution_options(synchronize_session=False))
                 db.commit()
-                _finalize_upload_status(db, task.upload_id)
-                done += 1
+                if res.rowcount:
+                    _finalize_upload_status(db, task.upload_id)
+                    done += 1
+                else:
+                    logger.info(
+                        "index task %s completion rejected (re-enqueued during "
+                        "execution, rev/claim mismatch)", tid)
         return done
     finally:
         if own:
             db.close()
 
 
-def _mark_retry_or_failed(db: Session, task: IndexTask, message: str) -> None:
+def _mark_retry_or_failed(db: Session, task: IndexTask, message: str,
+                          claim_token: str | None = None,
+                          claimed_rev: int | None = None) -> None:
+    """失败回写同样条件化（二.2）：只有仍持有认领（token/rev 未变）才能
+    改状态——失败不算完成，也不能覆盖已重新入队的新版本。"""
+    cond = [IndexTask.id == task.id, IndexTask.status == "processing"]
+    if claim_token:
+        cond.append(IndexTask.claim_token == claim_token)
+    if claimed_rev is not None:
+        cond.append(IndexTask.rev == claimed_rev)
+    values: dict = {"last_error": message}
     if task.attempts >= MAX_ATTEMPTS:
-        task.status = "failed"
-        task.last_error = message
-        db.commit()
-        logger.error("index task %s failed permanently: %s", task.target_key, message)
-        return
-    delay = min(BACKOFF_CAP_SECONDS, BACKOFF_BASE_SECONDS * (2 ** max(0, task.attempts - 1)))
-    task.status = "pending"
-    task.last_error = message
-    task.not_before = datetime.now(timezone.utc) + timedelta(seconds=delay)
+        values["status"] = "failed"
+        values["claim_token"] = None
+        values["lease_expires_at"] = None
+    else:
+        delay = min(BACKOFF_CAP_SECONDS,
+                    BACKOFF_BASE_SECONDS * (2 ** max(0, task.attempts - 1)))
+        values["status"] = "pending"
+        values["not_before"] = datetime.now(timezone.utc) + timedelta(seconds=delay)
+    res = db.execute(update(IndexTask).where(*cond).values(**values)
+                     .execution_options(synchronize_session=False))
     db.commit()
-    logger.warning("index task %s attempt %s failed, retry in %.0fs: %s",
-                   task.target_key, task.attempts, delay, message)
+    if not res.rowcount:
+        logger.info("index task %s failure write-back rejected (stale claim)",
+                    task.target_key)
+        return
+    if values["status"] == "failed":
+        logger.error("index task %s failed permanently: %s", task.target_key, message)
+    else:
+        logger.warning("index task %s attempt %s failed, retry in %.0fs: %s",
+                       task.target_key, task.attempts, delay, message)
 
 
 def _finalize_upload_status(db: Session, upload_id: uuid.UUID | None) -> None:
@@ -277,19 +395,22 @@ def _finalize_upload_status(db: Session, upload_id: uuid.UUID | None) -> None:
 
 
 def recover_stale_processing() -> int:
-    """启动恢复：上一进程崩溃时遗留的 processing 任务重回 pending。
-
-    upsert/delete 幂等，重复执行安全。"""
+    """恢复只回收【过期租约】的 processing 任务（二.2）：租约未到期的
+    可能是其他进程的活跃 worker，绝不重置。无租约的遗留行（升级前数据）
+    一并回收。upsert/delete 幂等，重复执行安全。"""
     db = SessionLocal()
     try:
         result = db.execute(
             update(IndexTask)
-            .where(IndexTask.status == "processing")
-            .values(status="pending")
+            .where(IndexTask.status == "processing",
+                   (IndexTask.lease_expires_at.is_(None))
+                   | (IndexTask.lease_expires_at <= datetime.now(timezone.utc)))
+            .values(status="pending", claim_token=None, lease_expires_at=None)
         )
         db.commit()
         if result.rowcount:
-            logger.warning("recovered %s stale processing index tasks", result.rowcount)
+            logger.warning("recovered %s stale (expired-lease) index tasks",
+                           result.rowcount)
         return int(result.rowcount or 0)
     finally:
         db.close()

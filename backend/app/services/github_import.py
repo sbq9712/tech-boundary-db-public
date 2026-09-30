@@ -31,7 +31,7 @@ from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from app.models.breadth_import_session import BreadthImportSession
@@ -369,6 +369,16 @@ def _apply_record_to_row(row: BreadthManualRecord, rec: dict, version: int) -> N
 # ── 应用引擎 ─────────────────────────────────────────────────────────────
 
 
+def _acquire_feed_apply_lock(db: Session) -> None:
+    """feed 包应用阶段的事务级串行锁（二.1 并发导入保护）。
+
+    PostgreSQL：pg_advisory_xact_lock——同键并发导入在版本判断与写入上
+    全程互斥，事务结束自动释放；SQLite：单写锁天然串行，无需处理。
+    墓碑表主键（feed_key_digest）提供最后一层数据库约束兜底。"""
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        db.execute(text("SELECT pg_advisory_xact_lock(hashtext('feed-import-apply'))"))
+
+
 def _load_feed_rows(db: Session) -> tuple[dict[str, BreadthManualRecord], dict[str, BreadthManualRecord], set[uuid.UUID]]:
     """既有行索引：feed_key_digest → row；回退（无 digest 的历史行，重建键）→ row。
 
@@ -379,7 +389,10 @@ def _load_feed_rows(db: Session) -> tuple[dict[str, BreadthManualRecord], dict[s
     by_digest: dict[str, BreadthManualRecord] = {}
     fallback: dict[str, BreadthManualRecord] = {}
     github_ids = _github_upload_ids(db)
-    for row in db.scalars(select(BreadthManualRecord)).all():
+    rows_q = select(BreadthManualRecord)
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        rows_q = rows_q.with_for_update()  # 二.1：版本判定窗口行锁
+    for row in db.scalars(rows_q).all():
         if row.feed_key_digest:
             by_digest.setdefault(row.feed_key_digest, row)
         else:
@@ -435,7 +448,13 @@ def _apply_changes(
         if op == "DELETE":
             if row is None:
                 deleted_missing += 1  # 幂等：键本就不在库
-                if tomb is not None and v > tomb.deleted_version:
+                # 二.1：先删后到（DELETE 早于首包/行早已不在）也必须持久化
+                # 删除版本——否则更晚重放的旧 ADD v' < v 无版本可比，静默复活
+                if tomb is None:
+                    tomb = FeedTombstone(feed_key_digest=hexd, deleted_version=0)
+                    db.add(tomb)
+                    tombstones[hexd] = tomb
+                if v > tomb.deleted_version:
                     # 重复/晚到的删除仍推进墓碑版本（包内可能夹带更高版本）
                     tomb.deleted_version = v
                     tomb.deleted_content_hash = None
@@ -504,6 +523,10 @@ def _apply_changes(
                 skipped_unchanged += 1  # 幂等重放
                 if row.upload_id != record.id:
                     row.upload_id = record.id
+            elif v == row.source_version:
+                # 二.1：同版本不同内容 = 协议冲突——绝不能当作更新静默改写
+                conflicts += 1
+                conflict_keys.append(key[:80])
             else:
                 _apply_record_to_row(row, rec, v)
                 row.upload_id = record.id
@@ -664,6 +687,11 @@ def import_github_package(db: Session, record: UploadedFile, zip_path: Path) -> 
                 logger.info("replay: re-pointed %s breadth rows to new upload", rows.rowcount)
             db.commit()
         return _session_payload(existing)
+
+    # 二.1：并发导入同键时，版本判断与写入必须串行——PostgreSQL 取事务级
+    # advisory lock 序列化 feed 应用阶段（SQLite 单写锁天然串行）。行锁
+    # （with_for_update）作第二层：锁既有行的版本判定窗口。
+    _acquire_feed_apply_lock(db)
 
     manifest, records, changes = _read_package(zip_path)
     package_date = str(manifest.get("date", "") or "").strip()
