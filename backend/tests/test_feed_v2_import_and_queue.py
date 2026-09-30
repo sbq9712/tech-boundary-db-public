@@ -139,6 +139,10 @@ def _cleanup():
             db.execute(text("DELETE FROM breadth_import_sessions WHERE upload_id=:i"), {"i": rid})
             db.execute(text("DELETE FROM breadth_manual_records WHERE upload_id=:i"), {"i": rid})
             db.execute(text("DELETE FROM uploaded_files WHERE id=:i"), {"i": rid})
+            db.execute(text("DELETE FROM breadth_feed_tombstones WHERE upload_id=:i"), {"i": rid})
+        db.execute(text(
+            "DELETE FROM breadth_manual_records WHERE user_id='feedv2-test'"
+        ))
         db.execute(text(
             "DELETE FROM breadth_manual_records WHERE user_id='feedv2-test'"
         ))
@@ -531,3 +535,96 @@ def test_note_with_details():
     assert "导入 5 条" in note and "更新 3" in note and "删除 1" in note
     assert "旧版跳过 4" in note and "gap" not in note
     assert "--since-last" in note and "3 天" in note
+
+
+def test_tombstone_rejects_stale_replay_and_conflict(tmp_path, monkeypatch):
+    """墓碑（二.4，2026-09-30）：DELETE v3 后，乱序/补投递包重放
+    ADD v2 拒绝复活；ADD v3 同内容幂等跳过；ADD v3 异内容判冲突；
+    ADD v4 合法重新上架并清除墓碑。"""
+    from app.models.feed_tombstone import FeedTombstone
+
+    monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
+    r1 = _norm({
+        "id": _stable_id("情报乙", "2026-09-28", "https://v2/b"),
+        "t": "情报乙", "d": "2026-09-28", "u": "https://v2/b",
+        "s": "源B", "c": "技术突破/芯片", "sc": 6.0, "i": 1,
+        "b": "正文乙" * 10,
+    })
+    key = "情报乙|2026-09-28|https://v2/b"
+    db = SessionLocal()
+    try:
+        # ① ADD v1
+        upload1 = _mk_upload(db, checksum=hashlib.sha256(b"zip-t1").hexdigest())
+        p1 = _import(db, upload1, _tmp_zip(
+            tmp_path, _build_v2([r1], [{"op": "ADD", "id": r1["id"], "key": key, "v": 1}])))
+        assert p1["details"]["added"] == 1
+
+        # ② DELETE v3 → 墓碑持久化（版本 + 内容哈希）
+        upload2 = _mk_upload(db, checksum=hashlib.sha256(b"zip-t2").hexdigest())
+        p2 = _import(db, upload2, _tmp_zip(
+            tmp_path, _build_v2([], [{"op": "DELETE", "id": r1["id"], "key": key, "v": 3}],
+                                date="2026-09-30")))
+        assert p2["details"]["deleted"] == 1
+        tb = db.query(FeedTombstone).filter_by(feed_key_digest=gi._feed_key_digest_hex(key)).one()
+        assert tb.deleted_version == 3 and tb.deleted_content_hash
+
+        # ③ 乱序包重放 ADD v2 → 拒绝复活
+        r_stale = dict(r1)
+        r_stale["sc"] = 3.0
+        upload3 = _mk_upload(db, checksum=hashlib.sha256(b"zip-t3").hexdigest())
+        p3 = _import(db, upload3, _tmp_zip(
+            tmp_path, _build_v2([r_stale], [{"op": "ADD", "id": r1["id"], "key": key, "v": 2}],
+                                date="2026-09-29")))
+        assert p3["details"]["skipped_tombstoned"] == 1 and p3["details"]["added"] == 0
+        assert db.execute(text(
+            "SELECT count(*) FROM breadth_manual_records WHERE stable_id=:s"
+        ), {"s": r1["id"]}).scalar() == 0
+
+        # ④ ADD v3 同内容 → 幂等跳过；④' ADD v3 异内容 → 冲突不落地
+        r_same = dict(r1)
+        upload4 = _mk_upload(db, checksum=hashlib.sha256(b"zip-t4").hexdigest())
+        p4 = _import(db, upload4, _tmp_zip(
+            tmp_path, _build_v2([r_same], [{"op": "ADD", "id": r1["id"], "key": key, "v": 3}],
+                                date="2026-09-30")))
+        assert p4["details"]["skipped_tombstoned"] == 1
+        r_conf = dict(r1)
+        r_conf["sc"] = 9.9
+        upload5 = _mk_upload(db, checksum=hashlib.sha256(b"zip-t5").hexdigest())
+        p5 = _import(db, upload5, _tmp_zip(
+            tmp_path, _build_v2([r_conf], [{"op": "ADD", "id": r1["id"], "key": key, "v": 3}],
+                                date="2026-09-30")))
+        assert p5["details"]["conflicts"] == 1 and p5["details"]["added"] == 0
+        assert p5["details"]["conflict_keys"] == [key]
+        assert db.execute(text(
+            "SELECT count(*) FROM breadth_manual_records WHERE stable_id=:s"
+        ), {"s": r1["id"]}).scalar() == 0
+
+        # ⑤ ADD v4 → 合法重新上架，墓碑清除
+        r_new = dict(r1)
+        r_new["sc"] = 8.0
+        upload6 = _mk_upload(db, checksum=hashlib.sha256(b"zip-t6").hexdigest())
+        p6 = _import(db, upload6, _tmp_zip(
+            tmp_path, _build_v2([r_new], [{"op": "ADD", "id": r1["id"], "key": key, "v": 4}],
+                                date="2026-10-01")))
+        assert p6["details"]["added"] == 1
+        assert db.query(FeedTombstone).filter_by(
+            feed_key_digest=gi._feed_key_digest_hex(key)).count() == 0
+        assert db.execute(text(
+            "SELECT source_version FROM breadth_manual_records WHERE stable_id=:s"
+        ), {"s": r1["id"]}).scalar() == 4
+
+        # ⑥ DELETE v2（低于行内版本 4）→ skipped_stale；再 DELETE v5 → 墓碑推进到 5
+        upload7 = _mk_upload(db, checksum=hashlib.sha256(b"zip-t7").hexdigest())
+        p7 = _import(db, upload7, _tmp_zip(
+            tmp_path, _build_v2([], [{"op": "DELETE", "id": r1["id"], "key": key, "v": 2}],
+                                date="2026-10-01")))
+        assert p7["details"]["skipped_stale"] == 1
+        upload8 = _mk_upload(db, checksum=hashlib.sha256(b"zip-t8").hexdigest())
+        p8 = _import(db, upload8, _tmp_zip(
+            tmp_path, _build_v2([], [{"op": "DELETE", "id": r1["id"], "key": key, "v": 5}],
+                                date="2026-10-02")))
+        assert p8["details"]["deleted"] == 1
+        assert db.query(FeedTombstone).filter_by(
+            feed_key_digest=gi._feed_key_digest_hex(key)).one().deleted_version == 5
+    finally:
+        db.close()

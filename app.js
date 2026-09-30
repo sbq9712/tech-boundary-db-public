@@ -2486,7 +2486,16 @@ async function upPrepareRowMapping(f){
     const guess=(slots)=>{for(const s of slots){const hit=headers.find(h=>h.toLowerCase().includes(s));if(hit)return hit;}return "";};
     const wrap=document.getElementById("upRowMapWrap");if(!wrap)return;
     wrap.hidden=false;
-    wrap.innerHTML=`<div class="lib-upload-tablewrap"><table class="lib-upload-table"><thead><tr><th>语义槽位</th><th>表格列（必映射：标题）</th></tr></thead><tbody>
+    /* 四.1（2026-09-30）：表格文件可选拆分模式——每行一个情报（默认，列映射 +
+       行级日期）或整个文件一个情报（保留 Docling 文档理解与分块，走通用文件
+       路径、可用文件级资料日期）。切换时行内日期输入同步启用/禁用。 */
+    f.rowMode=f.rowMode||"row";
+    wrap.innerHTML=`<label style="display:flex;gap:10px;align-items:center;font-size:13px;margin-bottom:6px;">
+      导入方式：
+      <label><input type="radio" name="upRowMode" value="row" ${f.rowMode==="row"?"checked":""}> 每行一个情报</label>
+      <label><input type="radio" name="upRowMode" value="file" ${f.rowMode==="file"?"checked":""}> 整个文件一个情报</label>
+      <span id="upRowModeHint" style="color:var(--text-secondary,#475467);font-size:12px;">${f.rowMode==="row"?"逐行：列映射 + 行级日期（无需文件级日期）":"整文件：AI 文档理解 + 分块；可选文件级资料日期"}</span></label>
+    <div id="upRowMapBody"><div class="lib-upload-tablewrap"><table class="lib-upload-table"><thead><tr><th>语义槽位</th><th>表格列（必映射：标题）</th></tr></thead><tbody>
       <tr><td>标题 *</td><td><select data-slot="title">${slotOptions()}</select></td></tr>
       <tr><td>日期</td><td><select data-slot="date">${slotOptions()}</select></td></tr>
       <tr><td>链接</td><td><select data-slot="url">${slotOptions()}</select></td></tr>
@@ -2496,7 +2505,7 @@ async function upPrepareRowMapping(f){
       <tr><td>来源</td><td><select data-slot="source">${slotOptions()}</select></td></tr>
       <tr><td>分类</td><td><select data-slot="category">${slotOptions()}</select></td></tr>
     </tbody></table></div>
-    <div style="font-size:12px;margin-top:4px;color:var(--text-secondary,#475467);">工作表：${escapeHtml(sheet.name)} · 共 ${sheet.total_rows} 行 · 预览前 ${(sheet.rows||[]).length} 行（每行一个情报；不要求文件级日期）</div>`;
+    <div style="font-size:12px;margin-top:4px;color:var(--text-secondary,#475467);">工作表：${escapeHtml(sheet.name)} · 共 ${sheet.total_rows} 行 · 预览前 ${(sheet.rows||[]).length} 行（每行一个情报；不要求文件级日期）</div></div>`;
     const setSel=(slot,val)=>{const el=wrap.querySelector(`[data-slot="${slot}"]`);if(el&&val)el.value=val;};
     setSel("title",guess(["标题","title","名称"]));
     setSel("date",guess(["日期","date"]));
@@ -2510,6 +2519,14 @@ async function upPrepareRowMapping(f){
     f.rowSheet=sheet.name;
     f.rowMapping=collect();
     wrap.querySelectorAll("[data-slot]").forEach(sel=>sel.addEventListener("change",()=>{f.rowMapping=collect();}));
+    wrap.querySelectorAll('input[name="upRowMode"]').forEach(radio=>radio.addEventListener("change",()=>{
+      f.rowMode=wrap.querySelector('input[name="upRowMode"]:checked').value;
+      const body=wrap.querySelector("#upRowMapBody");
+      if(body)body.hidden=f.rowMode!=="row";
+      const hint=wrap.querySelector("#upRowModeHint");
+      if(hint)hint.textContent=f.rowMode==="row"?"逐行：列映射 + 行级日期（无需文件级日期）":"整文件：AI 文档理解 + 分块；可选文件级资料日期";
+      upRenderList();
+    }));
   }catch(e){upShowResult("表格预览失败："+e,"err");}
 }
 function upAddFiles(fileList){
@@ -2540,13 +2557,16 @@ function upRenderList(){
   if(dialog)dialog.classList.toggle("has-table",has);
   list.innerHTML=upPending.map((f,i)=>{
     const meta=upRowStateMeta(f);
+    const rowLocked=upIsTableRowFile(f.name)&&(f.rowMode||"row")==="row"&&f.rowSheet; /* 逐行模式：日期来自各行 */
     return `<tr data-up-row="${i}" class="${meta.cls.trim()}">
       <td class="lib-up-fname" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}<small>${libFmtSize(f.size)}</small></td>
       <td><input class="lib-upload-input lib-up-title" type="text" placeholder="留空则自动识别" aria-label="资料标题" value="${escapeHtml(f.upTitle||"")}"></td>
-      <td><div class="lib-up-datebox" data-up-datebox="${i}">
+      <td><div class="lib-up-datebox" data-up-datebox="${i}" ${rowLocked?'title="逐行模式：日期取自每行的日期列，无需文件级日期"':""}>
+        <fieldset ${rowLocked?'disabled':""} style="border:0;padding:0;margin:0;display:inline;">
         <input class="lib-upload-input lib-up-seg lib-up-seg-y" inputmode="numeric" maxlength="4" placeholder="YYYY" aria-label="资料日期 年" value="${escapeHtml(f.upY||"")}">/<input class="lib-upload-input lib-up-seg lib-up-seg-m" inputmode="numeric" maxlength="2" placeholder="MM" aria-label="资料日期 月" value="${escapeHtml(f.upM||"")}">/<input class="lib-upload-input lib-up-seg lib-up-seg-d" inputmode="numeric" maxlength="2" placeholder="DD" aria-label="资料日期 日" value="${escapeHtml(f.upD||"")}">
         <input class="lib-up-native-date" type="date" tabindex="-1" aria-hidden="true" value="${escapeHtml(f.upDate||"")}">
         <button class="lib-up-cal" type="button" aria-label="打开日历选择资料日期" title="日历选择"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
+        </fieldset>
       </div></td>
       <td><select class="lib-upload-input lib-up-cat" aria-label="行业图景节点">${upTaxonomy?upTaxonomyOptions():'<option value="">不指定，通过AI自动识别</option>'}</select></td>
       <td><input class="lib-upload-input lib-up-note" type="text" placeholder="选填" aria-label="备注" value="${escapeHtml(f.upNote||"")}"></td>
@@ -2608,6 +2628,8 @@ async function upSubmit(){
   if(!targets.length)return;
   let dateErr=0;
   for(const f of targets){
+    /* 逐行模式的表格文件：日期来自各行，不要求/不提交文件级日期（四.2） */
+    if(upIsTableRowFile(f.name)&&(f.rowMode||"row")==="row"&&f.rowSheet)continue;
     if(upNormalizeDate(f.upDate)==null){f.upState="err";f.upMsg="✗ 日期";dateErr++;}
   }
   if(dateErr){upRenderList();upShowResult(`${dateErr} 行的资料日期不合法——已标红，请修正后再上传`,"err");submit.disabled=false;return;}
@@ -2618,8 +2640,10 @@ async function upSubmit(){
   const syncBreadth=!!(syncBreadthEl&&syncBreadthEl.checked);
   for(const f of targets){
     const fd=new FormData();
-    /* 表格逐行模式（.xlsx/.csv）：每行一个情报；首次添加该文件时已取得列映射 */
-    if(upIsTableRowFile(f.name)){
+    /* 表格逐行模式（.xlsx/.csv，四.1 可选）：每行一个情报；首次添加该文件时
+       已取得列映射。f.rowMode==="file" 时走通用文件路径（Docling 理解 + 分块，
+       可选文件级资料日期）。 */
+    if(upIsTableRowFile(f.name)&&(f.rowMode||"row")==="row"){
       if(!f.rowMapping){fail++;f.upState="err";f.upMsg="✗ 缺少列映射";upRenderList();continue;}
       fd.append("files",f);
       fd.append("row_mode","true");
@@ -2629,8 +2653,7 @@ async function upSubmit(){
       if(f.upNote)fd.append("note",f.upNote);
       if(upSection)fd.append("primary_section",upSection);
       if(upSection==="breadth"&&upSub)fd.append("breadth_source",upSub);
-      const rdate=upNormalizeDate(f.upDate);
-      if(rdate)fd.append("document_date",rdate);
+      /* 不提交文件级日期：行日期缺失时行内为空，不静默替代（四.2） */
       f.upState="uploading";f.upMsg="";
       upRenderList();
       try{

@@ -11,8 +11,10 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import datetime
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -139,6 +141,43 @@ def preview(data: bytes, filename: str, sheet_name: str | None = None) -> dict:
 # 列映射允许的语义槽位（title 必填，其余可选）
 MAPPING_SLOTS = ("title", "date", "category", "url", "source", "level", "body", "summary")
 
+# Excel 日期序列号合理范围（1900-01-01 起）：1990-01-01 ≈ 32874，2079 ≈ 65380
+_EXCEL_EPOCH = datetime.date(1899, 12, 30)
+_EXCEL_SERIAL_MIN, _EXCEL_SERIAL_MAX = 20000, 80000
+
+_DATE_STR_PATTERNS = (
+    "%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y年%m月%d日",
+    "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S",
+)
+
+
+def normalize_date_cell(value) -> str:
+    """表格日期单元格 → YYYY-MM-DD（四.2，2026-09-30）。
+
+    - datetime/date 对象（openpyxl 已按 Excel 日期格式解析）→ 直接格式化；
+    - 纯数字且落在 Excel 序列号合理区间 → 按 1900 日期体系换算；
+    - 常见字符串格式（- / . 年月日、带时间）→ 规范化；
+    - 空值/无法解析 → 空串（调用方计数，不用文件日期静默替代）。"""
+    if value is None:
+        return ""
+    if isinstance(value, datetime.datetime):
+        return value.date().isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    text = str(value).strip()
+    if not text:
+        return ""
+    if re.fullmatch(r"\d{1,7}(\.0+)?", text):
+        serial = int(float(text))
+        if _EXCEL_SERIAL_MIN <= serial <= _EXCEL_SERIAL_MAX:
+            return (_EXCEL_EPOCH + datetime.timedelta(days=serial)).isoformat()
+    for fmt in _DATE_STR_PATTERNS:
+        try:
+            return datetime.datetime.strptime(text, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return ""
+
 
 def validate_mapping(mapping: object) -> dict[str, str]:
     # HTTP 层 column_mapping 以 multipart Form 字符串到达（前端
@@ -181,15 +220,17 @@ def row_to_record_fields(
 ) -> dict | None:
     """一行 → BreadthManualRecord 字段。空标题返回 None（调用方跳过计数）。
 
-    每条记录带 source_ref（原文件/工作表/行号）满足溯源要求；日期列缺失时
-    回退上传日期（不要求文件级日期）。
+    每条记录带 source_ref（原文件/工作表/行号）满足溯源要求。日期列按
+    normalize_date_cell 规范化（Excel 序列号/中文日期/带时间格式）；
+    行日期缺失/不合法时不再用文件日期静默替代（四.2，2026-09-30）——
+    fallback_date 仅作显式兜底参数保留，前端逐行模式已不再提交文件级日期。
     """
     title = str(row.get(mapping["title"], "") or "").strip()
     if not title:
         return None
     date = ""
     if "date" in mapping:
-        date = str(row.get(mapping["date"], "") or "").strip()
+        date = normalize_date_cell(row.get(mapping["date"], ""))
     if not date and fallback_date:
         date = str(fallback_date)
     url = str(row.get(mapping.get("url", ""), "") or "").strip() if "url" in mapping else ""
@@ -253,7 +294,7 @@ def import_rows(
     )
     seen_hashes: set[str] = set()
     created: list[BreadthManualRecord] = []
-    skipped_empty = skipped_duplicate = 0
+    skipped_empty = skipped_duplicate = rows_missing_date = 0
     row_no = 1
     for sheet in sheets:
         for row in sheet.rows:
@@ -267,6 +308,8 @@ def import_rows(
             if fields is None:
                 skipped_empty += 1
                 continue
+            if not fields.get("document_date"):
+                rows_missing_date += 1  # 行日期缺失/不合法（照常入库，空日期）
             digest = fields["content_hash"]
             if digest in seen_hashes or digest in existing_hashes:
                 skipped_duplicate += 1
@@ -282,4 +325,5 @@ def import_rows(
         "imported": len(created),
         "skipped_empty": skipped_empty,
         "skipped_duplicate": skipped_duplicate,
+        "rows_missing_date": rows_missing_date,
     }

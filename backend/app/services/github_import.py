@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 
 from app.models.breadth_import_session import BreadthImportSession
 from app.models.breadth_manual_record import BreadthManualRecord
+from app.models.feed_tombstone import FeedTombstone
 from app.models.uploaded_file import UploadedFile
 
 logger = logging.getLogger(__name__)
@@ -404,10 +405,23 @@ def _apply_changes(
     by_digest, fallback, github_ids = _load_feed_rows(db)
     records_by_id = {str(r.get("id", "")): r for r in records if isinstance(r, dict)}
 
+    # 墓碑预载（仅本包涉及的键）：DELETE v 后到达的乱序/补投递包重放
+    # ADD/UPDATE v' <= v 时，行已不在库、行级 source_version 无法比较，
+    # 记录会被静默复活——墓碑持久化删除版本，导入侧据此拒绝/判冲突。
+    tombstones: dict[str, FeedTombstone] = {}
+    change_digests = {_feed_key_digest_hex(str(ch["key"])) for ch in changes}
+    if change_digests:
+        for tb in db.scalars(
+            select(FeedTombstone).where(FeedTombstone.feed_key_digest.in_(change_digests))
+        ):
+            tombstones[tb.feed_key_digest] = tb
+
     added = updated = deleted = 0
     skipped_stale = skipped_unchanged = skipped_protected = deleted_missing = 0
     skipped_upstream = failed = 0
+    skipped_tombstoned = conflicts = 0
     failed_keys: list[str] = []
+    conflict_keys: list[str] = []
     touched: list[BreadthManualRecord] = []
 
     for ch in changes:
@@ -416,16 +430,32 @@ def _apply_changes(
         key = str(ch["key"])
         hexd = _feed_key_digest_hex(key)
         row = by_digest.get(hexd) or fallback.get(hexd)
+        tomb = tombstones.get(hexd)
 
         if op == "DELETE":
             if row is None:
                 deleted_missing += 1  # 幂等：键本就不在库
+                if tomb is not None and v > tomb.deleted_version:
+                    # 重复/晚到的删除仍推进墓碑版本（包内可能夹带更高版本）
+                    tomb.deleted_version = v
+                    tomb.deleted_content_hash = None
+                    tomb.upload_id = record.id
             elif not _feed_owned(row, github_ids):
                 skipped_protected += 1
+            elif tomb is not None and tomb.deleted_version > v:
+                skipped_stale += 1  # 墓碑版本更高：更旧的删除重放
             elif row.source_version > v:
                 skipped_stale += 1  # 旧版本包的删除不能覆盖新版本
             else:
                 enqueue_record_delete(db, row.id, record.id)
+                # 墓碑与删除同一事务：崩溃不会出现「行已删、墓碑未记」
+                if tomb is None:
+                    tomb = FeedTombstone(feed_key_digest=hexd)
+                    db.add(tomb)
+                    tombstones[hexd] = tomb
+                tomb.deleted_version = v
+                tomb.deleted_content_hash = row.content_hash
+                tomb.upload_id = record.id
                 db.delete(row)
                 by_digest.pop(hexd, None)
                 fallback.pop(hexd, None)
@@ -436,6 +466,17 @@ def _apply_changes(
             rec = _filter_public(records_by_id[str(ch["id"])])
             content_hash = _v2_content_hash(rec)
             if row is None:
+                if tomb is not None and v < tomb.deleted_version:
+                    skipped_tombstoned += 1  # 陈旧重放：拒绝复活
+                    continue
+                if tomb is not None and v == tomb.deleted_version:
+                    if tomb.deleted_content_hash and content_hash != tomb.deleted_content_hash:
+                        conflicts += 1  # 同版本不同内容：协议冲突，不落地
+                        conflict_keys.append(key[:80])
+                    else:
+                        skipped_tombstoned += 1  # 同版本同内容：幂等重放
+                    continue
+                # v > tomb.deleted_version（或无墓碑）：合法（重新）上架
                 parts = key.split("|", 2)
                 parts += [""] * (3 - len(parts))
                 if _key_digest((parts[0], parts[1], parts[2])) in upstream:
@@ -447,6 +488,13 @@ def _apply_changes(
                     by_digest[hexd] = new
                     added += 1
                     touched.append(new)
+                    if tomb is not None:
+                        # 重新上架成功 → 墓碑使命完成
+                        db.delete(tomb)
+                        tombstones.pop(hexd, None)
+                continue
+            if tomb is not None and tomb.deleted_version > v:
+                skipped_tombstoned += 1  # 行在但墓碑版本更新：人工恢复被更高版本保护
                 continue
             if not _feed_owned(row, github_ids):
                 skipped_protected += 1
@@ -461,6 +509,9 @@ def _apply_changes(
                 row.upload_id = record.id
                 updated += 1
                 touched.append(row)
+                if tomb is not None:
+                    db.delete(tomb)  # 记录已推进到 v，旧墓碑失效
+                    tombstones.pop(hexd, None)
         except (TypeError, ValueError) as exc:
             failed += 1
             failed_keys.append(key[:80])
@@ -474,6 +525,9 @@ def _apply_changes(
         "skipped_stale": skipped_stale, "skipped_unchanged": skipped_unchanged,
         "skipped_protected": skipped_protected, "deleted_missing": deleted_missing,
         "skipped_upstream": skipped_upstream, "failed": failed,
+        # 墓碑判定（二.4，2026-09-30）：陈旧重放拒绝 + 同版本不同内容冲突
+        "skipped_tombstoned": skipped_tombstoned,
+        "conflicts": conflicts, "conflict_keys": conflict_keys,
         "skipped_in_package": 0, "package_deduplicated": False,
         "failed_keys": failed_keys,
     }
