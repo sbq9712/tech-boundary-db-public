@@ -31,8 +31,11 @@ TRIAGE_RETRIAGE_WORKERS=6 TRIAGE_LLM_BATCH=8 TRIAGE_LLM_SLEEP=2.0 \
   - ok=69368 fail=0；不相关 27,438（39.6%）↔ 9/28 39.6%
   - scored 41,930 ↔ 41,063；featured 3,943 ↔ 3,851（增量 341 条所致）
   - 引擎判定稳定，无方向漂移。
-- 数据契约：不相关记录 AI 字段清零（irrelevant-with-AI-fields=0）；
-  人工字段（lv/wr/cm/fb）与摘要/参数/聚类原样保留。
+- 数据契约：不相关记录 AI 字段清零（irrelevant-with-AI-fields=0），仅保留
+  人工字段（lv/wr/cm/fb）；相关记录的摘要/参数/聚类原样保留。
+- Codex 审查#1 修复：重分诊把簇成员判不相关后留下 2 个单成员残簇
+  （2453b343fb/d61ce74da6，违反 1父+≥1子 契约）→ 已降级为独立记录并
+  重发布，validate_data_contract 全绿（2026-10-01 23:53）。
 - 回滚资产：runtime/retriage-20261001/（lite/checkpoint/env 备份）。
 
 ### 发布链路 bug（本次发现并修复）
@@ -81,6 +84,7 @@ rerun_engine_retriage.py 发布前先 build_snapshot(lite) 重建分片。
 ## 三、验证清单
 
 - [x] 重分诊 fail=0、不相关率与首跑一致（39.6%）
+- [x] validate_data_contract 全绿（残簇降级后）
 - [x] lite 与线上分片标签一致（69,368 条 100% 新口径）
 - [x] 不相关记录无 AI 字段残留
 - [x] 页面（:8080）数据为新标签、auto-version 2333

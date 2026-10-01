@@ -45,7 +45,13 @@ def acquire_run_lock():
     """七（2026-10-01）并发保护：同一 checkpoint 同时只允许一个重跑进程。
     两个进程会读同一断点、重复调用引擎并把彼此的写回/断点推进交错
     （checkpoint 非行锁，last-writer-wins 会造成丢处理）。flock 独占；
-    拿不到锁立即退出（crontab 重叠触发场景）。"""
+    拿不到锁立即退出（crontab 重叠触发场景）。
+
+    同时持有主管线锁 .pipeline.lock（2026-10-01 Codex 审查#3）：auto_pipeline
+    的合并/聚类/自愈/发布都写同一份 lite 与分片，且它只认自己的锁——重跑
+    若只锁 checkpoint，4 小时定时器照样并发写（lost update：双方都读旧 lite
+    整体重写）。两把锁都拿（先 checkpoint 再 pipeline，顺序与主管线自身
+    获取顺序一致，无死锁环），任何一把拿不到都立即退出。"""
     import fcntl
     lock_path = CHECKPOINT.with_suffix(".lock")
     fh = open(lock_path, "w")
@@ -54,7 +60,16 @@ def acquire_run_lock():
     except OSError:
         fh.close()
         return None
-    return fh
+    pipeline_lock_path = PIPELINE / ".pipeline.lock"
+    pfh = open(pipeline_lock_path, "w")
+    try:
+        fcntl.flock(pfh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        pfh.close()
+        fh.close()
+        return None
+    # pfh 随主进程存活；fh 交由调用方持有。返回 (checkpoint锁, 主管线锁)。
+    return fh, pfh
 
 
 def load_checkpoint():
@@ -82,9 +97,11 @@ def main() -> int:
 
     lock_fh = acquire_run_lock()
     if lock_fh is None:
-        print("[FATAL] 另一个重跑进程正在运行（.engine_retriage_checkpoint.lock "
-              "被占用）——并发重跑会交错写回/断点，拒绝启动", flush=True)
+        print("[FATAL] 另一个重跑进程或主管线正在运行（checkpoint 锁或 "
+              ".pipeline.lock 被占用）——并发写 lite/分片会交错丢失更新，"
+              "拒绝启动", flush=True)
         return 1
+    lock_fh, pipeline_lock_fh = lock_fh  # 两把锁都持有到进程退出
 
     if args.reset_checkpoint and CHECKPOINT.exists():
         CHECKPOINT.unlink()
@@ -187,7 +204,14 @@ def main() -> int:
                     import auto_pipeline as _ap  # 复用主管线发布逻辑（含派生快照与版本戳）
                     from build_snapshot import build_snapshot
                     build_snapshot(lite)
-                    if not _ap.publish_to_boundary():
+                    # 主管线语义是「校验通过才发布」；重跑同样先跑契约校验，
+                    # 失败则不发布（2026-10-01 Codex 审查#1：重分诊会把簇成员
+                    # 判不相关清字段，留下单成员残簇违反 1父+≥1子 契约）。
+                    from validate_data_contract import validate
+                    problems = validate()
+                    if problems:
+                        print(f"[WARN] data contract failed, skip publish: {problems[:5]}", flush=True)
+                    elif not _ap.publish_to_boundary():
                         print("[WARN] publish failed this round (non-fatal, retried next round)", flush=True)
                 except Exception as exc:
                     print(f"[WARN] snapshot/publish failed (non-fatal): {exc}", flush=True)
