@@ -13,8 +13,18 @@ TAXONOMY_PATH = REPO / "data" / "category-taxonomy.json"
 CATEGORY_ORDER_PATH = REPO / "data" / "category-order-data.js"
 CHUNK_SIZE = 2000
 
-VALID_NEWS_TAGS = frozenset({"技术突破", "产业进展", "政策监管", "资本运作", "行业观察"})
-VALID_LIT_TAGS = frozenset({"研究论文", "观点评论"})
+# triage_engine v1.11 展示分类是新写入的唯一口径。旧 5+2 标签暂时仍
+# 允许通过校验，保证 6 万+ 历史记录无需在本次代码修复中被强制全量重跑；
+# 全量 retriage 完成后可删除 LEGACY_*。
+TRIAGE_NEWS_TAGS = frozenset({
+    "知识资产", "工程与产业化", "企业经营、合作与资本", "资源、市场与产业链",
+    "政策、法规与标准", "人才与组织动态", "观点与交流",
+})
+TRIAGE_LIT_TAGS = frozenset({"综述", "研究型", "分析类", "新闻/评论/观点"})
+LEGACY_NEWS_TAGS = frozenset({"技术突破", "产业进展", "政策监管", "资本运作", "行业观察"})
+LEGACY_LIT_TAGS = frozenset({"研究论文", "观点评论"})
+VALID_NEWS_TAGS = TRIAGE_NEWS_TAGS | LEGACY_NEWS_TAGS
+VALID_LIT_TAGS = TRIAGE_LIT_TAGS | LEGACY_LIT_TAGS
 SPECIAL_CATEGORIES = frozenset({"不相关", "未分类"})
 AI_DERIVED_FIELDS = ("sc", "scd", "aip", "as", "kp", "tp", "cl", "cp", "cln")
 
