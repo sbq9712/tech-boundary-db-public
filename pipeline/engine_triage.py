@@ -8,7 +8,7 @@
   3. 结果映射（只读引擎输出，不改引擎）：
      - 领域  c   ：引擎域判定 → 主库 125 叶完整路径；域外 → "不相关"
      - 载体  i   ：引擎展示大类（论文→l / 新闻→n；v1.10 C-T16 载体前提，不信源文件名）
-     - 类型  tg  ：引擎展示链 → 前端既有 7 标签词表（新闻5 + 文献2）
+     - 类型  tg  ：直接保存 triage_engine 展示链分类（新闻7类 + 文献4分型）；不再压回旧 5+2 标签
      - 评分  sc  ：引擎 S8 value/10（0-100 → 0-10 前端既有刻度），T02 区间档取区间中点
      - 维度  scd ：引擎评分卡维度归一 0-10 后，按语义填入前端 b/i/r/d/t 五槽
      - 精选  aip ：新闻 S8 档位 ∈ {高,中} → aip=1；文献一律不精选；低 → 不精选
@@ -37,30 +37,38 @@ METHOD_SUFFIX = "direct-banding-v111"
 # ── 源 → 引擎 src（引擎按载体身份判定论文/新闻，来源仅作入口通道） ──
 _SRC_MAP = {"news": "news-spider", "wechat": "wechat", "literature": "literature"}
 
-# ── 前端既有标签词表（breadth 页类型徽标/筛选树硬编码，保持不变） ──
-NEWS_TAGS = ("技术突破", "产业进展", "政策监管", "资本运作", "行业观察")
-LIT_TAGS = ("研究论文", "观点评论")
+# ── triage_engine 展示分类 = tg 唯一真源 ───────────────────────────────
+# 新闻：v1.09 DISPLAY_CHAIN_MAP 的 7 个展示小类；文献：T01 四分型。
+# 旧适配层曾把它们强行压成“新闻5 + 文献2”，导致广度页与 triage_engine
+# 口径不一致，也让 T05/T23/T24 带括号说明的小类误落默认标签。
+NEWS_TAGS = (
+    "知识资产",
+    "工程与产业化",
+    "企业经营、合作与资本",
+    "资源、市场与产业链",
+    "政策、法规与标准",
+    "人才与组织动态",
+    "观点与交流",
+)
+LIT_TAGS = ("综述", "研究型", "分析类", "新闻/评论/观点")
+_NEWS_DEFAULT_TAG = "观点与交流"
+_LIT_DEFAULT_TAG = "研究型"
 
-# 引擎新闻展示小类 → 前端标签（键做标点归一后匹配，兼容"、"与""变体）
-_NEWS_SUBCAT_TAG = {
-    "知识资产": "技术突破",
-    "工程与产业化": "产业进展",
-    "企业经营合作与资本": "资本运作",
-    "资源市场与产业链": "产业进展",
-    "政策法规与标准": "政策监管",
-    "人才与组织动态": "行业观察",
-    "观点与交流": "行业观察",
-}
-# 引擎论文四分型 → 前端标签
-_LIT_SUBCAT_TAG = {
-    "综述": "研究论文",
-    "研究型": "研究论文",
-    "分析类": "观点评论",
-    "新闻/评论/观点": "观点评论",
-    "新闻·评论·观点": "观点评论",
-}
-_NEWS_DEFAULT_TAG = "行业观察"
-_LIT_DEFAULT_TAG = "研究论文"
+
+def _tag_key(value: str) -> str:
+    """展示标签比较键：去掉空白/分隔标点，兼容引擎中的不同书写。"""
+    return re.sub(r"[、，,\s·/]", "", str(value or ""))
+
+
+def _strip_display_note(value: str) -> str:
+    """去掉 DISPLAY_CHAIN_MAP 中仅供解释的括号后缀，不改变分类本体。"""
+    return re.sub(r"[（(][^）)]*[）)]", "", str(value or "")).strip()
+
+
+_NEWS_CANONICAL = {_tag_key(x): x for x in NEWS_TAGS}
+_LIT_CANONICAL = {_tag_key(x): x for x in LIT_TAGS}
+# triage_engine 文献四分型历史上同时出现“新闻·评论·观点”书写。
+_LIT_CANONICAL[_tag_key("新闻·评论·观点")] = "新闻/评论/观点"
 
 # ── 引擎树路径 → 主库路径 规范化 ──
 # 引擎菜单用 " > " / "|" 分隔且 19 条叶把主库的"能源测"写作"能源侧"；
@@ -181,17 +189,18 @@ def resolve_carrier(item: dict, rec: dict) -> str:
 
 
 def resolve_tag(item: dict, carrier: str) -> str:
-    sub = re.sub(r"[、\s·/]", "", str(item.get("displaySubcategory") or ""))
-    table = _LIT_SUBCAT_TAG if carrier == "l" else _NEWS_SUBCAT_TAG
-    if sub in table:
-        return table[sub]
-    # 标点归一后的键做一次直接比对（论文四分型含 '/' 等）
-    for key, tag in table.items():
-        if re.sub(r"[、\s·/]", "", key) == sub:
-            return tag
-    default = _LIT_DEFAULT_TAG if carrier == "l" else _NEWS_DEFAULT_TAG
-    return default
-
+    """把引擎展示小类原义写入 tg；只做展示说明/标点规范化，不再降维。"""
+    raw = _strip_display_note(str(item.get("displaySubcategory") or ""))
+    table = _LIT_CANONICAL if carrier == "l" else _NEWS_CANONICAL
+    hit = table.get(_tag_key(raw))
+    if hit:
+        return hit
+    # 未知新值不臆造映射：只有在引擎明确给出当前载体展示大类时才原样保留，
+    # 这样未来 triage_engine 增类能直接出现在动态前端菜单；空值才用稳定默认。
+    expected_category = "论文" if carrier == "l" else "新闻"
+    if raw and str(item.get("displayCategory") or "") == expected_category:
+        return raw
+    return _LIT_DEFAULT_TAG if carrier == "l" else _NEWS_DEFAULT_TAG
 
 def parse_value(value, value_display) -> float | None:
     """引擎 S8 分值（0-100）→ float；T02 区间档（value=None, valueDisplay='55–69'）取中点。"""
