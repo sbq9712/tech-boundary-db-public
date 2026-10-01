@@ -1453,7 +1453,11 @@ def run_maintenance():
     log("Step 11: Generating reports (catch-up all)...")
     report_failed = False
     try:
+        # 一：隔离/裸机环境无 pipeline/.venv 时回退当前解释器（Step 10 同款回退），
+        # 报告补跑不能再因解释器路径缺失而整段失败。
         venv_python = os.path.join(REPO, ".venv", "bin", "python")
+        if not os.path.exists(venv_python):
+            venv_python = sys.executable
         report_scripts = os.path.join(REPO, "scripts", "generate_reports.py")
         if not os.path.exists(report_scripts):
             ok = False
@@ -1473,6 +1477,14 @@ def run_maintenance():
                     if result.returncode == 0:
                         tail = [l for l in result.stdout.strip().split("\n") if l.strip()]
                         log("  " + (tail[-1] if tail else "ok"))
+                        # 一：预期降级要可见——无 key/无记录的如实跳过原因
+                        # 进主日志，不再被 capture_output 吞掉（验收口径：
+                        # 诚实降级可核查；不改变退出码语义）。
+                        for marker in ("no dates in data", "no records for",
+                                       "no top events for", "GLM returned empty"):
+                            n = result.stdout.count(marker)
+                            if n:
+                                log(f"  11/{rtype}: {marker} ×{n}（预期降级，不伪造）")
                     else:
                         report_failed = True
                         log(f"  [WARN] {rtype} report failed: {(result.stderr or result.stdout)[:200]}")

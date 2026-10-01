@@ -170,8 +170,11 @@ def result_identity(result: dict) -> tuple:
 def rrf_merge_rounds(rounds: list[list[dict]], k: int = 60, cap: int = 80) -> list[dict]:
     """ITERATIVE_RETRIEVAL：多路（子查询/图谱扩展）结果 RRF 归并。
 
-    每一路内部已按序（分数降序）；跨路 RRF 权重累加，同结果取最高分
-    原始分作为 vec 评分保留。输出按 RRF 分降序。
+    每一路内部已按序（分数降序）；跨路 RRF 权重累加。输出按 RRF 分降序，
+    且 score 统一改写为 RRF 分：各路输入的 score 量纲可能不同（子查询路
+    来自 rrf_fuse 的 RRF 分，图谱扩展路来自 bm25_search 的原始 BM25 分），
+    原样保留会让重排先验跨量纲比较（一.6 隔离复现：原始 BM25 分 24~38 的
+    图谱扩展项以 ~1000 倍先验淹没增量记录）。原始分存入 raw_score 留证。
     """
     acc: dict[tuple, dict] = {}
     for round_results in rounds:
@@ -187,6 +190,10 @@ def rrf_merge_rounds(rounds: list[list[dict]], k: int = 60, cap: int = 80) -> li
                 merged["_rrf"] = contrib
                 acc[key] = merged
     merged = sorted(acc.values(), key=lambda r: r.get("_rrf", 0), reverse=True)
+    for item in merged:
+        if "vec_score" not in item and "bm25_score" not in item:
+            item["raw_score"] = item.get("score")
+        item["score"] = round(float(item.get("_rrf", 0) or 0), 6)
     return merged[:cap]
 
 
