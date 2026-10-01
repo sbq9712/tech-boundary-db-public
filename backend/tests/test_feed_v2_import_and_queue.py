@@ -975,3 +975,88 @@ def test_queue_old_upsert_cannot_overwrite_new_delete(monkeypatch):
         db.commit()
     finally:
         db.close()
+
+
+def test_delete_task_keeps_unified_identity_after_row_gone(monkeypatch, tmp_path):
+    """二：删除任务统一身份不丢。
+
+    - 行删除之前入队 → payload 必须持久化 record_key_sha（统一身份三元组
+      计算自行字段，与 canonical-qa 基础索引同源）；
+    - 任务执行时行已不存在（github_import 先入队后 db.delete 的真实次序），
+      worker 仍须以 payload 身份调用 record-mutate 墓碑（基础索引旧版本屏蔽）；
+    - 行与 payload 均无身份 → 拒绝静默完成（RuntimeError → 退避重试）。
+    """
+    monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
+    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "")  # HTTP 助手全部 stub
+    db = SessionLocal()
+    seen: dict = {}
+    try:
+        rec_id = uuid.uuid4()
+        up = _mk_upload(db, checksum=hashlib.sha256(b"zip-id2").hexdigest())
+        title, date_, url = "身份不丢", "2026-09-28", "https://q/id2"
+        db.execute(text(
+            "INSERT INTO breadth_manual_records "
+            "(id, upload_id, user_id, title, document_date, url, level, intelligence_type, source_version) "
+            "VALUES (:i, :u, 'feedv2-test', :t, :d, :u2, 0, 'news', 0)"
+        ), {"i": str(rec_id), "u": str(up.id), "t": title, "d": date_, "u2": url})
+        db.commit()
+
+        from app.models.breadth_manual_record import BreadthManualRecord
+        row = db.get(BreadthManualRecord, rec_id)
+        # 与 worker 同源的期望身份
+        expected_ksha = bq.canonical_record_key_sha(title, date_, url)
+        # 真实次序：先入队（行仍在，身份写入 payload），后删行，同事务提交
+        bq.enqueue_record_delete(db, rec_id, up.id, row=row)
+        db.delete(row)
+        db.commit()
+
+        from app.models.index_task import IndexTask
+        task = db.query(IndexTask).filter_by(target_key=str(rec_id)).one()
+        assert task.op == "delete"
+        assert task.payload.get("record_key_sha") == expected_ksha, (
+            "删除任务必须在行删除前持久化统一身份")
+
+        # worker 视角：行已不存在，payload 身份必须驱动 record-mutate 墓碑
+        def fake_mutate_delete(ksha):
+            seen["ksha"] = ksha
+
+        monkeypatch.setattr(bq, "_post_record_mutate_delete", fake_mutate_delete)
+        monkeypatch.setattr(bq, "_post_index_delete",
+                            lambda doc_id, ksha=None: seen.setdefault("doc", doc_id))
+        assert bq.process_batch(db) == 1
+        assert seen.get("ksha") == expected_ksha, "行已删仍须以 payload 身份墓碑基础旧版本"
+        status = db.execute(text(
+            "SELECT status FROM breadth_index_tasks WHERE target_key=:k"
+        ), {"k": str(rec_id)}).one()[0]
+        assert status == "done"
+    finally:
+        db.close()
+
+
+def test_delete_task_without_identity_fails_honestly(monkeypatch, tmp_path):
+    """二：行与 payload 均无统一身份 → 拒绝静默完成（退避重试，不标 done）。"""
+    monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
+    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "")
+    db = SessionLocal()
+    try:
+        rec_id = uuid.uuid4()
+        up = _mk_upload(db, checksum=hashlib.sha256(b"zip-no-id").hexdigest())
+        # 不传 row、不传 record_key_sha：模拟历史遗留任务（payload 只有 document_id）
+        bq.enqueue_record_delete(db, rec_id, up.id)
+        # 行从未存在（DELETE-before-first-ADD 且无身份）
+        db.commit()
+        from app.models.index_task import IndexTask
+        task = db.query(IndexTask).filter_by(target_key=str(rec_id)).one()
+        assert "record_key_sha" not in (task.payload or {})
+
+        monkeypatch.setattr(bq, "_post_index_delete", lambda doc_id, ksha=None: None)
+        # process_batch 返回成功数：执行失败 → 0，但任务必须退避重试不标 done
+        assert bq.process_batch(db) == 0
+        status, attempts, err = db.execute(text(
+            "SELECT status, attempts, last_error FROM breadth_index_tasks "
+            "WHERE target_key=:k"), {"k": str(rec_id)}).one()
+        assert status in ("pending", "failed"), status
+        assert attempts >= 1
+        assert "缺少统一身份" in (err or "")
+    finally:
+        db.close()

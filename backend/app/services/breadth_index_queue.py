@@ -58,8 +58,24 @@ def enqueue_record_upserts(db: Session, records: list[BreadthManualRecord]) -> i
     return n
 
 
-def enqueue_record_delete(db: Session, record_id: uuid.UUID | str, upload_id: uuid.UUID | None = None) -> None:
-    _enqueue(db, op="delete", target_key=str(record_id), payload={"document_id": str(record_id)}, upload_id=upload_id)
+def enqueue_record_delete(db: Session, record_id: uuid.UUID | str,
+                          upload_id: uuid.UUID | None = None,
+                          record_key_sha: str | None = None,
+                          *, row: BreadthManualRecord | None = None) -> None:
+    """入队删除任务（二）：调用方必须在删除数据库行之前入队，并把统一身份
+    record_key_sha 一并持久化进 payload——任务异步执行时行多半已删，
+    仅凭 document_id（数据库 UUID）无法再对齐基础索引同身份旧版本，
+    DELETE-before-first-ADD（行不存在但已烘焙进基础索引）也全靠它。
+    传 row 时由本函数计算 ksha，调用方无需重复拼身份三元组。"""
+    payload: dict = {"document_id": str(record_id)}
+    ksha = record_key_sha
+    if ksha is None and row is not None:
+        ksha = canonical_record_key_sha(
+            row.title, row.document_date or "", row.url or "")
+    if ksha:
+        payload["record_key_sha"] = str(ksha)
+    _enqueue(db, op="delete", target_key=str(record_id), payload=payload,
+             upload_id=upload_id)
 
 
 def _enqueue(db: Session, *, op: str, target_key: str, payload: dict, upload_id) -> None:
@@ -197,12 +213,18 @@ def _post_index_delete(document_id: str) -> None:
     request_incremental_index_delete(document_id)
 
 
+_record_mutate_supported: bool | None = None
+
+
 def _post_record_mutate_delete(record_key_sha: str) -> None:
     """一.4（2026-09-30）：源 DELETE 不能只删数据库 UUID 对应的增量文档——
     同身份的基础索引旧版本必须被墓碑屏蔽（否则旧版本继续可召回）。
-    record-mutate delete 幂等：重复发送安全；404（旧镜像无此端点）容忍。"""
+    record-mutate delete 幂等：重复发送安全。
+    二：404 不再静默当成功——首次 404 探测端点能力，确认是旧镜像后
+    如实抛错（任务进失败待办可重试/可审计），而不是假装删除完成。"""
     import os
 
+    global _record_mutate_supported
     base_url = os.getenv("TECHDB_QA_SERVICE_URL", "").strip().rstrip("/")
     if not base_url:
         return
@@ -214,8 +236,17 @@ def _post_record_mutate_delete(record_key_sha: str) -> None:
             f"{base_url}/api/index/record-mutate", headers=headers,
             json={"ops": [{"record_key_sha": record_key_sha, "op": "delete",
                            "reason": "breadth-import-delete"}]})
-        if resp.status_code not in (200, 404):
-            resp.raise_for_status()
+        if resp.status_code == 404:
+            if _record_mutate_supported is None:
+                _record_mutate_supported = False
+            if not _record_mutate_supported:
+                raise RuntimeError(
+                    "canonical-qa /api/index/record-mutate 不存在（镜像过旧）——"
+                    "同身份基础索引旧版本未被墓碑屏蔽，任务转失败待办，"
+                    "镜像升级后会随重试完成")
+            return
+        _record_mutate_supported = True
+        resp.raise_for_status()
 
 
 def _execute(db: Session, task: IndexTask) -> None:
@@ -235,6 +266,15 @@ def _execute(db: Session, task: IndexTask) -> None:
             ksha = str(task.payload["record_key_sha"])
         if ksha:
             _post_record_mutate_delete(ksha)  # 一.4：同身份基础旧版本一并屏蔽
+        else:
+            # 二：行与 payload 都拿不到统一身份 = 无法证明基础索引旧版本
+            # 已被屏蔽。增量文档虽删，烘焙基础 B 仍可能继续可召回——
+            # 如实失败进退避重试（记录行若被恢复/新包重导可补齐身份），
+            # 不允许假装删除完成。
+            raise RuntimeError(
+                f"delete task {task.id} 缺少统一身份（记录行不存在且 payload "
+                f"无 record_key_sha）——同身份基础索引旧版本屏蔽无法保证，"
+                f"拒绝静默完成")
         return
     rec = db.get(BreadthManualRecord, _as_uuid(document_id))
     if rec is None:

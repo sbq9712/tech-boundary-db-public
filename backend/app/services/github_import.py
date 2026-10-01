@@ -571,7 +571,9 @@ def _apply_changes(
             elif row.source_version > v:
                 skipped_stale += 1  # 旧版本包的删除不能覆盖新版本
             else:
-                enqueue_record_delete(db, row.id, record.id)
+                # 二：删除行之前把统一身份持久化进任务 payload——
+                # 任务异步执行时行已删，仅凭 UUID 无法对齐基础索引旧版本。
+                enqueue_record_delete(db, row.id, record.id, row=row)
                 # 墓碑与删除同一事务：崩溃不会出现「行已删、墓碑未记」
                 if tomb is None:
                     tomb = FeedTombstone(feed_key_digest=hexd)

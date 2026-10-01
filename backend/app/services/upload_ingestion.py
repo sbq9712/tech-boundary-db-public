@@ -645,7 +645,9 @@ def delete_uploaded_file(db: Session, record: UploadedFile) -> dict:
         from app.services.breadth_index_queue import enqueue_record_delete
 
         for row in breadth_rows:
-            enqueue_record_delete(db, row.id, record.id)
+            # 二：删除行之前持久化统一身份（record_key_sha），异步任务
+            # 执行时行已删也能屏蔽基础索引同身份旧版本。
+            enqueue_record_delete(db, row.id, record.id, row=row)
     try:
         path = safe_upload_path(record.stored_filename)
     except ValueError:
