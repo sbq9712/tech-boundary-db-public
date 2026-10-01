@@ -313,7 +313,7 @@ function renderAssistantMessage(msg, idx) {
           <div class="qa-citation-item" data-citation-num="${c.id}" data-record-id="${c.record_id}">
             <div class="qa-citation-head">
               <span class="qa-citation-num">[${c.id}]</span>
-              <a class="qa-citation-title" href="${escHtml(_qaSafeUrl(c.url))}" target="_blank" rel="noreferrer">${escHtml(c.title || '')}</a>
+              <a class="qa-citation-title" href="${_qaSafeHref(c.url)}" target="_blank" rel="noreferrer">${escHtml(c.title || '')}</a>
             </div>
             ${(c.grounding_status === 'VALID' || c.grounding_status === 'FUZZY') ? `<span class="qa-ground-badge qa-ground-${c.grounding_status.toLowerCase()}" title="${c.grounding_status === 'VALID' ? '证据已定位到原文：引用文字与原文一字不差' : '证据已定位到原文：原文经过改写/翻译，系统通过相似度分析找到对应段落'}">${c.grounding_status === 'VALID' ? '📍 精确对位' : '📍 相似对位'}</span>` : (c.grounding_status === 'GROUNDING_FAIL' ? '<span class="qa-ground-badge qa-ground-fail" title="未能定位到原文精确片段">⚠️ 未定位</span>' : '')}
             <div class="qa-citation-meta">
@@ -321,7 +321,7 @@ function renderAssistantMessage(msg, idx) {
               <span>📰 ${escHtml(c.source || '')}</span>
               ${c.score ? `<span>⭐ ${c.score}</span>` : ''}
               ${c.tag ? `<span>🏷️ ${escHtml(c.tag)}</span>` : ''}
-              <a class="qa-citation-link" href="${escHtml(_qaSafeUrl(c.url))}" target="_blank" rel="noreferrer">🔗 原文</a>
+              <a class="qa-citation-link" href="${_qaSafeHref(c.url)}" target="_blank" rel="noreferrer">🔗 原文</a>
             </div>
             ${card && card.source_role && card.source_role !== 'unknown'
               ? `<div class="qa-reference-role" title="来源性质：厂商/当事方自述（self_reported）或独立第三方（independent）">来源角色：${escHtml(card.source_role)}</div>` : ''}
@@ -1032,9 +1032,12 @@ function renderMarkdown(text) {
   // Bold
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   // Links [text](url) — scheme 白名单（含控制字符清洗，见 _qaSafeUrl）：
-  // javascript:/data:/vbscript: 及 `java\tscript:` 变体一律降级为纯文本
+  // javascript:/data:/vbscript: 及 `java\tscript:` 变体一律降级为纯文本。
+  // 插值进 href="..." 前必须把 `"` 百分号编码——escHtml 的 textContent→
+  // innerHTML 序列化不转义引号，相对 URL 中的引号可断开属性注入事件
+  // 处理器（codex 复审 R3-1，如 `[x](/a" onmouseover="alert(1))`）。
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text_, rawUrl) => {
-    const url = _qaSafeUrl(rawUrl);
+    const url = _qaSafeUrl(rawUrl).replace(/"/g, '%22');
     if (url === '#') return text_;
     return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--brand-light)">${text_}</a>`;
   });
@@ -1083,6 +1086,12 @@ function _qaSafeUrl(url) {
   const m = /^([a-z][a-z0-9+.-]*):/i.exec(u);
   if (m) return /^(https?|mailto)$/i.test(m[1]) ? u : '#';
   return u; // 无 scheme：相对地址
+}
+
+// href 属性插值专用：scheme 白名单 + `"` 百分号编码 + HTML 转义。
+// 引用卡片等直接以原始数据（未经 renderMarkdown 预转义）进模板的位置统一走这里。
+function _qaSafeHref(url) {
+  return escHtml(_qaSafeUrl(url).replace(/"/g, '%22'));
 }
 
 // T033: Answer status configuration for four-state display
@@ -1496,5 +1505,5 @@ window.qaModule = {
   switchToQAView,
   switchFromQAView,
   initQAView,
-  __testHooks: { sseFrameParser, handleSSEData, renderMarkdown, _qaSafeUrl },
+  __testHooks: { sseFrameParser, handleSSEData, renderMarkdown, _qaSafeUrl, _qaSafeHref },
 };

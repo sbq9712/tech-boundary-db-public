@@ -48,7 +48,7 @@ const src = readFileSync(join(root, 'breadth', 'qa.js'), 'utf8');
 // eslint-disable-next-line no-eval
 (0, eval)(src.replace(/^window\.qaModule/m, 'globalThis.qaModule'));
 const hooks = globalThis.qaModule.__testHooks ?? window.qaModule.__testHooks;
-const { sseFrameParser, handleSSEData, renderMarkdown, _qaSafeUrl } = hooks;
+const { sseFrameParser, handleSSEData, renderMarkdown, _qaSafeUrl, _qaSafeHref } = hooks;
 
 let failures = 0;
 function check(name, cond) {
@@ -133,6 +133,8 @@ function check(name, cond) {
   check('data: 链接降级', !data.includes('data:'));
   check('_qaSafeUrl 拦截 javascript:', _qaSafeUrl('javascript:alert(1)') === '#');
   check('_qaSafeUrl 放行 http:', _qaSafeUrl('http://a.b/c').startsWith('http://'));
+  check('_qaSafeHref 编码引号:', _qaSafeHref('/a" onmouseover="alert(1)').includes('%22')
+    && !/_qaSafeHref.*onmouseover=/.test(_qaSafeHref('/a" onmouseover="alert(1)')));
   // codex 复审 R2-1：浏览器 URL 解析剔除 TAB/NUL/首尾控制字符，
   // `java\tscript:` / `\0javascript:` 会归一成 javascript: —— 必须拦截
   check('TAB 混淆 scheme 拦截', _qaSafeUrl('java\tscript:alert(1)') === '#');
@@ -142,6 +144,16 @@ function check(name, cond) {
   check('markdown 内 TAB 混淆拦截', !tabMd.includes('ascript:') || !tabMd.includes('<a href'));
   const nulMd = renderMarkdown('[x](\0javascript:alert(1))');
   check('markdown 内 NUL 混淆拦截', !nulMd.includes('<a href'));
+  // codex 复审 R3-1：escHtml（textContent→innerHTML）不转义引号，相对 URL
+  // 中的 `"` 可断开 href 属性注入事件处理器 —— 必须百分号编码后插值。
+  // 验收标准：href="..." 的属性值完整包裹全部内容（无裸引号断开）。
+  const attrInj = renderMarkdown('[x](/a" onmouseover="alert(1))');
+  const hrefVal = (attrInj.match(/href="([^"]*)"/) || [])[1];
+  check('href 属性引号注入拦截', hrefVal === '/a%22 onmouseover=%22alert(1');
+  check('引号被 %22 编码', hrefVal.includes('%22'));
+  const attrInj2 = renderMarkdown('[x](https://a.b/c" onfocus="alert(2))');
+  const hrefVal2 = (attrInj2.match(/href="([^"]*)"/) || [])[1];
+  check('绝对 URL 引号注入同样拦截', hrefVal2 === 'https://a.b/c%22 onfocus=%22alert(2');
 }
 
 // ── 6. SSE 空行复位事件名（codex 复审 R2-2）─────────────────────
