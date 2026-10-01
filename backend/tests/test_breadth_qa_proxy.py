@@ -229,13 +229,35 @@ def test_payload_contract_history_bounds():
 
 def test_payload_contract_exclude_ids_validation():
     with pytest.raises(ValidationError):
-        BreadthQaChatIn(query="q", exclude_ids=["a b"])        # 空白
+        BreadthQaChatIn(query="q", exclude_ids=["a b"])        # 非 URL 的松散串
     with pytest.raises(ValidationError):
         BreadthQaChatIn(query="q", exclude_ids=["a\";drop"])   # 引号注入载体
     with pytest.raises(ValidationError):
         BreadthQaChatIn(query="q", exclude_ids=[str(i) for i in range(201)])
+    with pytest.raises(ValidationError):
+        BreadthQaChatIn(query="q", exclude_ids=["a\x00b"])     # 控制字符
     ok = BreadthQaChatIn(query="q", exclude_ids=[0, 12, "doc-id_1.txt"])
     assert ok.model_dump()["exclude_ids"] == ["0", "12", "doc-id_1.txt"]
+
+
+def test_payload_contract_exclude_ids_url_form():
+    """URL 形态的排除 id：真实语料 URL 含空格/Unicode/括号/波浪号，不得 422。"""
+    ok = BreadthQaChatIn(
+        query="q",
+        exclude_ids=[
+            "https://example.com/报告 (2026 final)~1.pdf?src=周报#p=2",
+            "http://a.b/c d",
+        ],
+    )
+    assert len(ok.model_dump()["exclude_ids"]) == 2
+    # 契约：紧凑白名单形态优先（如 "ftp://x/y" 全为白名单字符 → 接受；
+    # 上游仅做集合成员比对，不匹配任何记录即无害 no-op）；其余形态必须
+    # 是绝对 http(s) URL。
+    assert BreadthQaChatIn(query="q", exclude_ids=["ftp://x/y"]).model_dump()["exclude_ids"] == ["ftp://x/y"]
+    with pytest.raises(ValidationError):
+        BreadthQaChatIn(query="q", exclude_ids=["javascript:alert(1)"])  # 括号 → 走 URL 分支 → 非 http(s)
+    with pytest.raises(ValidationError):
+        BreadthQaChatIn(query="q", exclude_ids=["mailto:a b@c"])          # 空格且非合法 URL
 
 
 def test_payload_contract_rejects_empty_query(client):

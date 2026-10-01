@@ -133,6 +133,35 @@ function check(name, cond) {
   check('data: 链接降级', !data.includes('data:'));
   check('_qaSafeUrl 拦截 javascript:', _qaSafeUrl('javascript:alert(1)') === '#');
   check('_qaSafeUrl 放行 http:', _qaSafeUrl('http://a.b/c').startsWith('http://'));
+  // codex 复审 R2-1：浏览器 URL 解析剔除 TAB/NUL/首尾控制字符，
+  // `java\tscript:` / `\0javascript:` 会归一成 javascript: —— 必须拦截
+  check('TAB 混淆 scheme 拦截', _qaSafeUrl('java\tscript:alert(1)') === '#');
+  check('NUL 前缀混淆拦截', _qaSafeUrl('\0javascript:alert(1)') === '#');
+  check('大写 scheme 拦截', _qaSafeUrl('JaVaScRiPt:alert(1)') === '#');
+  const tabMd = renderMarkdown('[x](java\tscript:alert(1))');
+  check('markdown 内 TAB 混淆拦截', !tabMd.includes('ascript:') || !tabMd.includes('<a href'));
+  const nulMd = renderMarkdown('[x](\0javascript:alert(1))');
+  check('markdown 内 NUL 混淆拦截', !nulMd.includes('<a href'));
+}
+
+// ── 6. SSE 空行复位事件名（codex 复审 R2-2）─────────────────────
+{
+  const feed = sseFrameParser();
+  const seen = [];
+  // replace 事件后仅空行分隔，下一个无名 data 事件不得继承 'replace'
+  const stream = 'event: replace\ndata: {"content":"A"}\n\ndata: {"text":"t"}\n\n';
+  feed(stream, (d, ev) => { seen.push(ev); return null; });
+  check('空行后事件名复位为 null', seen.length === 2 && seen[1] === null);
+}
+{
+  const feed = sseFrameParser();
+  const seen = [];
+  // CRLF 行尾同样复位；data 内容不受 \r 污染
+  const stream = 'event: token\r\ndata: {"text":"x"}\r\n\r\ndata: {"text":"y"}\n\n';
+  feed(stream, (d, ev) => { seen.push([ev, d]); return null; });
+  check('CRLF 兼容：事件派发正确', seen.length === 2
+    && seen[0][0] === 'token' && seen[0][1].text === 'x'
+    && seen[1][0] === null && seen[1][1].text === 'y');
 }
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);

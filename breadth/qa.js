@@ -740,7 +740,11 @@ function sseFrameParser() {
     buffer += chunkText;
     const lines = buffer.split('\n');
     buffer = lines.pop();    // 不完整行留在缓冲区
-    for (const line of lines) {
+    for (const rawLine of lines) {
+      const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine; // CRLF 兼容
+      // 空行（事件分隔符）：按 SSE 规范，无论是否派发过事件，事件类型缓冲
+      // 都在此复位——防止 event: 名泄露到下一个事件帧（codex 复审 R2-2）。
+      if (line === '') { currentEvent = null; continue; }
       const field = line.split(':', 1)[0];
       if (field === 'event') {
         currentEvent = line.slice(6).trim();
@@ -1027,12 +1031,11 @@ function renderMarkdown(text) {
   html = html.replace(/^#\s(.+)$/gm, '<h3>$1</h3>');
   // Bold
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // Links [text](url) — scheme 白名单：http(s)/mailto 或无 scheme 的相对地址；
-  // javascript:/data:/vbscript: 等一律降级为纯文本（LLM 输出可被索引内容诱导）
+  // Links [text](url) — scheme 白名单（含控制字符清洗，见 _qaSafeUrl）：
+  // javascript:/data:/vbscript: 及 `java\tscript:` 变体一律降级为纯文本
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text_, rawUrl) => {
-    const url = rawUrl.trim();
-    const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(url);
-    if (hasScheme && !/^(https?|mailto):/i.test(url)) return text_;
+    const url = _qaSafeUrl(rawUrl);
+    if (url === '#') return text_;
     return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--brand-light)">${text_}</a>`;
   });
   // Lists - group consecutive <li> into <ul>
@@ -1069,12 +1072,17 @@ function escHtml(text) {
 
 // 引用 URL 的 scheme 白名单：引用数据来自检索索引（含用户上传文档的 u 字段），
 // javascript:/data: 等一律降级为 '#'，防 LLM/数据侧诱导点击。
+// 注意必须先剔除 ASCII 控制字符：浏览器 URL 解析会剔除 TAB/LF/CR 与首尾
+// C0 控制字符，`java\tscript:` / `\0javascript:` 由此归一为 javascript: ——
+// 在原始字符串上做 scheme 匹配会被绕过（codex 复审 R2-1）。
 function _qaSafeUrl(url) {
-  const u = String(url || '').trim();
+  const u = String(url || '')
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    .trim();
   if (!u) return '#';
-  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(u);
-  if (hasScheme && !/^(https?|mailto):/i.test(u)) return '#';
-  return u;
+  const m = /^([a-z][a-z0-9+.-]*):/i.exec(u);
+  if (m) return /^(https?|mailto)$/i.test(m[1]) ? u : '#';
+  return u; // 无 scheme：相对地址
 }
 
 // T033: Answer status configuration for four-state display

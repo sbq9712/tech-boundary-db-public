@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -54,9 +55,25 @@ class _HistoryItem(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
 
 
-# novelty 排除 id：canonical-qa 接受 record_idx / document_id / url 三种形态，
-# 共同字符集收敛为白名单（拒绝空白、控制字符与引号等注入载体）。
+# novelty 排除 id：canonical-qa 接受 record_idx / document_id / url 三种形态。
+# 紧凑形态（idx/document_id）用白名单；URL 形态单独校验——真实语料的 URL
+# 含空格/Unicode/括号/波浪号（实测约 6,246 条），白名单字符集会拒绝它们，
+# 导致带引用追问 422（codex 复审 R2-3）。
 _EXCLUDE_ID_RE = re.compile(r"^[A-Za-z0-9_\-./:=?#@%]{1,512}$")
+
+
+def _valid_exclude_id(s: str) -> bool:
+    if not 1 <= len(s) <= 512:
+        return False
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in s):  # 控制字符一律拒绝
+        return False
+    if _EXCLUDE_ID_RE.fullmatch(s):
+        return True
+    try:
+        parts = urlsplit(s)
+    except ValueError:
+        return False
+    return parts.scheme in ("http", "https") and bool(parts.netloc)
 
 
 class BreadthQaChatIn(BaseModel):
@@ -78,8 +95,8 @@ class BreadthQaChatIn(BaseModel):
             if isinstance(item, bool):
                 raise ValueError("exclude_ids 含非法布尔值")
             s = str(item)
-            if not _EXCLUDE_ID_RE.fullmatch(s):
-                raise ValueError("exclude_ids 含非法值（仅允许 record_idx/document_id/url 形态）")
+            if not _valid_exclude_id(s):
+                raise ValueError("exclude_ids 含非法值（仅允许 record_idx/document_id/http(s)-url 形态）")
             normalized.append(s)
         return normalized
 
