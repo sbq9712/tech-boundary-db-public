@@ -133,48 +133,63 @@ class IncrementalIndex:
                 raise ValueError("chunk text is empty")
             texts.append(text)
 
-        # 一.2 幂等：同 (record_key_sha, content_sha) 的 chunk 已在其他文档
-        # 存活（前一轮同步已落地）时先剔除——重试/超时重发/断点恢复不产生
-        # 重复召回，也不再重复付费嵌入。全被剔除则直接返回已就绪回执。
-        # 二.2 迟到旧版本拒绝：同身份已有更高 source_rev 的 chunk 时，旧
-        # 修订号的 upsert 整体拒收（worker 认领协议下旧任务迟到的副作用）。
-        existing_pairs: set[tuple[str, str]] = set()
-        ksha_max_rev: dict[str, int] = {}
-        for m in self.meta:
-            if str(m.get("document_id") or "") == document_id:
-                continue
-            md = m.get("chunk_metadata") or {}
-            existing_pairs.add((str(md.get("record_key_sha") or ""),
-                                str(md.get("content_sha") or "")))
-            k = str(md.get("record_key_sha") or "")
-            rv = md.get("source_rev")
-            if k and isinstance(rv, int):
-                if rv > ksha_max_rev.get(k, -1):
-                    ksha_max_rev[k] = rv
-        deduped = []
-        rejected_stale = 0
-        for chunk, text in zip(chunks, texts):
-            md = chunk.get("metadata") or {}
-            pair = (str(md.get("record_key_sha") or ""),
-                    str(md.get("content_sha") or ""))
-            if pair[0] and pair[1] and pair in existing_pairs:
-                continue
-            rv = md.get("source_rev")
-            if (pair[0] and isinstance(rv, int) and pair[0] in ksha_max_rev
-                    and rv < ksha_max_rev[pair[0]]):
-                rejected_stale += 1
-                continue
-            deduped.append((chunk, text))
-        skipped_dup = len(chunks) - len(deduped)
-        if skipped_dup or rejected_stale:
-            print(f"[index] upsert {document_id}: skipped {skipped_dup} duplicate, "
-                  f"rejected {rejected_stale} stale-rev chunks", flush=True)
-        if not deduped:
-            return {"documents": 0, "chunks": 0, "skipped_duplicate_chunks": skipped_dup,
-                    "rejected_stale_rev_chunks": rejected_stale, "status": "ready"}
-        chunks, texts = [c for c, _ in deduped], [t for _, t in deduped]
-
+        # 三：版本术语区分——
+        #   队列任务修订号 rev（IndexTask.rev，覆盖式重入队递增）与认领代次
+        #   （claim_token/租约，二.2）是「任务」层的概念；
+        #   chunk.metadata.source_rev 是「记录语义版本」（同一记录身份
+        #   record_key_sha 的新旧正文世代）。迟到旧版本拒绝只看后者：
+        #   版本高水位按 record_key_sha 聚合、不分 document_id——同文档
+        #   （上传记录 UUID 跨世代不变）rev2 晚于 rev10 落地同样必须拒收。
+        #   版本判定与状态提交在 self._lock 内一次完成（三.2）：并发
+        #   upsert（rev10/rev2 同时到达）时先取锁者提交高水位，后者
+        #   在锁内看到最新水位再判定，不再有「检查在锁外」的竞态窗口。
+        #   删除拒绝依据（三.3）：墓碑身份直接拒收（检索侧 _result_allowed
+        #   本就屏蔽墓碑，这里把拒绝提前到写入侧，省嵌入且回执如实）；
+        #   墓碑由 record-mutate update/unblock 解除后，合法高版本可正常
+        #   落地（补录=unblock+新版本 upsert 的顺序契约）。
         async with self._lock:
+            existing_pairs: set[tuple[str, str]] = set()
+            ksha_max_rev: dict[str, int] = {}
+            tombstoned: set[str] = set(_record_ops_store.tombstones) if _record_ops_store else set()
+            for m in self.meta:
+                md = m.get("chunk_metadata") or {}
+                existing_pairs.add((str(md.get("record_key_sha") or ""),
+                                    str(md.get("content_sha") or "")))
+                k = str(md.get("record_key_sha") or "")
+                rv = md.get("source_rev")
+                if k and isinstance(rv, int):
+                    if rv > ksha_max_rev.get(k, -1):
+                        ksha_max_rev[k] = rv
+            deduped = []
+            rejected_stale = 0
+            rejected_tombstoned = 0
+            for chunk, text in zip(chunks, texts):
+                md = chunk.get("metadata") or {}
+                pair = (str(md.get("record_key_sha") or ""),
+                        str(md.get("content_sha") or ""))
+                if pair[0] and pair[1] and pair in existing_pairs:
+                    continue
+                if pair[0] and pair[0] in tombstoned:
+                    rejected_tombstoned += 1
+                    continue
+                rv = md.get("source_rev")
+                if (pair[0] and isinstance(rv, int) and pair[0] in ksha_max_rev
+                        and rv < ksha_max_rev[pair[0]]):
+                    rejected_stale += 1
+                    continue
+                deduped.append((chunk, text))
+            skipped_dup = len(chunks) - len(deduped) - rejected_tombstoned
+            if skipped_dup or rejected_stale or rejected_tombstoned:
+                print(f"[index] upsert {document_id}: skipped {skipped_dup} duplicate, "
+                      f"rejected {rejected_stale} stale-rev, "
+                      f"{rejected_tombstoned} tombstoned chunks", flush=True)
+            if not deduped:
+                return {"document_id": document_id, "chunk_count": 0,
+                        "skipped_duplicate_chunks": skipped_dup,
+                        "rejected_stale_rev_chunks": rejected_stale,
+                        "rejected_tombstoned_chunks": rejected_tombstoned,
+                        "status": "ready"}
+            chunks, texts = [c for c, _ in deduped], [t for _, t in deduped]
             raw_embeddings = await self.embedding_func(texts)
             vectors = np.asarray(raw_embeddings, dtype=np.float32)
             if vectors.ndim != 2 or vectors.shape != (len(texts), 1024):
