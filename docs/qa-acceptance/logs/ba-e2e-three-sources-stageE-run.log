@@ -1,0 +1,19 @@
+[05:20:34] ==================================================
+[05:20:34] tech-db auto-sync pipeline starting
+[05:20:34] Step 1: Checking source repos...
+[05:20:34]   news: up to date (2 files)
+[05:20:34]   literature: up to date (1 files)
+[05:20:34]   wechat: up to date (1 files)
+[05:20:34] No new files. Running maintenance before exit...
+[05:20:34]   [retry] SKIP_CLUSTER 已设置——聚类待办保留，下轮继续
+[05:20:34] Step 10: Syncing published records into canonical-qa index...
+[05:20:34]   [qa-sync 2026-10-01 05:20:34] 基线条目：0
+[05:20:34]   [qa-sync 2026-10-01 05:20:34] 差异：新增 7 / 内容更新 0 / 删除 0
+[05:20:34]   [qa-sync 2026-10-01 05:20:34] 批次 0/0：7 条 → ready（0.0s，去重跳过 0）
+[05:20:34]   [qa-sync 2026-10-01 05:20:34] 同步完成：ADD 7 / UPDATE+DELETE 0 条；状态已落盘 /tmp/e2e3s/runtime/qa-index-sync/state.json
+[05:20:34]   QA index sync complete.
+[05:20:34] Step 11: Generating reports (catch-up all)...
+[05:20:34]   11/daily: catch-up...
+[05:20:34]   [WARN] Report generation failed (non-fatal): [Errno 2] No such file or directory: '/tmp/e2e3s/pipeline/.venv/bin/python'
+
+===STDERR===
