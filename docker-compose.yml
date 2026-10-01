@@ -35,6 +35,9 @@ services:
     environment:
       TZ: Asia/Shanghai
       TECHDB_QA_INDEX_TOKEN: ${TECHDB_QA_INDEX_TOKEN:-}
+      # 广度页「数据库问答」视图走 canonical-qa /api/chat/stream（旧契约），
+      # 生成侧需要 ZAI key（config.py 优先读 env，缺省回落宿主 env 文件）。
+      TECHDB_QA_LLM_API_KEY: ${TECHDB_QA_LLM_API_KEY:-}
       TECHDB_QA_INCREMENTAL_INDEX_PATH: /app/data/lightrag/incremental/index.pkl
       # 五.1 答案侧核验链（2026-09-30）：GLM-5.2 推理型输出在 60s/次内
       # 常超时（3 连超时 → UNVERIFIED），放宽 verifier 内层单次预算；

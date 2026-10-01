@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.session import SessionLocal
-from app.routers import assistant, assistant_stream, auth, breadth, conversations, dashboards, delivery_intel, domains, health, industry_map, info_items, intake, parameter_observations, uploads, users
+from app.routers import assistant, assistant_stream, auth, breadth, breadth_qa, conversations, dashboards, delivery_intel, domains, health, industry_map, info_items, intake, parameter_observations, uploads, users
 from app.services.bootstrap import seed_domains_if_empty, seed_users_if_empty
 from app.services.upload_ingestion import recover_pending_uploads
 
@@ -85,3 +85,4 @@ app.include_router(delivery_intel.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(uploads.router, prefix="/api")
 app.include_router(breadth.router, prefix="/api")
+app.include_router(breadth_qa.router, prefix="/api")
