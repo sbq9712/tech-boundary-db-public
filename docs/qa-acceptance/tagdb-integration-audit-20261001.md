@@ -65,3 +65,24 @@ A1-A8 中唯一的缺口 A4（数据库问答视图）本次补齐。
 - 代码：git revert 本次提交（breadth/index.html 恢复 3 视图、无 qa.js 引用；main.py 去掉 breadth_qa 注册）。
 - 部署：`.env` 的 `TECHDB_WEB_IMAGE_TAG`/`TECHDB_API_IMAGE_TAG` 回 `1003`/`1002` 后 `docker compose up -d api web`。
 - 配置：`.env` 删除 `TECHDB_QA_LLM_API_KEY` 一行（canonical-qa 回到仅检索无生成）。
+
+## 附：Codex 审查第 2 轮（2026-10-02，4d37ee3 收口）
+
+对 79999f0 / caf24b2 / 3f58698 的 Codex CLI 审查结论为 REQUEST_CHANGES，
+4 项必修全部落实（提交 4d37ee3，techdb-web/api:1005 部署实测）：
+
+| 必修项 | 落实 |
+|---|---|
+| 上游错误体透传 + history 无界契约 | 代理错误改固定口径（状态码 + 公开文案）；history 限 role/content/20 条/8k，扩展字段剥离；exclude_ids 白名单 + 200 上限 + int 归一 |
+| 前端 SSE 忽略事件名（replace/error 被丢弃） | sseFrameParser 事件名感知派发；error 显式失败；流式 401 兜底 |
+| markdown `javascript:` 链接 | 链接 scheme 白名单（http/https/mailto 或相对），引用 URL 同样过 `_qaSafeUrl` |
+| 测试缺口 | pytest 10 项（三端点 401、5/7 字节硬切分字节级透传、错误体不泄露、契约边界）+ Node 13 项（tests/js/test_qa_sse_parser.mjs，切分重组/replace/error/done/idx=0/链接白名单） |
+
+审查同时确认了根因分析：修复前 57/59 div 失衡、修复后 71/71。
+MINOR/NIT 项处置：Dockerfile div 守卫定位为回归告警（注释/动态 HTML 可绕过，
+已注释说明）；refresh_qa_assets.py 的 upstream_commit 为注释明示的兼容别名；
+app.js renderMarkdown 的同款链接问题先于本次改动存在（portal 页面，另行处理）。
+
+环境备注：codex 依赖的本地 :4567 Responses 代理（systemd 用户服务
+codex-zai-proxy.service）在审查时已停止，重启后恢复（此后审查为真实调用，
+token 用量 1,213,429）。
