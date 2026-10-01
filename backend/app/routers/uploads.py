@@ -464,6 +464,8 @@ async def upload_files(
                 document_date=document_date,
                 primary_section=section,
                 breadth_source=bsource,
+                # 逐行模式也持久化用户的“同步到广度”选择，便于后续管理/审计。
+                sync_breadth=sync_upload_to_breadth,
                 title_source="manual" if title and title.strip() else "filename_fallback",
                 taxonomy_version=None,
                 primary_category=manual_category,
@@ -483,11 +485,18 @@ async def upload_files(
             db.refresh(record)
             # 三.1：industry/atsc 逐行分支此前漏传 sync_upload_to_breadth——
             # 勾选"同步上传到广度"时行记录须同时进主导航广度列表（保持原栏目）。
+            # 广度/其他广度情报本身就属于广度主导航；行业/ATSC 只有
+            # 勾选“同步上传到广度情报”后才进入主导航。此前统一使用
+            # sync_upload_to_breadth 会把 breadth/other 的逐行记录错误隐藏。
+            row_in_breadth_nav = (
+                (section == "breadth" and bsource == "other")
+                or (sync_upload_to_breadth and section in ("industry", "atsc"))
+            )
             stats = import_rows(
                 db, record, sheets, mapping,
                 fallback_date=None,
                 category_fallback=manual_category,
-                in_breadth_nav=sync_upload_to_breadth,
+                in_breadth_nav=row_in_breadth_nav,
             )
             # 三.3：空日期与非法日期分开计数（行日期不再用文件日期静默兜底）
             record.note = (

@@ -129,15 +129,23 @@ else
 fi
 echo ""
 
-# 优先复用 docker-images 分支导入的稳定镜像。缺失时才从当前源码构建。
-if ! docker image inspect techdb-canonical-qa:0801 >/dev/null 2>&1; then
-    echo "❌ 错误：缺少 techdb-canonical-qa:0801 镜像"
-    echo "   该镜像包含已校验的 bge-m3、向量/BM25 索引和记录资产，不能在服务器现场临时下载或重建。"
-    echo "   请先从 docker-images 分支下载并执行 docker load。"
+# 每个服务独立版本。1001 是完成 QA 迁移/Feed/上传收口后的集成基线。
+# 这里绝不能再硬编码 0801，否则一键部署会静默绕过仓库里的新版代码。
+QA_TAG="${TECHDB_QA_IMAGE_TAG:-1001}"
+API_TAG="${TECHDB_API_IMAGE_TAG:-1001}"
+AGENT_TAG="${TECHDB_AGENT_IMAGE_TAG:-1001}"
+WEB_TAG="${TECHDB_WEB_IMAGE_TAG:-1001}"
+
+QA_IMAGE="techdb-canonical-qa:${QA_TAG}"
+if ! docker image inspect "$QA_IMAGE" >/dev/null 2>&1; then
+    echo "❌ 错误：缺少 $QA_IMAGE 镜像"
+    echo "   canonical-qa 镜像包含 bge-m3、向量/BM25 基线索引和记录资产；"
+    echo "   公司离线服务器不要现场全量重跑 embedding。请先构建/导入与"
+    echo "   TECHDB_QA_IMAGE_TAG 一致的已验收镜像后再部署。"
     exit 1
 fi
 
-APP_IMAGES=("techdb-api:0801" "techdb-readonly-agent:0801" "techdb-web:0801")
+APP_IMAGES=("techdb-api:${API_TAG}" "techdb-readonly-agent:${AGENT_TAG}" "techdb-web:${WEB_TAG}")
 APP_SERVICES=("api" "readonly-agent" "web")
 BUILD_SERVICES=()
 for i in "${!APP_IMAGES[@]}"; do
@@ -153,13 +161,13 @@ fi
 if [ "${#BUILD_SERVICES[@]}" -gt 0 ]; then
     if [[ " ${BUILD_SERVICES[*]} " == *" web "* ]] && [ ! -f "$SCRIPT_DIR/breadth/data/processed/manifest-data.js" ]; then
         echo "❌ 错误：构建 web 镜像需要已批准的 breadth/data/processed 资产"
-        echo "   请先导入 techdb-web:0801，或由资料提供方补齐广度追踪数据。"
+        echo "   请先导入 techdb-web:${WEB_TAG}，或由资料提供方补齐广度追踪数据。"
         exit 1
     fi
     echo "🔨 构建缺失镜像: ${BUILD_SERVICES[*]}"
     docker compose build "${BUILD_SERVICES[@]}"
 else
-    echo "✓ 已找到 0801 应用镜像，跳过源码重建"
+    echo "✓ 已找到所需应用镜像（qa=${QA_TAG}, api=${API_TAG}, agent=${AGENT_TAG}, web=${WEB_TAG}），跳过源码重建"
 fi
 
 if ! docker image inspect postgres:16 >/dev/null 2>&1; then

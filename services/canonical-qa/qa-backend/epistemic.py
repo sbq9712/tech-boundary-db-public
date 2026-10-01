@@ -377,49 +377,48 @@ def build_epistemic_system_prompt(base_prompt: str, claim_metadata: list) -> str
 # ── 5. Source type inference ──
 
 def infer_source_type(record: dict) -> str:
-    """Infer source_type from record fields (tag, source, category, etc.).
+    """Infer source_type from record fields.
 
-    Mapping:
-      研究论文/Doi/Science/Nature → academic_paper
-      产业进展/公司名 → company_announcement
-      观点评论/行业观察 → industry_report
-      政策监管 → government
-      资本运作 → broker_report
+    tg now follows triage_engine's display taxonomy (news 7 + literature 4).
+    Legacy 5+2 values remain accepted during the historical-data transition.
     """
     _tg = record.get("tg") or ""
     tag = (_tg[0] if isinstance(_tg, list) and _tg else _tg).strip() if isinstance(_tg, (str, list)) else ""
     source = (record.get("a") or record.get("s") or "").strip()
     category = (record.get("c") or "").strip()
-
-    # Academic papers
-    if tag == "研究论文":
-        return "academic_paper"
     source_lower = source.lower()
-    if any(k in source_lower for k in ["doi", "science", "nature", "wiley", "cell", "arxiv", "springer", "elsevier"]):
+
+    if tag in {"综述", "研究型", "分析类", "新闻/评论/观点", "研究论文"}:
+        return "academic_paper"
+    if any(k in source_lower for k in [
+        "doi", "science", "nature", "wiley", "cell", "arxiv", "springer", "elsevier"
+    ]):
         return "academic_paper"
 
-    # Government / policy
-    if tag == "政策监管" or "政府" in source or "ministry" in source_lower or "政策" in category:
+    if tag in {"政策、法规与标准", "政策监管"} or "政府" in source \
+            or "ministry" in source_lower or "政策" in category:
         return "government"
 
-    # Capital / financial
     if tag == "资本运作":
         return "broker_report"
 
-    # Company announcements (industry progress from companies)
-    if tag == "产业进展" or tag == "技术突破":
+    if tag in {
+        "知识资产", "工程与产业化", "企业经营、合作与资本", "人才与组织动态",
+        "产业进展", "技术突破",
+    }:
         return "company_announcement"
 
-    # Industry reports (observations, analysis)
-    if tag in ("观点评论", "行业观察"):
+    if tag in {
+        "资源、市场与产业链", "观点与交流", "观点评论", "行业观察",
+    }:
         return "industry_report"
 
-    # Mainstream media
-    if any(k in source_lower for k in ["bbc", "reuters", "bloomberg", "新华", "央视", "人民", "ithome", "澎湃"]):
+    if any(k in source_lower for k in [
+        "bbc", "reuters", "bloomberg", "新华", "央视", "人民", "ithome", "澎湃"
+    ]):
         return "mainstream_media"
 
     return "unknown"
-
 
 def build_source_metadata(record: dict) -> dict:
     """Build source metadata for a record (for citation enrichment)."""

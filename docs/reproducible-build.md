@@ -28,7 +28,7 @@ docker build -f services/canonical-qa/qa-backend/Dockerfile.rebuilt \
 # 缺一即构建失败——这是"源头不完整"的硬闸门。
 
 # 换装（回滚 = 上一 TAG 重新 up -d）：
-TECHDB_IMAGE_TAG=<TAG> docker compose up -d canonical-qa
+TECHDB_QA_IMAGE_TAG=<TAG> docker compose up -d canonical-qa
 # 首次启动需要 LLM key：docker cp ~/.config/anthropic-proxy.env
 #   <容器>:/home/qa/.config/ && chown qa:qa + chmod 600（容器内 root 执行）
 ```
@@ -37,16 +37,16 @@ TECHDB_IMAGE_TAG=<TAG> docker compose up -d canonical-qa
 
 ```bash
 docker build -f backend/Dockerfile -t techdb-api:<TAG> .
-TECHDB_IMAGE_TAG=<TAG> docker compose up -d api
+TECHDB_API_IMAGE_TAG=<TAG> docker compose up -d api
 ```
-（2026-09-30 时点 api 仍是 0801 镜像 + qa_verification 包/agent_service
-docker-cp 热补；重建镜像即可把热补固化。）
+当前分支已经把 qa_verification 与 agent_service 修复固化在源码中；离线交付
+必须使用与 TECHDB_API_IMAGE_TAG 对应的重建镜像，不能依赖 docker-cp 热补。
 
 ### 3. web（门户前端）
 
 ```bash
 docker build -f web/Dockerfile -t techdb-web:<TAG> .
-TECHDB_IMAGE_TAG=<TAG> docker compose up -d web
+TECHDB_WEB_IMAGE_TAG=<TAG> docker compose up -d web
 ```
 
 ## 二、断外网验证（ZIP 导入/解析/索引/问答）
@@ -82,5 +82,5 @@ tech-db 目录可以安全地从构建/运行依赖中移除（是否物理删�
 
 - 127.0.0.1:8765 = tech-db-fresh 旧服务（宿主进程，非本仓库容器）——
   旧链对照基准，保留给用户处置；
-- 127.0.0.1:8767 = 本仓库 canonical-qa（TECHDB_IMAGE_TAG=0930h）；
+- 127.0.0.1:8767 = 本仓库 canonical-qa（历史验收曾使用 0930h；当前部署由 TECHDB_QA_IMAGE_TAG 指定）；
 - 127.0.0.1:8000 = 本仓库 api（0801 + 热补）；web/db/readonly-agent 0801。
