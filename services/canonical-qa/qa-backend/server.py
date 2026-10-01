@@ -17,6 +17,7 @@ Run:
 import os
 import sys
 import json
+import hashlib as _hl
 import pickle
 import asyncio
 import re
@@ -1544,7 +1545,40 @@ async def stats():
         },
         "model": MODEL_NAME,
         "llm_configured": LLM_CONFIGURED,
+        # 六（2026-10-01）内容指纹：基础全集 + 增量索引的逐记录内容摘要
+        # 拼接哈希（缓存，一次性 O(N)）——冻结比对据此判定语料内容漂移，
+        # 而不是只看记录数。库未加载时如实 null。
+        "content_fingerprint": _content_fingerprint(),
     }
+
+
+_CONTENT_FP_CACHE: list = []
+
+
+def _content_fingerprint() -> "str | None":
+    """语料内容指纹 = sha256(基础记录身份+正文摘要 ∥ 增量 chunk 同构串)。
+
+    与记录数解耦：同数不同内容（替换/改写）会得到不同指纹，冻结验收
+    依赖它区分「库没变」与「库恰好一样大」。"""
+    if _records is None and not _incremental_index.record_count:
+        return None
+    if _CONTENT_FP_CACHE:
+        return _CONTENT_FP_CACHE[0]
+    h = _hl.sha256()
+    for rec in (_records or []):
+        h.update(_record_key_sha_of(rec.get("t", ""), rec.get("d", ""),
+                                    rec.get("u", "")).encode())
+        body = str(rec.get("b", "") or "")
+        h.update(str(len(body)).encode())
+        h.update(body[:400].encode("utf-8", "ignore"))
+    for meta in _incremental_index.meta:
+        h.update(_meta_record_key_sha(meta).encode())
+        body = str(meta.get("b", "") or "")
+        h.update(str(len(body)).encode())
+        h.update(body[:400].encode("utf-8", "ignore"))
+    fp = h.hexdigest()[:32]
+    _CONTENT_FP_CACHE.append(fp)
+    return fp
 
 
 @app.get("/api/search")

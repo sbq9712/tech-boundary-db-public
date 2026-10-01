@@ -41,6 +41,22 @@ CHECKPOINT = PIPELINE / ".engine_retriage_checkpoint.json"
 PROTECTED_FIELDS = ("lv", "wr", "cm", "fb", "cl", "cp", "cln", "as", "kp", "tp")  # 重跑不得触碰
 
 
+def acquire_run_lock():
+    """七（2026-10-01）并发保护：同一 checkpoint 同时只允许一个重跑进程。
+    两个进程会读同一断点、重复调用引擎并把彼此的写回/断点推进交错
+    （checkpoint 非行锁，last-writer-wins 会造成丢处理）。flock 独占；
+    拿不到锁立即退出（crontab 重叠触发场景）。"""
+    import fcntl
+    lock_path = CHECKPOINT.with_suffix(".lock")
+    fh = open(lock_path, "w")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
+
+
 def load_checkpoint():
     if CHECKPOINT.exists():
         try:
@@ -63,6 +79,12 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0, help="本次最多处理条数（0=全部）")
     ap.add_argument("--reset-checkpoint", action="store_true")
     args = ap.parse_args()
+
+    lock_fh = acquire_run_lock()
+    if lock_fh is None:
+        print("[FATAL] 另一个重跑进程正在运行（.engine_retriage_checkpoint.lock "
+              "被占用）——并发重跑会交错写回/断点，拒绝启动", flush=True)
+        return 1
 
     if args.reset_checkpoint and CHECKPOINT.exists():
         CHECKPOINT.unlink()

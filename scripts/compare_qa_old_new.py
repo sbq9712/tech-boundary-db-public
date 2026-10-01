@@ -222,10 +222,10 @@ def freeze_fingerprint(targets: dict) -> dict:
         stats = fetch_json(base, "/api/stats") if ":8000" not in base else {}
         health = fetch_json(base, "/api/health")
         rp = (health.get("retrieval_pipeline") or {}) or (stats.get("retrieval_pipeline") or {})
-        content_sha = None
-        if ":8000" not in base:
-            for cand in ("all-records-lite.json",):
-                pass  # 内容哈希经由 /api/stats 无法直接取——用规模三元组做代理指纹
+        # 六（2026-10-01）：内容指纹——服务端 /api/stats.content_fingerprint
+        # （基础+增量逐记录身份+正文摘要哈希）。旧镜像无此字段时如实 null
+        # 并在漂移判定中记「内容一致性尚未证实」（不拿规模三元组冒充内容）。
+        content_sha = stats.get("content_fingerprint")
         fp[name] = {
             "total_records": stats.get("total_records"),
             "indexed_records": stats.get("indexed_records"),
@@ -243,6 +243,7 @@ def freeze_fingerprint(targets: dict) -> dict:
             "flags_off": health.get("experimental_flags_off") or rp.get("flags_off"),
             # record-ops 状态（墓碑/遮蔽可观测；旧镜像 null）
             "record_ops": _fetch_record_ops(base),
+            "content_sha": content_sha,
         }
     fp["_config_sha"] = hashlib.sha256(
         json.dumps(fp, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
@@ -455,7 +456,7 @@ def main(argv=None) -> int:
         for k in ("total_records", "indexed_records", "bm25_records",
                   "incremental_records", "incremental_documents", "model",
                   "llm_configured", "flags_on", "flags_total", "flags_off",
-                  "record_ops"):
+                  "record_ops", "content_sha"):
             nv = (freeze.get("new", {}) or {}).get(k)
             bv = (bfp.get("new", {}) or {}).get(k)
             if nv != bv:
@@ -464,6 +465,11 @@ def main(argv=None) -> int:
             print(f"✗ 基线失效（四.2）：{len(baseline_drift)} 个冻结字段变化——"
                   f"{[d['field'] for d in baseline_drift]}；本次结果不与旧基线合并评级",
                   flush=True)
+        # 六：content_sha 缺失（旧镜像无 content_fingerprint 端点字段）→
+        # 语料内容一致性无法证明——如实标注，不冒充已验证。
+        if not (freeze.get("new", {}) or {}).get("content_sha"):
+            print("⚠ 现有全量资产一致性尚未证实：服务端未透出 content_fingerprint"
+                  "（旧镜像）——冻结比对仅覆盖规模/配置/墓碑维度", flush=True)
 
     # followup 需要会话连续：链 A 用 conversation_id（不支持则退化为独立问），
     # 链 B 用同 session_id —— sse_chat 目前逐题独立，followup 以“关键词回指”
@@ -602,6 +608,10 @@ def main(argv=None) -> int:
               "scoring_version": "4.1-facts-2026-10-01",
               "old_heuristic_51_54": "旧启发式口径（2026-09-30），含已知反例，不可与本版混比",
               "total": {"new": new_total, "old": old_total, "max": n, "gate_80": gate}}
+    if not (freeze.get("new", {}) or {}).get("content_sha"):
+        report["content_consistency"] = (
+            "现有全量资产一致性尚未证实：服务端未透出 content_fingerprint"
+            "（旧镜像），冻结比对仅覆盖规模/配置/墓碑维度")
     if args.report:
         Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=1), "utf-8")
         print(f"报告已写入 {args.report}")

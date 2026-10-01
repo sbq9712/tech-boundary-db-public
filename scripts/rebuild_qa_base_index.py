@@ -49,6 +49,43 @@ BREADTH = REPO / "breadth" / "data" / "processed"
 OUT = REPO / "runtime" / "qa-base-rebuild"
 CHUNK_DIR = OUT / "embed-shards"
 PROGRESS = CHUNK_DIR / "progress.json"
+LOCK = CHUNK_DIR / "embed.lock"
+
+
+def input_fingerprint(records: list[dict], embed_chars: int) -> str:
+    """七（2026-10-01）冻结输入指纹：记录身份序列 + 逐条嵌入文本 + 截断参数。
+
+    绑定分片可复用性：语料增删/重排/改写或截断参数变化 → 指纹不同 →
+    已有分片的【位置对应关系】不可证明，拒绝静默复用（位置式分片不是
+    键值存储，idx 错位=把 A 的向量当 B 的证据）。返回 16 位 hex。"""
+    h = hashlib.sha256()
+    for rec in records:
+        h.update(record_key(rec).encode("utf-8"))
+        h.update(b"\x00")
+    h.update(str(embed_chars).encode())
+    return h.hexdigest()[:16]
+
+
+def read_input_fingerprint() -> "str | None":
+    try:
+        data = json.loads(PROGRESS.read_text("utf-8"))
+    except (ValueError, OSError):
+        return None
+    return data.get("input_fingerprint")
+
+
+def acquire_run_lock() -> "int | None":
+    """七：并发保护——同目录同时只允许一个 embed/assemble 进程
+    （flock；两个 embed 会同时扫空位、重复嵌入同一分片互相覆盖）。"""
+    import fcntl
+    CHUNK_DIR.mkdir(parents=True, exist_ok=True)
+    fh = open(LOCK, "w")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
 
 EMBED_BATCH = 16          # ST encode batch（长度分桶后短批为主）
 SHARD_EMBEDS = 500        # 每 500 条落一个 .npy 分片（断点粒度）
@@ -196,17 +233,40 @@ def _pending_positions(n: int) -> list[int]:
 
 
 def cmd_embed(argv: list[str] | None = None) -> int:
+    lock_fh = acquire_run_lock()
+    if lock_fh is None:
+        print("[FATAL] 另一个 embed/assemble 进程正在运行（embed.lock 被占用）"
+              "——并发重建会互相覆盖分片，拒绝启动", flush=True)
+        return 1
     records = load_published_records()
     n = len(records)
     print(f"[rebuild] 发布视图：{n} 条", flush=True)
 
+    embed_chars_now = int(os.environ.get("QA_REBUILD_EMBED_CHARS", str(EMBED_TEXT_CHARS)))
+    fp_now = input_fingerprint(records, embed_chars_now)
+    fp_saved = read_input_fingerprint()
+    if PROGRESS.exists() and CHUNK_DIR.exists() and any(CHUNK_DIR.glob("emb-*.npy")):
+        if fp_saved != fp_now:
+            # 七：冻结输入绑定——已有分片对应的输入（语料内容/顺序/截断）
+            # 与当前不一致，位置对应关系不可证明。拒绝静默复用：
+            # 要么恢复相同输入重跑，要么明确 --reset-shards 丢弃重来。
+            print(f"[FATAL] 输入指纹漂移：分片指纹 {fp_saved} != 当前 {fp_now}"
+                  f"（语料增删/重排/改写或 QA_REBUILD_EMBED_CHARS 变化）——"
+                  f"拒绝复用旧分片（位置错位会把 A 的向量当 B 的证据）。"
+                  f"如确认丢弃重跑：rm -rf {CHUNK_DIR} 后重新 embed", flush=True)
+            return 1
+        print(f"[rebuild] 输入指纹匹配：{fp_now}（分片可续跑）", flush=True)
     CHUNK_DIR.mkdir(parents=True, exist_ok=True)
     pending = _pending_positions(n)
     print(f"[rebuild] 分片扫描：待嵌入 {len(pending)}/{n}", flush=True)
+    if not PROGRESS.exists() or read_input_fingerprint() != fp_now:
+        PROGRESS.write_text(json.dumps(
+            {"input_fingerprint": fp_now, "total": n,
+             "updated_at": datetime.now(timezone.utc).isoformat()}), "utf-8")
 
     if not pending:
         print("[rebuild] 嵌入已全部完成 —— 直接 assemble", flush=True)
-        PROGRESS.write_text(json.dumps({"done": n, "total": n,
+        PROGRESS.write_text(json.dumps({"done": n, "total": n, "input_fingerprint": fp_now,
                                         "updated_at": datetime.now(timezone.utc).isoformat()}), "utf-8")
         return 0
 
@@ -254,16 +314,31 @@ def cmd_embed(argv: list[str] | None = None) -> int:
             eta = (len(remaining) - processed) / max(rate, 1e-9) / 3600
             print(f"[rebuild] {processed}/{len(remaining)}  {rate:.2f} 条/s  ETA {eta:.1f}h", flush=True)
             PROGRESS.write_text(json.dumps({"done": processed, "total": len(remaining),
+                                            "input_fingerprint": fp_now,
                                             "updated_at": datetime.now(timezone.utc).isoformat()}), "utf-8")
     PROGRESS.write_text(json.dumps({"done": len(remaining), "total": len(remaining),
+                                    "input_fingerprint": fp_now,
                                     "updated_at": datetime.now(timezone.utc).isoformat()}), "utf-8")
     print(f"[rebuild] 嵌入完成：{len(remaining)} 条，用时 {(time.time()-t0)/3600:.2f}h", flush=True)
     return 0
 
 
 def cmd_assemble(argv: list[str] | None = None) -> int:
+    lock_fh = acquire_run_lock()
+    if lock_fh is None:
+        print("[FATAL] 另一个 embed/assemble 进程正在运行（embed.lock 被占用）", flush=True)
+        return 1
     records = load_published_records()
     n = len(records)
+    # 七：装配前冻结输入核对——分片必须与当前发布视图同源同参
+    fp_now = input_fingerprint(records, int(os.environ.get(
+        "QA_REBUILD_EMBED_CHARS", str(EMBED_TEXT_CHARS))))
+    fp_saved = read_input_fingerprint()
+    if fp_saved != fp_now:
+        print(f"[FATAL] 输入指纹漂移：分片指纹 {fp_saved} != 当前 {fp_now}——"
+              f"拒绝装配（产物会与语料错位）。恢复原输入或删除 {CHUNK_DIR} 重嵌",
+              flush=True)
+        return 1
     # 完整性以分片非零行判定（计数器断点在稀疏落盘下不可信）
     pending = _pending_positions(n)
     if pending:
