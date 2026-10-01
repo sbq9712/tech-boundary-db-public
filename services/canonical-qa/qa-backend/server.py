@@ -112,6 +112,8 @@ _record_ops_store = _RecordOpsStoreImpl(
     count_chunks_with_content_fn=_incremental_index.count_chunks_with_content)
 _record_ops_store.superseded_base_positions = set()
 _record_ops_store.deleted_base_positions = set()
+# 三.3：增量索引写入侧的墓碑拒绝源（provider 形式，避免模块级循环导入）
+_incremental_index.record_ops_store_provider = lambda: _record_ops_store
 
 
 def _meta_record_key_sha(meta: dict) -> str:

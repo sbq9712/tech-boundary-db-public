@@ -21,6 +21,11 @@ from rank_bm25 import BM25Okapi
 
 INDEX_VERSION = 1
 
+# 墓碑源（server 启动时注入 _RecordOpsStore 实例；独立导入本模块——
+# 如离线契约测试/独立工具——时保持 None：写入侧无墓碑可查即不拒绝，
+# 语义与「无墓碑状态」一致，不再 NameError）
+record_ops_store_provider = None
+
 
 def _tokens(text: str) -> list[str]:
     return [token for token in jieba.cut_for_search(text) if token.strip()]
@@ -150,7 +155,8 @@ class IncrementalIndex:
         async with self._lock:
             existing_pairs: set[tuple[str, str]] = set()
             ksha_max_rev: dict[str, int] = {}
-            tombstoned: set[str] = set(_record_ops_store.tombstones) if _record_ops_store else set()
+            _ops = record_ops_store_provider() if callable(record_ops_store_provider) else record_ops_store_provider
+            tombstoned: set[str] = set(_ops.tombstones) if _ops is not None else set()
             for m in self.meta:
                 md = m.get("chunk_metadata") or {}
                 existing_pairs.add((str(md.get("record_key_sha") or ""),
@@ -184,7 +190,10 @@ class IncrementalIndex:
                       f"rejected {rejected_stale} stale-rev, "
                       f"{rejected_tombstoned} tombstoned chunks", flush=True)
             if not deduped:
+                # 全拒收/全去重回执：chunk_count（canonical-qa 历史契约键）
+                # 与 chunks: 0（upload_ingestion/CI 断言键）同值透出
                 return {"document_id": document_id, "chunk_count": 0,
+                        "chunks": 0,
                         "skipped_duplicate_chunks": skipped_dup,
                         "rejected_stale_rev_chunks": rejected_stale,
                         "rejected_tombstoned_chunks": rejected_tombstoned,
