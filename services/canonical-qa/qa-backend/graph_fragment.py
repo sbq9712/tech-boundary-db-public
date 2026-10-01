@@ -322,6 +322,9 @@ def prune_static_by_ops(static: dict, records: list, sha_of, masked,
     dropped_ids: list[str] = []
     dropped_labels: list[str] = []
     dropped = trimmed = unbound = 0
+    # 四：端点存活成员集合（边贡献可验证性判定用）
+    kshas_by_node: dict[str, set] = {}
+    members_changed: set[str] = set()
 
     for node in nodes_in:
         nid = str(node.get("id"))
@@ -352,6 +355,7 @@ def prune_static_by_ops(static: dict, records: list, sha_of, masked,
         out_node = dict(node)
         if len(alive) != len(idxs):
             trimmed += 1
+            members_changed.add(nid)
             out_node["degree"] = len(alive)
         out_node["records"] = [{
             "t": str(records[i].get("t", ""))[:120],
@@ -360,17 +364,48 @@ def prune_static_by_ops(static: dict, records: list, sha_of, masked,
             "rid": f"lite:{i}",
             "kind": "pipeline",
         } for i in alive[:max_records]]
+        # 四：节点级贡献清单（存活记录身份）——边贡献可验证性的基础
+        out_node["source_kshas"] = [
+            str(sha_of(records[i].get("t", ""), records[i].get("d", ""),
+                       records[i].get("u", ""))) for i in alive]
         kept[nid] = out_node
         new_e2r[nid] = alive
+        kshas_by_node[nid] = set(out_node["source_kshas"])
 
-    new_edges = [e for e in edges_in
-                 if str(e.get("source")) in kept and str(e.get("target")) in kept]
+    # 四：边贡献可验证性。静态导出的边 weight 是整图聚合共现值、无逐记录
+    # 明细——端点被裁剪（墓碑/替换）后，原 weight 可能全部/部分来自已消失
+    # 的记录对。未验证的聚合值不得原样保留：
+    # - 任一端点 members_changed（存活集合 != 原集合）→ weight 未验证，
+    #   置 0 并标记 weight_unverified（拓扑保留，供可视；不作为证据权重）；
+    # - 端点无成员变化 → weight 与图构建输入一致，weight_unverified=False。
+    # 共现关系（co-occurrence，本导出全部如此）与事实关系（factual，带
+    # 逐记录证据，本导出暂无）以此字段区分，消费方不得混用。
+    new_edges = []
+    edges_unverified = 0
+    for e in edges_in:
+        src, dst = str(e.get("source")), str(e.get("target"))
+        if src not in kept or dst not in kept:
+            continue
+        out_edge = dict(e)
+        src_changed = src in members_changed
+        dst_changed = dst in members_changed
+        if src_changed or dst_changed:
+            out_edge["weight"] = 0
+            out_edge["weight_unverified"] = True
+            out_edge["relation_kind"] = "co_occurrence_aggregate"
+            edges_unverified += 1
+        else:
+            out_edge["weight_unverified"] = False
+            out_edge["relation_kind"] = "co_occurrence_aggregate"
+        new_edges.append(out_edge)
+
     out.update({
         "nodes": list(kept.values()),
         "edges": new_edges,
         "entity_to_records": new_e2r,
         "governance": {"bound": True, "dropped_nodes": dropped,
                        "trimmed_nodes": trimmed, "unbound_nodes": unbound,
+                       "edges_unverified": edges_unverified,
                        "dropped_node_ids": dropped_ids,
                        "dropped_labels": dropped_labels},
     })

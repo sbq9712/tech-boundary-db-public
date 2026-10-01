@@ -242,6 +242,18 @@ def _masked_key_shas() -> set:
             | set(store.superseded_key_shas or set()))
 
 
+def _ops_membership_digest() -> str:
+    """四：记录操作集合的成员资格摘要（墓碑 ∪ 替换遮蔽，排序后 sha）。
+
+    len() 计数在「同数量换身份」时不变化，曾导致治理视图拿旧缓存；
+    成员摘要对任何增/删/换都变化。"""
+    import hashlib as _hl
+    store = _record_ops_store
+    members = sorted({str(k) for k in (store.tombstones or {})}
+                     | {str(k) for k in (store.superseded_key_shas or set())})
+    return _hl.sha256("|".join(members).encode("utf-8")).hexdigest()[:16]
+
+
 _STATIC_GOVERN_CACHE: dict = {"sig": None, "data": None}
 
 
@@ -258,9 +270,11 @@ def _governed_static() -> dict:
     except OSError:
         return {}
     store = _record_ops_store
+    # 四：缓存失效按「成员资格」而非计数——同数量不同身份的墓碑/
+    # 替换变化也必须重算（sha 排序摘要），否则等量换墓碑命中旧缓存。
+    ops_sig = _ops_membership_digest()
     sig = ((st.st_mtime_ns, st.st_size),
-           len(store.tombstones or {}), len(store.superseded_pending or set()),
-           len(store.superseded_landed or set()),
+           ops_sig,
            len(_records) if isinstance(_records, list) else 0)
     cached = _STATIC_GOVERN_CACHE.get("data")
     if cached is not None and _STATIC_GOVERN_CACHE.get("sig") == sig:
@@ -285,24 +299,43 @@ def _governed_static() -> dict:
     return pruned
 
 
+_STATIC_GRAPH_STATE: dict = {"degraded": False, "reason": ""}
+
+
 def _merged_graph() -> tuple[list, dict]:
     """静态 graph-export 标签/邻接 ∪ 增量碎片（SEMANTIC_GRAPH 召回用）。
 
     六.5：静态侧先过版本/墓碑治理——已删除/被替换记录的实体不再参与
     实体匹配与邻居标签扩展（记录本身的屏蔽在 _result_allowed 已生效，
-    这里同步移除其图谱影响）。"""
-    s_labels, s_adj = _graph_index()
+    这里同步移除其图谱影响）。
+    四：绑定不可证明（bound=False：旧版图文件/下标越界/治理失败）→
+    静态图整体退出 SEMANTIC_GRAPH 召回（只保留增量碎片），置
+    _STATIC_GRAPH_STATE 降级标记供编排层写入 trace——未绑定图谱不得
+    作为检索扩展/证据来源；向量/BM25/碎片等可靠路径不受影响。"""
+    s_labels, s_adj = [], {}
+    _STATIC_GRAPH_STATE["degraded"] = False
+    _STATIC_GRAPH_STATE["reason"] = ""
     try:
         gov = _governed_static().get("governance") or {}
         if gov.get("bound"):
             drop_ids = set(gov.get("dropped_node_ids") or [])
             drop_labels = set(gov.get("dropped_labels") or [])
             if drop_ids:
+                s_labels, s_adj = _graph_index()
                 s_labels = [t for t in s_labels if t[0] not in drop_ids]
                 s_adj = {k: [nb for nb in v if nb[0] not in drop_labels]
                          for k, v in s_adj.items() if k not in drop_ids}
-    except Exception as exc:  # 治理失败不阻断召回
-        print(f"[graph-govern] merged-graph filter skipped: {exc}", flush=True)
+        else:
+            _STATIC_GRAPH_STATE["degraded"] = True
+            _STATIC_GRAPH_STATE["reason"] = str(
+                gov.get("reason") or "static graph binding not provable")
+            print(f"[graph-govern] static graph excluded from QA expansion: "
+                  f"{_STATIC_GRAPH_STATE['reason']}", flush=True)
+    except Exception as exc:  # 治理失败同绑定失败：静态侧整体退出，不猜测
+        _STATIC_GRAPH_STATE["degraded"] = True
+        _STATIC_GRAPH_STATE["reason"] = f"governance failed: {exc}"
+        print(f"[graph-govern] static graph excluded (governance failed): {exc}",
+              flush=True)
     frag = _fragment()
     if not frag["nodes"]:
         return s_labels, s_adj
@@ -749,6 +782,13 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
         graph_extra: list = []
         if FLAGS.get("SEMANTIC_GRAPH_ENABLED"):
             labels, adjacency = _merged_graph()
+            # 四：静态图绑定不可证明 → 降级口径如实写入 trace（无论本轮
+            # 是否命中实体；静态侧已整体退出，扩展仅剩增量碎片）
+            if _STATIC_GRAPH_STATE.get("degraded"):
+                trace["semantic_graph_degraded"] = {
+                    "reason": _STATIC_GRAPH_STATE.get("reason", ""),
+                    "scope": "fragment_only",
+                }
             entities = _pl_match_entities(base, labels) if FLAGS.get("ENTITY_RESOLUTION_ENABLED") else []
             trace["graph_entities"] = [e["label"] for e in entities]
             if entities:
