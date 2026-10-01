@@ -45,7 +45,6 @@ const qaState = {
   activeConversationId: null,
   isStreaming: false,
   abortController: null,   // For aborting SSE stream
-  abortController: null,
 };
 
 // ── DOM helpers ──
@@ -314,7 +313,7 @@ function renderAssistantMessage(msg, idx) {
           <div class="qa-citation-item" data-citation-num="${c.id}" data-record-id="${c.record_id}">
             <div class="qa-citation-head">
               <span class="qa-citation-num">[${c.id}]</span>
-              <a class="qa-citation-title" href="${escHtml(c.url || '#')}" target="_blank" rel="noreferrer">${escHtml(c.title || '')}</a>
+              <a class="qa-citation-title" href="${escHtml(_qaSafeUrl(c.url))}" target="_blank" rel="noreferrer">${escHtml(c.title || '')}</a>
             </div>
             ${(c.grounding_status === 'VALID' || c.grounding_status === 'FUZZY') ? `<span class="qa-ground-badge qa-ground-${c.grounding_status.toLowerCase()}" title="${c.grounding_status === 'VALID' ? '证据已定位到原文：引用文字与原文一字不差' : '证据已定位到原文：原文经过改写/翻译，系统通过相似度分析找到对应段落'}">${c.grounding_status === 'VALID' ? '📍 精确对位' : '📍 相似对位'}</span>` : (c.grounding_status === 'GROUNDING_FAIL' ? '<span class="qa-ground-badge qa-ground-fail" title="未能定位到原文精确片段">⚠️ 未定位</span>' : '')}
             <div class="qa-citation-meta">
@@ -322,7 +321,7 @@ function renderAssistantMessage(msg, idx) {
               <span>📰 ${escHtml(c.source || '')}</span>
               ${c.score ? `<span>⭐ ${c.score}</span>` : ''}
               ${c.tag ? `<span>🏷️ ${escHtml(c.tag)}</span>` : ''}
-              <a class="qa-citation-link" href="${escHtml(c.url || '#')}" target="_blank" rel="noreferrer">🔗 原文</a>
+              <a class="qa-citation-link" href="${escHtml(_qaSafeUrl(c.url))}" target="_blank" rel="noreferrer">🔗 原文</a>
             </div>
             ${card && card.source_role && card.source_role !== 'unknown'
               ? `<div class="qa-reference-role" title="来源性质：厂商/当事方自述（self_reported）或独立第三方（independent）">来源角色：${escHtml(card.source_role)}</div>` : ''}
@@ -580,24 +579,29 @@ async function sendQuestion() {
   updateSendButton();
 
   // Build history for API (exclude current question and empty assistant placeholder)
-  const history = conv.messages.slice(0, -2).map(m => {
-    const entry = { role: m.role, content: m.content };
-    // For assistant messages, prefer backend-authoritative cited_record_ids
-    // Fall back to [N] regex parsing only for old conversations (pre-v1.1)
-    if (m.role === 'assistant') {
-      if (m.cited_record_ids !== undefined) {
-        entry.cited_record_ids = m.cited_record_ids;
-      } else if (m.citations?.length) {
-        const nums = [...m.content.matchAll(/\[(\d+)\]/g)].map(match => +match[1]);
-        entry.cited_record_ids = nums
-          .map(n => m.citations.find(c => c.id === n)?.record_id)
-          .filter(Boolean);
-      }
-      // Always send searched_record_ids when available (for prev_has_results gate)
-      if (m.searched_record_ids) entry.searched_record_ids = m.searched_record_ids;
-    }
-    return entry;
-  });
+  // 注意：canonical-qa 的 ChatRequest 只消费 history[].role/content；代理层
+  // （breadth_qa.py）也会剥离扩展字段。cited 记录改经顶层 exclude_ids 走
+  // novelty 排除（上游 retrieval_pipeline.novelity_filter 的设计入口）。
+  const history = conv.messages.slice(0, -2).map(m => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  // novelty 排除：历史轮已引用记录不再重复召回（record_id 可能是 int idx）
+  const excludeIds = [...new Set(
+    conv.messages.slice(0, -2)
+      .filter(m => m.role === 'assistant')
+      .flatMap(m => {
+        let ids = m.cited_record_ids;
+        if (!ids && m.citations?.length) {
+          const nums = [...m.content.matchAll(/\[(\d+)\]/g)].map(match => +match[1]);
+          ids = nums.map(n => m.citations.find(c => c.id === n)?.record_id)
+            .filter(rid => rid !== undefined && rid !== null && rid !== '');
+        }
+        return ids || [];
+      })
+      .map(id => String(id))
+  )].slice(0, 200);
 
   try {
     // Show status indicators
@@ -610,11 +614,18 @@ async function sendQuestion() {
         query: question,
         conversation_id: conv.id,
         history: history,
+        exclude_ids: excludeIds,
       }),
       signal: qaState.abortController.signal,
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // 流式请求同样受 401 约束：iframe 内 qaFetch 已触发门户刷新；
+        // 直开广度页时在此兜底提示，而不是把 401 当成普通服务错误。
+        _qaShowAuthError();
+        throw new Error('登录态失效，请刷新门户页面后重试。');
+      }
       let detail = {};
       try { detail = await response.json(); } catch (_) { /* non-JSON proxy error */ }
       const message = detail.error || `问答服务暂时不可用（HTTP ${response.status}）`;
@@ -627,28 +638,25 @@ async function sendQuestion() {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    const feed = sseFrameParser();
+    let streamError = null;       // 上游/代理 error 事件 → 终止并显式报错
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // Keep incomplete line in buffer
+      const err = feed(
+        decoder.decode(value, { stream: true }),
+        (data, ev) => handleSSEData(data, assistantMsg, ev)
+      );
+      if (err) { streamError = err; break; }
+    }
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6).trim();
-          if (!dataStr || dataStr === '[DONE]') continue;
-          try {
-            const data = JSON.parse(dataStr);
-            handleSSEData(data, assistantMsg);
-          } catch (e) {
-            // Ignore parse errors for partial data
-          }
-        }
-      }
+    if (streamError) {
+      // 上游显式 error 事件：不算成功。有部分内容就保留并附错误说明。
+      assistantMsg.error = streamError;
+      if (!assistantMsg.content) assistantMsg.content = streamError;
+      else assistantMsg.content += '\n\n> ⚠️ ' + streamError;
     }
 
     // Finalize
@@ -721,37 +729,94 @@ function relationLabel(relation) {
   }
 }
 
-function handleSSEData(data, assistantMsg) {
-  if (data.step) {
-    // Status update
+// ── SSE 帧解析器（可测）────────────────────────────────────────────────────
+// 任意 chunk 切分（网络分包可能切断 data: 行、甚至多字节 UTF-8 字符——解码由
+// TextDecoder(stream:true) 负责）下按行重组，识别 event:/data: 字段并派发。
+// dispatch(data, eventName) 返回错误消息即终止（error 事件显式失败，不静默）。
+function sseFrameParser() {
+  let buffer = '';
+  let currentEvent = null;   // SSE `event:` 字段对其后的 data 行生效
+  return function feed(chunkText, dispatch) {
+    buffer += chunkText;
+    const lines = buffer.split('\n');
+    buffer = lines.pop();    // 不完整行留在缓冲区
+    for (const line of lines) {
+      const field = line.split(':', 1)[0];
+      if (field === 'event') {
+        currentEvent = line.slice(6).trim();
+      } else if (field === 'data') {
+        const dataStr = line.slice(5).trim();
+        if (!dataStr || dataStr === '[DONE]') { currentEvent = null; continue; }
+        try {
+          const data = JSON.parse(dataStr);
+          const err = dispatch(data, currentEvent);
+          if (err) return err;
+        } catch (e) {
+          // Ignore parse errors for partial data
+        }
+        currentEvent = null; // 事件已派发，后续 data 默认为 message
+      }
+      // `id:`/`retry:`/注释行/空行：忽略
+    }
+    return null;
+  };
+}
+
+function handleSSEData(data, assistantMsg, eventName) {
+  // 事件名优先：canonical-qa 的 server.py 明确使用 event: status/token/
+  // citations/replace/done/error。历史实现按载荷形状猜测事件类型，导致
+  // replace（载荷键是 content）与 error（载荷键是 message）被静默丢弃。
+  const ev = eventName || (data.step ? 'status'
+    : data.text !== undefined ? 'token'
+    : data.citations ? 'citations'
+    : data.answer !== undefined ? 'done'
+    : null);
+
+  if (ev === 'status') {
     showStatusIndicator(data.step, data.message || '');
-  } else if (data.text !== undefined) {
-    // Streaming token
+    return null;
+  }
+  if (ev === 'token') {
     assistantMsg.content += data.text;
     removeStatusIndicator();
     updateStreamingMessage(assistantMsg);
-  } else if (data.citations) {
+    return null;
+  }
+  if (ev === 'citations') {
     // Citations received (before or during streaming)
     assistantMsg.citations = data.citations;
+    return null;
   }
-
-  // Handle replace event (epistemic verifier rewrote the answer)
-  if (data.answer !== undefined && data.verified) {
-    assistantMsg.content = data.answer;
-    removeStatusIndicator();
-    updateStreamingMessage(assistantMsg);
+  if (ev === 'replace') {
+    // 修复链改写了答案 ⇒ 用服务端权威版本整体替换已流式展示的内容
+    const replacement = data.content !== undefined ? data.content : data.answer;
+    if (replacement !== undefined) {
+      assistantMsg.content = replacement;
+      removeStatusIndicator();
+      updateStreamingMessage(assistantMsg);
+    }
+    return null;
+  }
+  if (ev === 'error') {
+    // 上游显式 error 事件：返回错误消息，由读取循环终止并报错
+    return data.message || data.error || '问答服务返回未知错误。';
   }
 
   // Handle done event (may contain both answer and citations)
-  if (data.answer !== undefined) {
+  if (ev === 'done' && data.answer !== undefined) {
     if (data.answer && !assistantMsg.content) {
       assistantMsg.content = data.answer;
     }
     if (data.citations) {
       assistantMsg.citations = data.citations;
     }
-    // Store backend-authoritative cited/searched record ids for exclusion in follow-ups
-    assistantMsg.cited_record_ids = data.cited_record_ids || [];
+    // canonical-qa 的 done 载荷不含 cited/searched_record_ids（那是门户 agent 链
+    // 的字段）：从 citations[].record_id 提取（record_id 为 int idx 时 0 也是合法值，
+    // 故按 null/undefined/空串过滤而不是 truthy）。
+    assistantMsg.cited_record_ids = data.cited_record_ids
+      || (data.citations || [])
+          .map(c => c.record_id)
+          .filter(rid => rid !== undefined && rid !== null && rid !== '');
     assistantMsg.searched_record_ids = data.searched_record_ids || [];
     // T033: Store answer status and evidence metadata for reference card UI
     assistantMsg.answer_status = data.answer_status || null;
@@ -774,12 +839,14 @@ function handleSSEData(data, assistantMsg) {
     assistantMsg.verification_status = data.verification_status || '';
     assistantMsg.degraded_capabilities = data.degraded_capabilities || [];
     assistantMsg.support_relations = data.support_relations || {};
+    // canonical-qa done 载荷实有字段（server.py）：知识边界与证据态
+    assistantMsg.knowledge_boundary = data.knowledge_boundary || null;
+    assistantMsg.safety_hits = data.safety_hits || [];
+    assistantMsg.evidence = data.evidence || null;
+    assistantMsg.retrieval_trace = data.retrieval_trace || null;
   }
 
-  // Handle error
-  if (data.message && !data.step) {
-    assistantMsg.content = data.message;
-  }
+  return null;
 }
 
 // ── Dynamic pipeline progress timeline ──
@@ -960,8 +1027,14 @@ function renderMarkdown(text) {
   html = html.replace(/^#\s(.+)$/gm, '<h3>$1</h3>');
   // Bold
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // Links [text](url)
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--brand-light)">$1</a>');
+  // Links [text](url) — scheme 白名单：http(s)/mailto 或无 scheme 的相对地址；
+  // javascript:/data:/vbscript: 等一律降级为纯文本（LLM 输出可被索引内容诱导）
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text_, rawUrl) => {
+    const url = rawUrl.trim();
+    const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(url);
+    if (hasScheme && !/^(https?|mailto):/i.test(url)) return text_;
+    return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--brand-light)">${text_}</a>`;
+  });
   // Lists - group consecutive <li> into <ul>
   html = html.replace(/(?:^(\d+)\.\s(.+)$\n?)+/gm, (m) => {
     const items = m.trim().split('\n').map(line => {
@@ -992,6 +1065,16 @@ function escHtml(text) {
   const div = document.createElement('div');
   div.textContent = String(text);
   return div.innerHTML;
+}
+
+// 引用 URL 的 scheme 白名单：引用数据来自检索索引（含用户上传文档的 u 字段），
+// javascript:/data: 等一律降级为 '#'，防 LLM/数据侧诱导点击。
+function _qaSafeUrl(url) {
+  const u = String(url || '').trim();
+  if (!u) return '#';
+  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(u);
+  if (hasScheme && !/^(https?|mailto):/i.test(u)) return '#';
+  return u;
 }
 
 // T033: Answer status configuration for four-state display
@@ -1400,9 +1483,10 @@ function loadConversationsFromStorage() {
   }
 }
 
-// Export for global access
+// Export for global access（__testHooks 仅供构建期/CI 的 Node 单测使用）
 window.qaModule = {
   switchToQAView,
   switchFromQAView,
   initQAView,
+  __testHooks: { sseFrameParser, handleSSEData, renderMarkdown, _qaSafeUrl },
 };
