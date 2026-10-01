@@ -87,7 +87,7 @@ def test_literature_never_featured(dom_map, whitelist):
                        displaySubcategory="研究型", scoreBand="高", attention="高", value=92)]
     apply(recs, items, dom_map, whitelist)
     assert recs[0]["i"] == "l"
-    assert recs[0]["tg"] == "研究论文"
+    assert recs[0]["tg"] == "研究型"
     assert "aip" not in recs[0], "文献无论分数和档位都不进入 AI精选"
     assert recs[0]["sc"] == 9.2  # 分数照常保存
 
@@ -119,7 +119,7 @@ def test_no_user_facing_band_labels(dom_map, whitelist):
     for banned in ("未评分", "参考", "待定", "高中低", "scoreBand", "attention"):
         assert banned not in blob, f"用户可见终态标签 {banned} 泄漏进记录"
     # T25 未定类型 → 默认标签，档位仍按引擎（中 → 新闻精选）
-    assert recs[0]["tg"] == "行业观察"
+    assert recs[0]["tg"] == "观点与交流"
     assert recs[0]["aip"] == 1
 
 
@@ -185,11 +185,35 @@ def test_carrier_from_engine_display_chain(dom_map, whitelist):
     items = [make_item(url="https://h/1", title="媒体解读论文的新闻", displayCategory="新闻",
                        displaySubcategory="观点与交流", scoreBand="低", value=30)]
     apply([rec], items, dom_map, whitelist)
-    assert rec["i"] == "n" and rec["tg"] == "行业观察"
+    assert rec["i"] == "n" and rec["tg"] == "观点与交流"
     assert "aip" not in rec  # 新闻但档位低 → 不精选
 
 
-# ── 10. T02 区间评分 ──
+# ── 10. triage_engine 展示分类不再降维 ──
+@pytest.mark.parametrize(
+    ("carrier", "display_category", "raw", "expected"),
+    [
+        ("n", "新闻", "知识资产", "知识资产"),
+        ("n", "新闻", "知识资产（计分走B链3工程示范）", "知识资产"),
+        ("n", "新闻", "工程与产业化", "工程与产业化"),
+        ("n", "新闻", "企业经营、合作与资本", "企业经营、合作与资本"),
+        ("n", "新闻", "资源、市场与产业链", "资源、市场与产业链"),
+        ("n", "新闻", "政策、法规与标准", "政策、法规与标准"),
+        ("n", "新闻", "人才与组织动态", "人才与组织动态"),
+        ("n", "新闻", "观点与交流（建模分析通道）", "观点与交流"),
+        ("n", "新闻", "观点与交流（场合标签）", "观点与交流"),
+        ("l", "论文", "综述", "综述"),
+        ("l", "论文", "研究型", "研究型"),
+        ("l", "论文", "分析类", "分析类"),
+        ("l", "论文", "新闻·评论·观点", "新闻/评论/观点"),
+    ],
+)
+def test_display_taxonomy_matches_triage_engine(carrier, display_category, raw, expected):
+    item = make_item(displayCategory=display_category, displaySubcategory=raw)
+    assert et.resolve_tag(item, carrier) == expected
+
+
+# ── 11. T02 区间评分 ──
 def test_t02_range_score_midpoint(dom_map, whitelist):
     rec = {"t": "行业报告", "b": "", "u": "https://i/1", "d": "2026-09-01", "sr": "news/x.csv", "i": "n", "c": "", "tg": ""}
     items = [make_item(url="https://i/1", title="行业报告", typeId="T02", value=None,
