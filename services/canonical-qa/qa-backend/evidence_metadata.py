@@ -8,20 +8,23 @@ from __future__ import annotations
 
 
 def infer_evidence_role(record: dict) -> str:
-    """Infer evidence role."""
+    """Infer evidence role from provenance plus the current triage taxonomy."""
     tag = record.get("tg", "")
     source = (record.get("a", "") or record.get("s", "")).lower()
 
-    # Self-reported: company's own announcement
-    if tag in ("产业进展", "技术突破") and source:
+    if tag in {
+        "知识资产", "工程与产业化", "企业经营、合作与资本", "人才与组织动态",
+        "产业进展", "技术突破",
+    } and source:
         return "self_reported"
 
-    # Commentary: opinions/analysis
-    if tag in ("观点评论",):
+    if tag in {
+        "观点与交流", "分析类", "新闻/评论/观点", "观点评论", "行业观察",
+    }:
         return "commentary"
 
-    # Independence is a provenance claim, not a style/domain inference.
     if record.get("independence_verified") is True and record.get("provenance_root_id"):
         return "independent"
 
     return "unknown"
+
