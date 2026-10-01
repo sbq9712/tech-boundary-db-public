@@ -6,7 +6,7 @@ COPY *.html *.js *.css /usr/share/nginx/html/
 COPY lib/extractor.js /usr/share/nginx/html/lib/extractor.js
 COPY assets /usr/share/nginx/html/assets
 COPY data/*.json data/*.csv /usr/share/nginx/html/data/
-COPY breadth/index.html breadth/app.js breadth/styles.css /usr/share/nginx/html/breadth/
+COPY breadth/index.html breadth/app.js breadth/qa.js breadth/styles.css /usr/share/nginx/html/breadth/
 COPY breadth/data/category-order-data.js breadth/data/category-order.json /usr/share/nginx/html/breadth/data/
 COPY breadth/version.txt /usr/share/nginx/html/breadth/version.txt
 COPY breadth/data/processed /usr/share/nginx/html/breadth/data/processed
@@ -24,3 +24,13 @@ RUN set -eu; \
     summary="$(find "$runtime" -type f -name 'summary-part-*.js' | wc -l | tr -d ' ')"; \
     test "$lite" -gt 0 -a "$lite" -eq "$meta" -a "$meta" -eq "$summary" || \
       { echo "Shard families disagree: lite=$lite meta=$meta summary=$summary" >&2; exit 1; }
+
+# Regression guard (2nd incident): a stray </div> in breadth/index.html once closed
+# aside.sidebar + div.layout early, pushing main.content below the fold — the whole
+# right side looked blank. Fail the build on div imbalance.
+RUN set -eu; \
+    page=/usr/share/nginx/html/breadth/index.html; \
+    opens="$(grep -o '<div\b' "$page" | wc -l | tr -d ' ')"; \
+    closes="$(grep -o '</div>' "$page" | wc -l | tr -d ' ')"; \
+    test "$opens" -eq "$closes" || \
+      { echo "breadth/index.html div imbalance: <div>=$opens </div>=$closes — layout would break" >&2; exit 1; }

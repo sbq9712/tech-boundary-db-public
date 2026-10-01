@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,6 +45,30 @@ class BreadthManualRecord(Base):
     score: Mapped[str | None] = mapped_column(Text, nullable=True)
     score_detail: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
+    # ── feed-pkg/v2 增量契约字段 ──────────────────────────────────────────
+    # tag/topic/ai_picked：包内 AI 精选链路字段（tg/tp/aip），此前被丢弃导致
+    # 导入丢字段；source_version 为该键在 feed 侧的单调版本（旧不覆新）。
+    tag: Mapped[str | None] = mapped_column(Text, nullable=True)
+    topic: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_picked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 稳定 ID（sha256(t|d|u)[:16]）与 feed 规范键摘要（md5("t|d|u")hex）：
+    # UPDATE/DELETE 按 feed_key_digest 直接定位既有行，避免从行字段反推键。
+    stable_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    feed_key_digest: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    # 逐行表格导入的溯源（原文件/工作表/行号）；整包导入为空。
+    source_ref: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 三.1：是否进入主导航广度列表。行业/ATSC 逐行导入默认 False——行记录
+    # 保留原栏目与门户检索，不进主导航；勾选 sync_upload_to_breadth 时为
+    # True（同时进广度，保持原栏目）。GitHub 增量包记录不受影响（True）。
+    in_breadth_nav: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", default=True
+    )
+    # feed-pkg/v2 白名单记录全量 JSON：包往返不丢字段（cl/cp/cln/dp/hb/wr
+    # 等无列字段随 JSON 保留，读取层优先透出），UPDATE 时整体替换。
+    record_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

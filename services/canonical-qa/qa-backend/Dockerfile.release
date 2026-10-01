@@ -15,8 +15,22 @@ RUN useradd --create-home --uid 10001 qa
 
 WORKDIR /app
 
-COPY --chown=qa:qa qa-backend/config.py qa-backend/server.py qa-backend/incremental_index.py \
-    qa-backend/check_assets.py qa-backend/qa-assets-manifest.json /app/qa-backend/
+# Keep the release image module set in lock-step with server.py.  The current
+# server imports record_ops/graph_fragment unconditionally and loads the full
+# migrated legacy_hybrid answer verification chain when available.  Omitting
+# these files either crashes startup or silently falls back to the old heuristic
+# answer path.
+COPY --chown=qa:qa qa-backend/config.py qa-backend/server.py \
+    qa-backend/incremental_index.py qa-backend/retrieval_pipeline.py \
+    qa-backend/graph_fragment.py qa-backend/record_ops.py \
+    qa-backend/answer_chain.py \
+    qa-backend/epistemic.py qa-backend/verifier.py qa-backend/claim_mapping.py \
+    qa-backend/citation_grounding.py qa-backend/numeric_facts.py \
+    qa-backend/primary_evidence.py qa-backend/answer_status.py \
+    qa-backend/knowledge_boundary.py qa-backend/answer_repair.py \
+    qa-backend/provenance.py qa-backend/evidence_metadata.py \
+    qa-backend/runtime_safety.py qa-backend/check_assets.py \
+    qa-backend/qa-assets-manifest.json /app/qa-backend/
 COPY --chown=qa:qa data/lightrag /app/data/lightrag
 COPY --chown=qa:qa data/processed/all-records-lite.json /app/data/processed/all-records-lite.json
 COPY --chown=qa:qa bge-m3-model /app/bge-m3-model

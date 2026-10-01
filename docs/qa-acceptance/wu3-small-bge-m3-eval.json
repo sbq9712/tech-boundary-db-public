@@ -1,0 +1,26 @@
+{
+ "sample": 200,
+ "probes": 169,
+ "variants": {
+  "vec_800": {
+   "self_recall@10": 0.9882,
+   "self_recall@25": 0.9882,
+   "mrr@25": 0.93,
+   "encode_s": 529.4
+  },
+  "vec_600": {
+   "self_recall@10": 0.9882,
+   "self_recall@25": 1.0,
+   "mrr@25": 0.9345,
+   "encode_s": 420.1
+  },
+  "vec_200": {
+   "self_recall@10": 0.8462,
+   "self_recall@25": 0.9231,
+   "mrr@25": 0.7056,
+   "encode_s": 196.9
+  }
+ },
+ "delta_recall@25_800_vs_600": -0.0118,
+ "delta_recall@25_800_vs_200": 0.0651
+}

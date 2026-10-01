@@ -1,0 +1,1509 @@
+/**
+ * Tech-DB Q&A Module（tech-boundary-db 移植版）
+ * Handles chat interface, streaming responses, knowledge graph visualization,
+ * and multi-conversation management.
+ *
+ * 2026-10-01: API 重定向至本仓认证代理 /api/breadth/qa/*（canonical-qa 链路），
+ * 其余会话管理/流式解析/图谱逻辑与 tech-db 原版一致。
+ */
+
+// ── Config ──
+// ── API 接入（2026-10-01 TagDB 完整接入收口）──
+// 原版直连 qa-backend :8765（无鉴权）。本仓部署形态：canonical-qa 只在
+// compose 内网 + 127.0.0.1 可达，广度页与门户同源，经 api 服务的认证代理
+// 转发（backend/app/routers/breadth_qa.py），token 复用门户登录态。
+const QA_API_BASE = (() => {
+  const explicit = window.TECH_DB_CONFIG?.qaApiBase || localStorage.getItem('tech_db_qa_api');
+  if (explicit) return explicit.replace(/\/$/, '');
+  return '/api/breadth/qa';  // same-origin → nginx → api:8000（Bearer 鉴权）
+})();
+
+function _qaAuthHeaders() {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'Authorization': 'Bearer ' + token } : {};
+}
+
+async function qaFetch(path, opts = {}) {
+  const headers = { ..._qaAuthHeaders(), ...(opts.headers || {}) };
+  const resp = await fetch(QA_API_BASE + path, { ...opts, headers });
+  if (resp.status === 401) {
+    // 未登录/登录态过期：广度页嵌在门户 iframe 内，交给门户处理
+    if (window.parent !== window) { try { window.parent.location.reload(); return resp; } catch (e) { /* cross-origin guard */ } }
+    _qaShowAuthError();
+  }
+  return resp;
+}
+
+function _qaShowAuthError() {
+  const el = document.getElementById('qaEmptyStats');
+  if (el) el.innerHTML = '<span style="color:#b91c1c">登录态失效，请刷新门户页面后重试。</span>';
+}
+
+// ── State ──
+const qaState = {
+  conversations: [],       // [{id, title, messages: []}]
+  activeConversationId: null,
+  isStreaming: false,
+  abortController: null,   // For aborting SSE stream
+};
+
+// ── DOM helpers ──
+function qa$(id) { return document.getElementById(id); }
+
+// ── Initialize Q&A view ──
+function initQAView() {
+  // New chat button
+  qa$('qaNewChatBtn').addEventListener('click', () => createNewConversation());
+
+  // Send button
+  qa$('qaSendBtn').addEventListener('click', () => {
+    if (qaState.isStreaming && qaState.abortController) {
+      qaState.abortController.abort();
+      return;
+    }
+    sendQuestion();
+  });
+
+  // Input: Enter to send, Shift+Enter for newline
+  const input = qa$('qaInput');
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!qaState.isStreaming) sendQuestion();
+    }
+  });
+
+  // Auto-resize textarea
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  });
+
+  // Example question clicks
+  document.querySelectorAll('.qa-example-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const q = el.dataset.q;
+      if (q) {
+        qa$('qaInput').value = q;
+        sendQuestion();
+      }
+    });
+  });
+
+  // Load saved conversations from localStorage
+  loadConversationsFromStorage();
+
+  // Check if graph data is available and render
+  loadAndRenderGraph();
+  loadStats();
+  window.addEventListener('online', updateQAConnectivity);
+  window.addEventListener('offline', updateQAConnectivity);
+  updateQAConnectivity();
+}
+
+function updateQAConnectivity() {
+  const input = qa$('qaInput');
+  const button = qa$('qaSendBtn');
+  if (!input || !button) return;
+  const offline = navigator.onLine === false;
+  input.placeholder = offline ? '数据库可离线浏览；AI 问答需要联网' : '输入你的问题...';
+  input.disabled = offline;
+  button.disabled = offline;
+  button.title = offline ? 'AI 问答需要联网' : '';
+}
+
+// ── Conversation management ──
+function createNewConversation() {
+  const conv = {
+    id: 'conv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    title: '新对话',
+    messages: [],
+  };
+  qaState.conversations.unshift(conv);
+  qaState.activeConversationId = conv.id;
+  renderConversationList();
+  renderMessages();
+  qa$('qaInput').focus();
+}
+
+function switchConversation(id) {
+  qaState.activeConversationId = id;
+  renderConversationList();
+  renderMessages();
+}
+
+function deleteConversation(id) {
+  qaState.conversations = qaState.conversations.filter(c => c.id !== id);
+  if (qaState.activeConversationId === id) {
+    qaState.activeConversationId = qaState.conversations[0]?.id || null;
+  }
+  renderConversationList();
+  renderMessages();
+  saveConversationsToStorage();
+}
+
+function getActiveConversation() {
+  return qaState.conversations.find(c => c.id === qaState.activeConversationId);
+}
+
+function renderConversationList() {
+  const list = qa$('qaConversationList');
+  if (qaState.conversations.length === 0) {
+    list.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--text-quaternary)">点击上方按钮开始新对话</div>';
+    return;
+  }
+  list.innerHTML = qaState.conversations.map(c => `
+    <div class="qa-conversation-item ${c.id === qaState.activeConversationId ? 'active' : ''}" data-conv-id="${c.id}">
+      <span>${escHtml(c.title)}</span>
+      <button class="qa-conv-delete" data-conv-id="${c.id}" title="删除">✕</button>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.qa-conversation-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.classList.contains('qa-conv-delete')) {
+        e.stopPropagation();
+        deleteConversation(e.target.dataset.convId);
+      } else {
+        switchConversation(el.dataset.convId);
+      }
+    });
+  });
+}
+
+function renderMessages() {
+  const conv = getActiveConversation();
+  const emptyState = qa$('qaEmptyState');
+  const messagesEl = qa$('qaMessages');
+
+  if (!conv || conv.messages.length === 0) {
+    emptyState.style.display = 'flex';
+    messagesEl.style.display = 'none';
+    return;
+  }
+
+  emptyState.style.display = 'none';
+  messagesEl.style.display = 'block';
+
+  messagesEl.innerHTML = conv.messages.map((msg, idx) => {
+    if (msg.role === 'user') {
+      return `
+        <div class="qa-message user">
+          <div class="qa-message-avatar">👤</div>
+          <div class="qa-message-content">
+            <div class="qa-message-bubble">${escHtml(msg.content)}</div>
+          </div>
+        </div>
+      `;
+    } else {
+      return renderAssistantMessage(msg, idx);
+    }
+  }).join('');
+
+  // Scroll to bottom
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  // Attach action button handlers
+  messagesEl.querySelectorAll('.qa-action-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const action = btn.dataset.action;
+      const msgIdx = parseInt(btn.dataset.msgIdx);
+      handleAction(action, msgIdx);
+    });
+  });
+
+  // 2026-09-20: evidence drawer helpers — citations + claim card live in a
+  // click-open sheet attached to each assistant message (trigger = the
+  // answer-status badge or fallback 📎 trigger).
+  const openDrawer = (idx) => {
+    const drawer = document.getElementById(`qa-evidence-drawer-${idx}`);
+    if (!drawer) return;
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    const body = drawer.querySelector('.qa-evidence-sheet-body');
+    if (body) body.scrollTop = 0;
+  };
+  const closeDrawer = (idx) => {
+    const drawer = document.getElementById(`qa-evidence-drawer-${idx}`);
+    if (!drawer) return;
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
+  };
+
+  // Trigger: status badge / fallback button opens the drawer.
+  messagesEl.querySelectorAll('[data-evidence-idx]').forEach(trig => {
+    trig.addEventListener('click', () => openDrawer(trig.dataset.evidenceIdx));
+    trig.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDrawer(trig.dataset.evidenceIdx); }
+    });
+  });
+
+  // Close: ✕ button and backdrop click.
+  messagesEl.querySelectorAll('[data-evidence-close]').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); closeDrawer(btn.dataset.evidenceClose); });
+  });
+  messagesEl.querySelectorAll('.qa-evidence-drawer').forEach(d => {
+    d.addEventListener('click', (e) => {
+      if (e.target === d) closeDrawer((d.id.match(/(\d+)$/) || [])[1]);
+    });
+  });
+
+  // Attach citation ref click handlers — prose [N] opens this message's
+  // drawer (if any), then scrolls to the citation inside it.
+  messagesEl.querySelectorAll('.qa-citation-ref').forEach(ref => {
+    ref.addEventListener('click', (e) => {
+      e.preventDefault();
+      const citationNum = parseInt(ref.dataset.citation);
+      const msgEl = ref.closest('.qa-message');
+      const drawer = msgEl ? msgEl.querySelector('.qa-evidence-drawer') : null;
+      if (drawer && !drawer.classList.contains('open')) {
+        drawer.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+      }
+      const scope = drawer || msgEl || messagesEl;
+      const citationItem = scope.querySelector(`.qa-citation-item[data-citation-num="${citationNum}"]`);
+      if (citationItem) {
+        citationItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        citationItem.style.transition = 'background 0.3s';
+        citationItem.style.background = 'var(--brand-bg)';
+        setTimeout(() => { citationItem.style.background = ''; }, 1500);
+      }
+    });
+  });
+
+  // Evidence-card citation chips ([N] in the claim rows) — already inside
+  // the drawer; scroll to the citation within the same drawer.
+  messagesEl.querySelectorAll('.qa-claim-cite').forEach(chip => {
+    chip.addEventListener('click', (e) => {
+      e.preventDefault();
+      const citationNum = parseInt(chip.dataset.citationNum);
+      const scope = chip.closest('.qa-evidence-drawer') || chip.closest('.qa-message') || messagesEl;
+      const citationItem = scope.querySelector(`.qa-citation-item[data-citation-num="${citationNum}"]`);
+      if (citationItem) {
+        citationItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        citationItem.style.transition = 'background 0.3s';
+        citationItem.style.background = 'var(--brand-bg)';
+        setTimeout(() => { citationItem.style.background = ''; }, 1500);
+      }
+    });
+  });
+}
+
+function renderAssistantMessage(msg, idx) {
+  const content = msg.content || '';
+  // RT-029: defensive verified-citation filtering (stale-cache safe)
+  const citations = defensivelyFilterCitations(msg);
+  const referenceCards = Array.isArray(msg.reference_cards) ? msg.reference_cards : [];
+  const isStreaming = msg.streaming || false;
+
+  // 2026-09-20: the citation list and the evidence card no longer render
+  // inline under the answer — they live in a click-open drawer attached to
+  // the answer-status badge (owner request: collapse the wall of citations;
+  // the prose [N] markers already show what was used).
+  let citationsHtml = '';
+  let evidenceCardHtml = '';
+  if (citations.length > 0 && !isStreaming) {
+    citationsHtml = `
+      <div class="qa-citations-block">
+        <div class="qa-citations-title">📎 来源引用（${citations.length}条）</div>
+        ${citations.map(c => {
+          const card = referenceCards.find(r => String(r.citation_id) === String(c.id));
+          const exactSpans = card && card.displayable && Array.isArray(card.spans) ? card.spans : [];
+          return `
+          <div class="qa-citation-item" data-citation-num="${c.id}" data-record-id="${c.record_id}">
+            <div class="qa-citation-head">
+              <span class="qa-citation-num">[${c.id}]</span>
+              <a class="qa-citation-title" href="${_qaSafeHref(c.url)}" target="_blank" rel="noreferrer">${escHtml(c.title || '')}</a>
+            </div>
+            ${(c.grounding_status === 'VALID' || c.grounding_status === 'FUZZY') ? `<span class="qa-ground-badge qa-ground-${c.grounding_status.toLowerCase()}" title="${c.grounding_status === 'VALID' ? '证据已定位到原文：引用文字与原文一字不差' : '证据已定位到原文：原文经过改写/翻译，系统通过相似度分析找到对应段落'}">${c.grounding_status === 'VALID' ? '📍 精确对位' : '📍 相似对位'}</span>` : (c.grounding_status === 'GROUNDING_FAIL' ? '<span class="qa-ground-badge qa-ground-fail" title="未能定位到原文精确片段">⚠️ 未定位</span>' : '')}
+            <div class="qa-citation-meta">
+              <span>📅 ${c.date || ''}</span>
+              <span>📰 ${escHtml(c.source || '')}</span>
+              ${c.score ? `<span>⭐ ${c.score}</span>` : ''}
+              ${c.tag ? `<span>🏷️ ${escHtml(c.tag)}</span>` : ''}
+              <a class="qa-citation-link" href="${_qaSafeHref(c.url)}" target="_blank" rel="noreferrer">🔗 原文</a>
+            </div>
+            ${card && card.source_role && card.source_role !== 'unknown'
+              ? `<div class="qa-reference-role" title="来源性质：厂商/当事方自述（self_reported）或独立第三方（independent）">来源角色：${escHtml(card.source_role)}</div>` : ''}
+            ${card && card.snapshot_drift && card.snapshot_drift.detected
+              ? '<div class="qa-reference-warning" data-warning="SOURCE_SNAPSHOT_DRIFT">⚠️ 来源快照已漂移，精确片段已隐藏</div>' : ''}
+            ${card && !card.displayable && card.policy_reason && !(card.snapshot_drift && card.snapshot_drift.detected)
+              ? `<div class="qa-reference-warning" data-warning="${escHtml(card.policy_reason)}">⚠️ 原文片段未能展示（${card.policy_reason === 'SOURCE_SNAPSHOT_MISSING' ? '该引用生成时未绑定原文快照' : escHtml(card.policy_reason)}），可点"🔗 原文"查看全文</div>` : ''}
+            ${c.ungrouded_note ? `<div class="qa-citation-snippet qa-ungrounded-note">${escHtml(c.ungrouded_note)}</div>` : ''}
+            ${exactSpans.length
+              ? exactSpans.map(span => `<div class="qa-evidence-span" title="已授权精确原文定位">🔖 <mark>${escHtml(span.text || '')}</mark></div>`).join('')
+              : ''}
+          </div>
+        `}).join('')}
+      </div>
+    `;
+  }
+
+  // Render content with citation refs [1] -> clickable
+  let renderedContent = renderMarkdown(content);
+  // Replace [1], [2], etc. with clickable citation refs
+  renderedContent = renderedContent.replace(/\[(\d+)\]/g, (match, num) => {
+    const citationNum = parseInt(num);
+    if (citations.find(c => c.id === citationNum)) {
+      return `<span class="qa-citation-ref" data-citation="${citationNum}">[${num}]</span>`;
+    }
+    return match;
+  });
+
+  const typingCursor = isStreaming ? '<span class="qa-typing-cursor"></span>' : '';
+
+  let html = `
+    <div class="qa-message assistant">
+      <div class="qa-message-avatar">🤖</div>
+      <div class="qa-message-content">
+        <div class="qa-message-bubble">${renderedContent}${typingCursor}</div>
+  `;
+
+  // RT-029 (RT-024/025): UNVERIFIED gets a distinct, explicit verification
+  // banner — the grey badge alone does not explain WHY content was withheld.
+  if (!isStreaming && msg.answer_status === 'UNVERIFIED') {
+    const caps = (msg.degraded_capabilities || []);
+    html += `
+      <div class="qa-unverified-banner">
+        <span class="qa-unverified-icon">🔍</span>
+        <div class="qa-unverified-body">
+          <div class="qa-unverified-title">本回答未通过独立验证（${escHtml(msg.verification_status || 'UNVERIFIED')}）</div>
+          <div class="qa-unverified-sub">仅保留可核对的内容；其余已按未验证处理，请谨慎采信。</div>
+          ${caps.length ? `<div class="qa-unverified-caps">${caps.map(c => `<span class="qa-degraded-chip">${escHtml(c)}</span>`).join('')}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  // 2026-09-20: hoisted from TK-13 — needed early so the status badge can
+  // become the evidence-drawer trigger (owner request: citation wall
+  // collapsed behind the status badge click).
+  const claims = msg.claims || [];
+  const mappedCitations = citations.filter(c => Array.isArray(c.supports_claim_ids) && c.supports_claim_ids.length > 0);
+  const hasEvidence = !isStreaming && (citations.length > 0 || (claims.length > 0 && mappedCitations.length > 0));
+
+  // T033: Answer status badge (only when not streaming and status is present)
+  if (!isStreaming && msg.answer_status) {
+    const statusConfig = getAnswerStatusConfig(msg.answer_status);
+    // evidence_summary is a backend dict {requirements_total, …}; render it
+    // as a readable stats string instead of "[object Object]" (2026-09-20).
+    let summaryText = '';
+    const es = msg.evidence_summary;
+    if (typeof es === 'string') summaryText = es;
+    else if (es && typeof es === 'object') {
+      const parts = [];
+      if (Number.isFinite(es.requirements_total) && es.requirements_total > 0) {
+        parts.push(`主张${es.requirements_total}条`);
+        parts.push(`已支持${es.requirements_supported || 0}条`);
+        if (es.requirements_partial > 0) parts.push(`部分${es.requirements_partial}条`);
+      }
+      if (Number.isFinite(es.independent_source_groups)) parts.push(`独立来源${es.independent_source_groups}个`);
+      summaryText = parts.join(' · ');
+    }
+    const baseStyle = 'display:flex;align-items:center;gap:6px;margin-top:4px;padding:4px 10px;border-radius:8px;background:' + statusConfig.bg + ';font-size:12px;';
+    const trigStyle = hasEvidence ? baseStyle + 'cursor:pointer;' : baseStyle;
+    html += `
+      <div class="qa-answer-status${hasEvidence ? ' qa-status-clickable' : ''}"${hasEvidence ? ` role="button" tabindex="0" data-evidence-idx="${idx}" title="点击查看来源引用与证据卡片"` : ''} style="${trigStyle}">
+        <span style="font-size:14px;">${statusConfig.icon}</span>
+        <span style="color:${statusConfig.color};font-weight:600;">${statusConfig.label}</span>
+        ${summaryText ? `<span style="color:var(--text-quaternary);margin-left:4px;">· ${escHtml(summaryText)}</span>` : ''}
+        ${hasEvidence ? `<span class="qa-status-open-hint" style="margin-left:auto;font-size:11px;color:var(--text-quaternary);">展开依据 ▾</span>` : ''}
+      </div>
+    `;
+  } else if (hasEvidence) {
+    // No answer_status but citations/claims exist — plain fallback trigger.
+    html += `
+      <div class="qa-answer-status qa-status-clickable" role="button" tabindex="0" data-evidence-idx="${idx}" title="点击查看来源引用与证据卡片" style="display:flex;align-items:center;gap:6px;margin-top:4px;padding:4px 10px;border-radius:8px;background:var(--surface-2, #f1f5f9);font-size:12px;cursor:pointer;">
+        <span style="font-size:14px;">📎</span>
+        <span style="color:var(--text-secondary, #475569);font-weight:600;">来源与依据（${citations.length}条引用）</span>
+        <span class="qa-status-open-hint" style="margin-left:auto;font-size:11px;color:var(--text-quaternary);">展开 ▾</span>
+      </div>
+    `;
+  }
+
+  // RT-094: operator audit clients must display the truthful RT-092 mode.
+  // This block is presentation only; the server endpoint owns authorization.
+  if (!isStreaming && msg.audit_replay && msg.audit_replay.fidelity_mode) {
+    html += `<div class="qa-replay-fidelity" data-fidelity="${escHtml(msg.audit_replay.fidelity_mode)}">回放忠实度：${escHtml(msg.audit_replay.fidelity_mode)}</div>`;
+  }
+
+  // TK-10 (Q11): user-visible warning for UNVERIFIED answers (e.g. GLM API failure)
+  if (!isStreaming && msg.user_warning) {
+    html += `<div class="qa-user-warning">${escHtml(msg.user_warning)}</div>`;
+  }
+
+  // TK-13 (Q13/R8): minimal evidence card — claim→citation mapping.
+  // Graceful degrade: hidden entirely when supports_claim_ids are empty
+  // (legacy path), never a "no data" placeholder.
+  // (claims/mappedCitations hoisted above for the drawer trigger check.)
+  if (!isStreaming && claims.length > 0 && mappedCitations.length > 0) {
+    // 2026-09-20: citations referenced in the prose but never mapped to a
+    // claim by the claim-mapper get their own explicit row, so the card
+    // accounts for every [N] the answer text actually uses.
+    const claimedIds = new Set();
+    claims.forEach(cl => (cl.relations || []).forEach(r => {
+      if (r.citation_id !== undefined && r.citation_id !== null) {
+        claimedIds.add(String(r.citation_id));
+      }
+    }));
+    const proseOnly = citations.filter(c => {
+      const n = parseInt(c.id, 10);
+      return Number.isFinite(n) && new RegExp(`\\[${n}\\]`).test(content) &&
+        !claimedIds.has(String(c.id));
+    });
+    evidenceCardHtml += `
+      <div class="qa-evidence-card">
+        <div class="qa-evidence-card-title">🧩 证据卡片（主张 → 引用映射）</div>
+        ${claims.map((cl, i) => {
+          const supCits = mappedCitations.filter(c => (c.supports_claim_ids || []).includes(cl.id));
+          // RT-029: typed relations per claim — CONTRADICTS/BACKGROUND get
+          // their own chips so conflicts are visible, not only support.
+          const rels = Array.isArray(cl.relations) ? cl.relations : [];
+          const relChips = rels.map(r => {
+            const rl = relationLabel(r.relation);
+            return `<span class="qa-rel-chip ${rl.cls}" ${rl.tip ? `title="${escHtml(rl.tip)}"` : ''}>${rl.icon} ${rl.label} [${r.citation_id}]</span>`;
+          }).join('');
+          if (!supCits.length && !relChips) return '';
+          const statusCls = cl.status === 'SUPPORTED' ? 'qa-claim-supported' : (cl.status === 'UNSUPPORTED' ? 'qa-claim-unsupported' : '');
+          // Number from the claim's own id (claim_6 → 6) so the card matches
+          // the 「支持 主张6」 badges in the citation list; positional numbering
+          // would drift whenever a claim renders without chips.
+          const idNum = String(cl.id || '').match(/(\d+)/);
+          const claimNo = idNum ? parseInt(idNum[1], 10) : (i + 1);
+          return `
+          <div class="qa-claim-row ${statusCls}">
+            <div class="qa-claim-text">主张${claimNo}：${escHtml(cl.text)}</div>
+            <div class="qa-claim-cites">
+              ${supCits.map(c => `<span class="qa-claim-cite" data-citation-num="${c.id}">[${c.id}]</span>`).join('')}
+              ${relChips}
+            </div>
+          </div>`;
+        }).join('')}
+        ${proseOnly.length ? `
+          <div class="qa-claim-row">
+            <div class="qa-claim-text">正文提及（写作时引用了原文，但不构成以上任一主张的直接证据）</div>
+            <div class="qa-claim-cites">${proseOnly.map(c => `<span class="qa-claim-cite" data-citation-num="${c.id}">[${c.id}]</span>`).join('')}</div>
+          </div>` : ''}
+      </div>
+    `;
+  }
+
+  // Evidence drawer: citations + claim card live behind a click trigger
+  // (the answer-status badge, or a fallback button when no status exists).
+  const hasEvidenceDrawer = !!(citationsHtml || evidenceCardHtml);
+  if (hasEvidenceDrawer) {
+    html += `
+      <div class="qa-evidence-drawer" id="qa-evidence-drawer-${idx}" aria-hidden="true">
+        <div class="qa-evidence-sheet">
+          <div class="qa-evidence-sheet-head">
+            <span class="qa-evidence-sheet-title">回答依据</span>
+            <button class="qa-evidence-sheet-close" data-evidence-close="${idx}" title="关闭">✕ 关闭</button>
+          </div>
+          <div class="qa-evidence-sheet-body">
+            ${evidenceCardHtml}
+            ${citationsHtml}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Actions (only when not streaming)
+  if (!isStreaming && content) {
+    html += `
+      <div class="qa-actions">
+        <button class="qa-action-btn" data-action="copy" data-msg-idx="${idx}">📋 复制</button>
+        <button class="qa-action-btn" data-action="regenerate" data-msg-idx="${idx}">🔄 重新生成</button>
+        <button class="qa-action-btn" data-action="export" data-msg-idx="${idx}">📤 导出</button>
+      </div>
+    `;
+  }
+
+  html += `
+      </div>
+    </div>
+  `;
+
+  return html;
+}
+
+function updateSendButton() {
+  const btn = qa$('qaSendBtn');
+  if (qaState.isStreaming) {
+    btn.disabled = false;
+    btn.textContent = '⏹ 停止';
+    btn.classList.add('qa-send-btn-stop');
+  } else {
+    btn.disabled = false;
+    btn.textContent = '发送';
+    btn.classList.remove('qa-send-btn-stop');
+  }
+}
+
+// ── Send question and handle streaming response ──
+async function sendQuestion() {
+  const input = qa$('qaInput');
+  const question = input.value.trim();
+  if (!question || qaState.isStreaming) return;
+  if (navigator.onLine === false) {
+    showToast('数据库仍可离线浏览；AI 问答需要联网。');
+    return;
+  }
+
+  // Create conversation if none exists
+  if (!getActiveConversation()) {
+    createNewConversation();
+  }
+
+  const conv = getActiveConversation();
+  
+  // Set conversation title from first question
+  if (conv.messages.length === 0) {
+    conv.title = question.slice(0, 20) + (question.length > 20 ? '...' : '');
+    renderConversationList();
+  }
+
+  // Add user message
+  conv.messages.push({ role: 'user', content: question });
+
+  // Add placeholder assistant message
+  const assistantMsg = { role: 'assistant', content: '', citations: [], streaming: true };
+  conv.messages.push(assistantMsg);
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  renderMessages();
+  qaState.isStreaming = true;
+  qaState.abortController = new AbortController();
+  updateSendButton();
+
+  // Build history for API (exclude current question and empty assistant placeholder)
+  // 注意：canonical-qa 的 ChatRequest 只消费 history[].role/content；代理层
+  // （breadth_qa.py）也会剥离扩展字段。cited 记录改经顶层 exclude_ids 走
+  // novelty 排除（上游 retrieval_pipeline.novelity_filter 的设计入口）。
+  const history = conv.messages.slice(0, -2).map(m => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  // novelty 排除：历史轮已引用记录不再重复召回（record_id 可能是 int idx）
+  const excludeIds = [...new Set(
+    conv.messages.slice(0, -2)
+      .filter(m => m.role === 'assistant')
+      .flatMap(m => {
+        let ids = m.cited_record_ids;
+        if (!ids && m.citations?.length) {
+          const nums = [...m.content.matchAll(/\[(\d+)\]/g)].map(match => +match[1]);
+          ids = nums.map(n => m.citations.find(c => c.id === n)?.record_id)
+            .filter(rid => rid !== undefined && rid !== null && rid !== '');
+        }
+        return ids || [];
+      })
+      .map(id => String(id))
+  )].slice(0, 200);
+
+  try {
+    // Show status indicators
+    showStatusIndicator('retrieving', '🔍 正在检索相关知识...');
+
+    const response = await qaFetch(`/api/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: question,
+        conversation_id: conv.id,
+        history: history,
+        exclude_ids: excludeIds,
+      }),
+      signal: qaState.abortController.signal,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // 流式请求同样受 401 约束：iframe 内 qaFetch 已触发门户刷新；
+        // 直开广度页时在此兜底提示，而不是把 401 当成普通服务错误。
+        _qaShowAuthError();
+        throw new Error('登录态失效，请刷新门户页面后重试。');
+      }
+      let detail = {};
+      try { detail = await response.json(); } catch (_) { /* non-JSON proxy error */ }
+      const message = detail.error || `问答服务暂时不可用（HTTP ${response.status}）`;
+      if (response.status === 429 && detail.retry_after) {
+        throw new Error(`${message}，请在 ${detail.retry_after} 秒后重试`);
+      }
+      throw new Error(message);
+    }
+    if (!response.body) throw new Error('浏览器未收到流式响应');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const feed = sseFrameParser();
+    let streamError = null;       // 上游/代理 error 事件 → 终止并显式报错
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const err = feed(
+        decoder.decode(value, { stream: true }),
+        (data, ev) => handleSSEData(data, assistantMsg, ev)
+      );
+      if (err) { streamError = err; break; }
+    }
+
+    if (streamError) {
+      // 上游显式 error 事件：不算成功。有部分内容就保留并附错误说明。
+      assistantMsg.error = streamError;
+      if (!assistantMsg.content) assistantMsg.content = streamError;
+      else assistantMsg.content += '\n\n> ⚠️ ' + streamError;
+    }
+
+    // Finalize
+    assistantMsg.streaming = false;
+    qaState.isStreaming = false;
+    qaState.abortController = null;
+    updateSendButton();
+    removeStatusIndicator();
+    renderMessages();
+    saveConversationsToStorage();
+
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      // User aborted - keep whatever content was streamed
+      assistantMsg.content = assistantMsg.content || '（已停止生成）';
+    } else {
+      assistantMsg.content = '抱歉，连接服务器失败：' + error.message;
+    }
+    assistantMsg.streaming = false;
+    qaState.isStreaming = false;
+    qaState.abortController = null;
+    updateSendButton();
+    removeStatusIndicator();
+    renderMessages();
+    saveConversationsToStorage();
+  }
+}
+
+
+// ── RT-029 (Phase 02): verified-citation rendering helpers ──────────────────
+// Old-schema messages (pre citation_schema_version 2.0.0) may carry
+// GROUNDING_FAIL citations whose highlight/body_snippet still LOOK like
+// normal evidence (the pre-RT-020 backend kept the snippet). Rendering an
+// invalid citation as evidence counts as invalid-citation-displayed, so we
+// defensively strip evidence-looking content for any message not explicitly
+// schema >= 2.
+function schemaAtLeast(msg, major, minor) {
+  const v = String(msg.citation_schema_version || '');
+  if (!v) return false;
+  const parts = v.split('.').map(x => parseInt(x, 10) || 0);
+  const cur = [parseInt(major, 10) || 0, parseInt(minor, 10) || 0];
+  return (parts[0] || 0) > cur[0] || ((parts[0] || 0) === cur[0] && (parts[1] || 0) >= cur[1]);
+}
+
+function defensivelyFilterCitations(msg) {
+  const citations = msg.citations || [];
+  if (schemaAtLeast(msg, 2, 0)) {
+    // Schema 2.0: backend already dropped INVALID citations before emitting;
+    // still hard-filter anything that slipped through with a non-VALID status.
+    return citations.filter(c => !c.grounding_status || c.grounding_status === 'VALID');
+  }
+  // Pre-2.0 / unknown schema: keep the card but strip evidence-looking
+  // content the old backend failed to ground — an ungrounded snippet must
+  // not render as normal evidence.
+  return citations.map(c => {
+    if (c.grounding_status === 'VALID' || c.grounding_status === 'FUZZY') return c;
+    const { highlight, body_snippet, ...rest } = c;
+    return { ...rest, ungrouded_note: '旧数据：该引用未能定位到原文，证据片段已隐藏' };
+  });
+}
+
+function relationLabel(relation) {
+  switch (relation) {
+    case 'DIRECT_SUPPORT': return { icon: '✅', label: '直接支持', cls: 'qa-rel-support', tip: '引用原文本身就是该事实的报道，事实有出处' };
+    case 'PREMISE_SUPPORT': return { icon: '✅', label: '前提支持', cls: 'qa-rel-support', tip: '引用原文为该主张提供了前提依据' };
+    case 'ATTRIBUTION': return { icon: '📣', label: '引述', cls: 'qa-rel-attribution', tip: '原文确实这样说过（归属属实），但所说内容本身是真是假未经证实' };
+    case 'CONTRADICTS': return { icon: '⚔️', label: '与此矛盾', cls: 'qa-rel-contradict', tip: '引用原文与该主张相矛盾' };
+    case 'BACKGROUND': return { icon: '📜', label: '背景参考', cls: 'qa-rel-background', tip: '查证时翻到过这条资料，但它不构成该主张的证据' };
+    default: return { icon: '•', label: relation || '未知', cls: 'qa-rel-background', tip: '' };
+  }
+}
+
+// ── SSE 帧解析器（可测）────────────────────────────────────────────────────
+// 任意 chunk 切分（网络分包可能切断 data: 行、甚至多字节 UTF-8 字符——解码由
+// TextDecoder(stream:true) 负责）下按行重组，识别 event:/data: 字段并派发。
+// dispatch(data, eventName) 返回错误消息即终止（error 事件显式失败，不静默）。
+function sseFrameParser() {
+  let buffer = '';
+  let currentEvent = null;   // SSE `event:` 字段对其后的 data 行生效
+  return function feed(chunkText, dispatch) {
+    buffer += chunkText;
+    const lines = buffer.split('\n');
+    buffer = lines.pop();    // 不完整行留在缓冲区
+    for (const rawLine of lines) {
+      const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine; // CRLF 兼容
+      // 空行（事件分隔符）：按 SSE 规范，无论是否派发过事件，事件类型缓冲
+      // 都在此复位——防止 event: 名泄露到下一个事件帧（codex 复审 R2-2）。
+      if (line === '') { currentEvent = null; continue; }
+      const field = line.split(':', 1)[0];
+      if (field === 'event') {
+        currentEvent = line.slice(6).trim();
+      } else if (field === 'data') {
+        const dataStr = line.slice(5).trim();
+        if (!dataStr || dataStr === '[DONE]') { currentEvent = null; continue; }
+        try {
+          const data = JSON.parse(dataStr);
+          const err = dispatch(data, currentEvent);
+          if (err) return err;
+        } catch (e) {
+          // Ignore parse errors for partial data
+        }
+        currentEvent = null; // 事件已派发，后续 data 默认为 message
+      }
+      // `id:`/`retry:`/注释行/空行：忽略
+    }
+    return null;
+  };
+}
+
+function handleSSEData(data, assistantMsg, eventName) {
+  // 事件名优先：canonical-qa 的 server.py 明确使用 event: status/token/
+  // citations/replace/done/error。历史实现按载荷形状猜测事件类型，导致
+  // replace（载荷键是 content）与 error（载荷键是 message）被静默丢弃。
+  const ev = eventName || (data.step ? 'status'
+    : data.text !== undefined ? 'token'
+    : data.citations ? 'citations'
+    : data.answer !== undefined ? 'done'
+    : null);
+
+  if (ev === 'status') {
+    showStatusIndicator(data.step, data.message || '');
+    return null;
+  }
+  if (ev === 'token') {
+    assistantMsg.content += data.text;
+    removeStatusIndicator();
+    updateStreamingMessage(assistantMsg);
+    return null;
+  }
+  if (ev === 'citations') {
+    // Citations received (before or during streaming)
+    assistantMsg.citations = data.citations;
+    return null;
+  }
+  if (ev === 'replace') {
+    // 修复链改写了答案 ⇒ 用服务端权威版本整体替换已流式展示的内容
+    const replacement = data.content !== undefined ? data.content : data.answer;
+    if (replacement !== undefined) {
+      assistantMsg.content = replacement;
+      removeStatusIndicator();
+      updateStreamingMessage(assistantMsg);
+    }
+    return null;
+  }
+  if (ev === 'error') {
+    // 上游显式 error 事件：返回错误消息，由读取循环终止并报错
+    return data.message || data.error || '问答服务返回未知错误。';
+  }
+
+  // Handle done event (may contain both answer and citations)
+  if (ev === 'done' && data.answer !== undefined) {
+    if (data.answer && !assistantMsg.content) {
+      assistantMsg.content = data.answer;
+    }
+    if (data.citations) {
+      assistantMsg.citations = data.citations;
+    }
+    // canonical-qa 的 done 载荷不含 cited/searched_record_ids（那是门户 agent 链
+    // 的字段）：从 citations[].record_id 提取（record_id 为 int idx 时 0 也是合法值，
+    // 故按 null/undefined/空串过滤而不是 truthy）。
+    assistantMsg.cited_record_ids = data.cited_record_ids
+      || (data.citations || [])
+          .map(c => c.record_id)
+          .filter(rid => rid !== undefined && rid !== null && rid !== '');
+    assistantMsg.searched_record_ids = data.searched_record_ids || [];
+    // T033: Store answer status and evidence metadata for reference card UI
+    assistantMsg.answer_status = data.answer_status || null;
+    assistantMsg.terminal_schema_version = data.terminal_schema_version || '';
+    // Phase08 compatibility alias is bound server-side. Fail closed if a
+    // cached/intermediary payload ever presents contradictory authorities.
+    if (data.status && data.answer_status && data.status !== data.answer_status) {
+      assistantMsg.answer_status = 'UNVERIFIED';
+      assistantMsg.user_warning = '终态字段不一致，已按未验证处理。';
+    }
+    assistantMsg.stop_reason = data.stop_reason || null;
+    assistantMsg.evidence_summary = data.evidence_summary || null;
+    assistantMsg.reference_cards = data.reference_cards || [];
+    assistantMsg.trace_id = data.trace_id || null;
+    // TK-13 (Q13): claims + user warning for the evidence card
+    assistantMsg.claims = data.claims || [];
+    assistantMsg.user_warning = assistantMsg.user_warning || data.user_warning || '';
+    // RT-029 (Phase 02): verified-citation schema version + verification state
+    assistantMsg.citation_schema_version = data.citation_schema_version || '';
+    assistantMsg.verification_status = data.verification_status || '';
+    assistantMsg.degraded_capabilities = data.degraded_capabilities || [];
+    assistantMsg.support_relations = data.support_relations || {};
+    // canonical-qa done 载荷实有字段（server.py）：知识边界与证据态
+    assistantMsg.knowledge_boundary = data.knowledge_boundary || null;
+    assistantMsg.safety_hits = data.safety_hits || [];
+    assistantMsg.evidence = data.evidence || null;
+    assistantMsg.retrieval_trace = data.retrieval_trace || null;
+  }
+
+  return null;
+}
+
+// ── Dynamic pipeline progress timeline ──
+// Shows every retrieval/generation stage: done ✓ / active spinner / pending,
+// with a ticking elapsed-seconds counter so the wait stays transparent.
+const QA_STAGE_ORDER = ['rewriting', 'searching', 'planning', 'searched',
+                        'analyzing', 'generating', 'verifying'];
+const QA_STAGE_LABELS = {
+  rewriting:  '理解问题',
+  searching:  '多路检索',
+  planning:   '智能规划检索',
+  searched:   '检索完成',
+  analyzing:  '证据分析',
+  generating: '生成回答',
+  verifying:  '证据核验',
+  retrieving: '检索知识',
+  started:    '流水线启动',
+};
+
+let _qaStatusTimer = null;
+
+function showStatusIndicator(step, message) {
+  let indicator = document.querySelector('.qa-status-indicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.className = 'qa-status-indicator';
+    indicator.dataset.t0 = String(Date.now());
+    indicator.dataset.stages = JSON.stringify({});
+    const messagesEl = qa$('qaMessages');
+    messagesEl.appendChild(indicator);
+    _qaStatusTimer = setInterval(() => {
+      const el = document.querySelector('.qa-status-indicator');
+      if (!el) { clearInterval(_qaStatusTimer); _qaStatusTimer = null; return; }
+      const t0 = parseInt(el.dataset.t0, 10);
+      const cur = el.querySelector('.qa-status-elapsed');
+      if (cur && t0) cur.textContent = `${Math.round((Date.now() - t0) / 1000)}s`;
+    }, 1000);
+  }
+  const stages = JSON.parse(indicator.dataset.stages || '{}');
+  if (!stages[step]) stages[step] = Date.now();
+  indicator.dataset.stages = JSON.stringify(stages);
+  const t0 = parseInt(indicator.dataset.t0, 10);
+  const elapsed = t0 ? `${Math.round((Date.now() - t0) / 1000)}s` : '';
+  const reached = Object.keys(stages);
+  const curIdx = QA_STAGE_ORDER.indexOf(step);
+  const stepsHtml = QA_STAGE_ORDER.filter(s => s !== 'searched').map(s => {
+    const idx = QA_STAGE_ORDER.indexOf(s);
+    const state = idx < curIdx || (s === 'searching' && reached.includes('searched'))
+      ? 'done' : (s === step ? 'active' : '');
+    const icon = state === 'done' ? '✓' : (state === 'active'
+      ? '<span class="qa-status-spinner"></span>' : '·');
+    const stageElapsed = stages[s]
+      ? `<span class="qa-step-elapsed"></span>` : '';
+    return `<span class="qa-status-step ${state}">${icon} ${QA_STAGE_LABELS[s] || s}${s === step ? '' : stageElapsed}</span>`;
+  }).join('');
+  indicator.innerHTML = `
+    <div class="qa-status-steps">${stepsHtml}</div>
+    <div class="qa-status-current">
+      <span class="qa-status-spinner"></span>
+      <span>${escHtml(message || QA_STAGE_LABELS[step] || step)}</span>
+      <span class="qa-status-elapsed">${elapsed}</span>
+    </div>`;
+  indicator.style.display = 'flex';
+  qa$('qaMessages').scrollTop = qa$('qaMessages').scrollHeight;
+}
+
+function removeStatusIndicator() {
+  const indicator = document.querySelector('.qa-status-indicator');
+  if (indicator) {
+    if (_qaStatusTimer) { clearInterval(_qaStatusTimer); _qaStatusTimer = null; }
+    indicator.remove();
+  }
+}
+
+function updateStreamingMessage(assistantMsg) {
+  const messagesEl = qa$('qaMessages');
+  const lastMsg = messagesEl.querySelector('.qa-message.assistant:last-child .qa-message-bubble');
+  if (lastMsg) {
+    let html = renderMarkdown(assistantMsg.content);
+    // Add typing cursor
+    html += '<span class="qa-typing-cursor"></span>';
+    lastMsg.innerHTML = html;
+  }
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// ── Actions (copy, regenerate, export) ──
+function handleAction(action, msgIdx) {
+  const conv = getActiveConversation();
+  if (!conv) return;
+  const msg = conv.messages[msgIdx];
+  if (!msg) return;
+
+  if (action === 'copy') {
+    navigator.clipboard.writeText(msg.content).then(() => {
+      showToast('已复制到剪贴板');
+    });
+  } else if (action === 'regenerate') {
+    // Remove this message and re-ask
+    const prevUserMsg = conv.messages[msgIdx - 1];
+    if (prevUserMsg && prevUserMsg.role === 'user') {
+      conv.messages.splice(msgIdx); // Remove this and subsequent
+      renderMessages();
+      // Re-send (need to remove the user message too and re-add it)
+      const question = prevUserMsg.content;
+      conv.messages.splice(msgIdx - 1); // Remove the user message
+      qa$('qaInput').value = question;
+      sendQuestion();
+    }
+  } else if (action === 'export') {
+    exportMessage(msg, conv);
+  }
+}
+
+function exportMessage(msg, conv) {
+  // Export as Markdown
+  let md = `# 技术情报问答\n\n`;
+  md += `**对话：** ${conv.title}\n\n`;
+  md += `**时间：** ${new Date().toLocaleString('zh-CN')}\n\n---\n\n`;
+
+  // Find the user question
+  const msgIdx = conv.messages.indexOf(msg);
+  if (msgIdx > 0) {
+    md += `## ❓ 问题\n\n${conv.messages[msgIdx - 1].content}\n\n`;
+  }
+  md += `## 💡 回答\n\n${msg.content}\n\n`;
+
+  if (msg.citations && msg.citations.length > 0) {
+    md += `## 📎 来源引用\n\n`;
+    msg.citations.forEach(c => {
+      md += `[${c.id}] ${c.title} (${c.date}, ${c.source})\n`;
+      if (c.body_snippet) md += `> ${c.body_snippet}\n`;
+      if (c.url) md += `> 🔗 ${c.url}\n`;
+      md += `\n`;
+    });
+  }
+
+  // Download
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `qa_${Date.now()}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('已导出为 Markdown');
+}
+
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--bg-surface); color: var(--text-primary);
+    padding: 8px 16px; border-radius: 8px; font-size: 13px;
+    border: 1px solid var(--border-subtle); z-index: 9999;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.1); transition: opacity 0.3s;
+  `;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+  setTimeout(() => toast.remove(), 2500);
+}
+
+// ── Simple markdown renderer (reuses app.js renderMarkdown if available) ──
+function renderMarkdown(text) {
+  if (typeof window.renderMarkdownSafe === 'function') {
+    return window.renderMarkdownSafe(text);
+  }
+  // Fallback: basic markdown
+  let html = escHtml(text);
+  // Code blocks
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code) => `<pre><code>${code}</code></pre>`);
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Headers
+  html = html.replace(/^###\s(.+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^##\s(.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^#\s(.+)$/gm, '<h3>$1</h3>');
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Links [text](url) — scheme 白名单（含控制字符清洗，见 _qaSafeUrl）：
+  // javascript:/data:/vbscript: 及 `java\tscript:` 变体一律降级为纯文本。
+  // 插值进 href="..." 前必须把 `"` 百分号编码——escHtml 的 textContent→
+  // innerHTML 序列化不转义引号，相对 URL 中的引号可断开属性注入事件
+  // 处理器（codex 复审 R3-1，如 `[x](/a" onmouseover="alert(1))`）。
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text_, rawUrl) => {
+    const url = _qaSafeUrl(rawUrl).replace(/"/g, '%22');
+    if (url === '#') return text_;
+    return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--brand-light)">${text_}</a>`;
+  });
+  // Lists - group consecutive <li> into <ul>
+  html = html.replace(/(?:^(\d+)\.\s(.+)$\n?)+/gm, (m) => {
+    const items = m.trim().split('\n').map(line => {
+      const match = line.match(/^\d+\.\s(.+)$/);
+      return match ? `<li>${match[1]}</li>` : '';
+    }).filter(Boolean);
+    return items.length ? `<ul>${items.join('')}</ul>` : m;
+  });
+  html = html.replace(/(?:^[-•]\s(.+)$\n?)+/gm, (m) => {
+    const items = m.trim().split('\n').map(line => {
+      const match = line.match(/^[-•]\s(.+)$/);
+      return match ? `<li>${match[1]}</li>` : '';
+    }).filter(Boolean);
+    return items.length ? `<ul>${items.join('')}</ul>` : m;
+  });
+  // Paragraphs
+  html = html.split('\n\n').map(p => {
+    if (p.startsWith('<ul>') || p.startsWith('<pre>') || p.startsWith('<h')) {
+      return p;
+    }
+    return `<p>${p.replace(/\n/g, '<br>')}</p>`;
+  }).join('');
+  return html;
+}
+
+function escHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = String(text);
+  return div.innerHTML;
+}
+
+// 引用 URL 的 scheme 白名单：引用数据来自检索索引（含用户上传文档的 u 字段），
+// javascript:/data: 等一律降级为 '#'，防 LLM/数据侧诱导点击。
+// 注意必须先剔除 ASCII 控制字符：浏览器 URL 解析会剔除 TAB/LF/CR 与首尾
+// C0 控制字符，`java\tscript:` / `\0javascript:` 由此归一为 javascript: ——
+// 在原始字符串上做 scheme 匹配会被绕过（codex 复审 R2-1）。
+function _qaSafeUrl(url) {
+  const u = String(url || '')
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    .trim();
+  if (!u) return '#';
+  const m = /^([a-z][a-z0-9+.-]*):/i.exec(u);
+  if (m) return /^(https?|mailto)$/i.test(m[1]) ? u : '#';
+  return u; // 无 scheme：相对地址
+}
+
+// href 属性插值专用：scheme 白名单 + `"` 百分号编码 + HTML 转义。
+// 引用卡片等直接以原始数据（未经 renderMarkdown 预转义）进模板的位置统一走这里。
+function _qaSafeHref(url) {
+  return escHtml(_qaSafeUrl(url).replace(/"/g, '%22'));
+}
+
+// T033: Answer status configuration for four-state display
+function getAnswerStatusConfig(status) {
+  const configs = {
+    'SUPPORTED': {
+      icon: '✅',
+      label: '证据充分支持',
+      color: '#16a34a',
+      bg: 'rgba(22,163,74,0.08)',
+    },
+    'PARTIALLY_SUPPORTED': {
+      icon: '⚠️',
+      label: '部分支持',
+      color: '#d97706',
+      bg: 'rgba(217,119,6,0.08)',
+    },
+    'UNSUPPORTED': {
+      icon: '❌',
+      label: '证据不支持',
+      color: '#dc2626',
+      bg: 'rgba(220,38,38,0.08)',
+    },
+    'UNVERIFIED': {
+      icon: '🔍',
+      label: '未能验证',
+      color: '#6b7280',
+      bg: 'rgba(107,114,128,0.08)',
+    },
+  };
+  return configs[status] || configs['UNVERIFIED'];
+}
+
+// ── Knowledge Graph Visualization ──
+async function loadAndRenderGraph() {
+  const container = qa$('qaGraphContainer');
+  if (!container) return;
+
+  try {
+    const resp = await qaFetch(`/api/graph?limit=200`);
+    const data = await resp.json();
+
+    if (!data.nodes || data.nodes.length === 0) {
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-quaternary);font-size:13px">知识图谱正在构建中...</div>';
+      return;
+    }
+
+    renderGraphCanvas(container, data);
+  } catch (error) {
+    // If backend is not running, show placeholder
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-quaternary);font-size:13px">知识图谱将在服务启动后显示</div>';
+  }
+}
+
+function renderGraphCanvas(container, data) {
+  // Create canvas
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  container.innerHTML = '';
+  container.appendChild(canvas);
+
+  // Tooltip
+  const tooltip = document.createElement('div');
+  tooltip.className = 'qa-graph-tooltip';
+  container.appendChild(tooltip);
+
+  // Size
+  function resize() {
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Node colors by type (support both Chinese and English type names)
+  const typeColors = {
+    '公司': '#6366f1', '机构': '#8b5cf6', '技术': '#3b82f6',
+    '材料': '#10b981', '产品': '#f59e0b', '人物': '#ef4444',
+    '地点': '#6b7280', '政策': '#ec4899', '指标': '#14b8a6',
+    '事件': '#f97316', '项目': '#8b5cf6', '设备': '#06b6d4',
+    '方法': '#a855f7', '未知': '#9ca3af',
+    // English types from LightRAG
+    'organization': '#6366f1', 'artifact': '#f59e0b', 'concept': '#3b82f6',
+    'location': '#6b7280', 'person': '#ef4444', 'method': '#a855f7',
+    'event': '#f97316', 'content': '#ec4899', 'naturalobject': '#10b981',
+    'data': '#14b8a6', 'other': '#9ca3af', 'UNKNOWN': '#9ca3af',
+    '组织': '#6366f1', '人工制品': '#f59e0b', '概念': '#3b82f6',
+    '其他': '#9ca3af',
+  };
+
+  const nodes = data.nodes.map(n => ({
+    ...n,
+    x: canvas.width / 2 + (Math.random() - 0.5) * canvas.width * 0.8,
+    y: canvas.height / 2 + (Math.random() - 0.5) * canvas.height * 0.8,
+    vx: 0, vy: 0,
+    radius: Math.max(4, Math.min(16, 4 + (n.degree || 0) * 0.5)),
+    color: typeColors[n.type] || typeColors['未知'],
+  }));
+
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.label] = n; });
+
+  const edges = data.edges.filter(e => nodeMap[e.source] && nodeMap[e.target]);
+
+  // Force simulation
+  let animationId = null;
+  let temperature = 1;
+  let transform = { x: 0, y: 0, scale: 1 };
+  let isDragging = false;
+  let dragNode = null;
+  let hoverNode = null;
+  let mouseX = 0, mouseY = 0;
+  let isPanning = false;
+  let panStart = { x: 0, y: 0 };
+
+  function simulate() {
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+
+    // Repulsion
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[j].x - nodes[i].x;
+        const dy = nodes[j].y - nodes[i].y;
+        const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+        const force = 800 / (dist * dist);
+        nodes[i].vx -= (dx / dist) * force * temperature;
+        nodes[i].vy -= (dy / dist) * force * temperature;
+        nodes[j].vx += (dx / dist) * force * temperature;
+        nodes[j].vy += (dy / dist) * force * temperature;
+      }
+    }
+
+    // Attraction (edges)
+    edges.forEach(e => {
+      const a = nodeMap[e.source];
+      const b = nodeMap[e.target];
+      if (!a || !b) return;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const force = (dist - 80) * 0.01 * temperature;
+      a.vx += (dx / dist) * force;
+      a.vy += (dy / dist) * force;
+      b.vx -= (dx / dist) * force;
+      b.vy -= (dy / dist) * force;
+    });
+
+    // Center gravity
+    nodes.forEach(n => {
+      n.vx += (cx - n.x) * 0.001 * temperature;
+      n.vy += (cy - n.y) * 0.001 * temperature;
+    });
+
+    // Update positions
+    nodes.forEach(n => {
+      if (n === dragNode) return;
+      n.vx *= 0.85;
+      n.vy *= 0.85;
+      n.x += n.vx;
+      n.y += n.vy;
+    });
+
+    temperature = Math.max(0.02, temperature * 0.998);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.translate(transform.x, transform.y);
+    ctx.scale(transform.scale, transform.scale);
+
+    // Draw edges
+    ctx.strokeStyle = 'rgba(150,150,160,0.15)';
+    ctx.lineWidth = 1;
+    edges.forEach(e => {
+      const a = nodeMap[e.source];
+      const b = nodeMap[e.target];
+      if (!a || !b) return;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    });
+
+    // Draw nodes
+    nodes.forEach(n => {
+      // Glow for hover
+      if (n === hoverNode) {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.radius + 4, 0, Math.PI * 2);
+        ctx.fillStyle = n.color + '30';
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+      ctx.fillStyle = n.color;
+      ctx.fill();
+
+      // Label for larger nodes
+      if (n.radius > 8 || n === hoverNode) {
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(n.label.slice(0, 12), n.x, n.y - n.radius - 4);
+      }
+    });
+
+    ctx.restore();
+  }
+
+  function animate() {
+    simulate();
+    draw();
+    animationId = requestAnimationFrame(animate);
+  }
+
+  // Mouse interaction
+  canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left - transform.x) / transform.scale;
+    const my = (e.clientY - rect.top - transform.y) / transform.scale;
+
+    // Check if clicking a node
+    for (const n of nodes) {
+      const dx = mx - n.x;
+      const dy = my - n.y;
+      if (Math.sqrt(dx * dx + dy * dy) < n.radius + 3) {
+        dragNode = n;
+        isDragging = true;
+        temperature = Math.max(temperature, 0.3);
+        return;
+      }
+    }
+
+    // Otherwise pan
+    isPanning = true;
+    panStart = { x: e.clientX - transform.x, y: e.clientY - transform.y };
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+
+    if (isDragging && dragNode) {
+      dragNode.x = (mouseX - transform.x) / transform.scale;
+      dragNode.y = (mouseY - transform.y) / transform.scale;
+      temperature = Math.max(temperature, 0.2);
+    } else if (isPanning) {
+      transform.x = e.clientX - panStart.x;
+      transform.y = e.clientY - panStart.y;
+    } else {
+      // Hover detection
+      const mx = (mouseX - transform.x) / transform.scale;
+      const my = (mouseY - transform.y) / transform.scale;
+      hoverNode = null;
+      for (const n of nodes) {
+        const dx = mx - n.x;
+        const dy = my - n.y;
+        if (Math.sqrt(dx * dx + dy * dy) < n.radius + 3) {
+          hoverNode = n;
+          break;
+        }
+      }
+
+      if (hoverNode) {
+        canvas.style.cursor = 'pointer';
+        tooltip.textContent = `${hoverNode.label} (${hoverNode.type}) — 连接度: ${hoverNode.degree || 0}`;
+        tooltip.style.left = (mouseX + 10) + 'px';
+        tooltip.style.top = (mouseY + 10) + 'px';
+        tooltip.classList.add('visible');
+      } else {
+        canvas.style.cursor = 'grab';
+        tooltip.classList.remove('visible');
+      }
+    }
+  });
+
+  canvas.addEventListener('mouseup', () => {
+    isDragging = false;
+    isPanning = false;
+    dragNode = null;
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    isDragging = false;
+    isPanning = false;
+    dragNode = null;
+    hoverNode = null;
+    tooltip.classList.remove('visible');
+  });
+
+  // Zoom with wheel
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(0.3, Math.min(5, transform.scale * delta));
+    // Zoom towards mouse position
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    transform.x = mx - (mx - transform.x) * (newScale / transform.scale);
+    transform.y = my - (my - transform.y) * (newScale / transform.scale);
+    transform.scale = newScale;
+  }, { passive: false });
+
+  animate();
+}
+
+// ── View switching integration ──
+function switchToQAView() {
+  // Hide main content
+  document.querySelector('.content').style.display = 'none';
+  qa$('qaView').style.display = 'flex';
+
+  // Show QA sidebar in the main sidebar
+  const qaSidebar = document.getElementById('qaSidebar');
+  if (qaSidebar) qaSidebar.style.display = '';
+
+  // Initialize if not already
+  if (!qaState._initialized) {
+    initQAView();
+    qaState._initialized = true;
+  }
+
+  // Ensure proper visibility state
+  renderMessages();
+}
+
+function switchFromQAView() {
+  // Restore content
+  document.querySelector('.content').style.display = '';
+  qa$('qaView').style.display = 'none';
+
+  // Hide QA sidebar
+  const qaSidebar = document.getElementById('qaSidebar');
+  if (qaSidebar) qaSidebar.style.display = 'none';
+}
+
+// ── Stats loading ──
+async function loadStats() {
+  try {
+    const resp = await qaFetch(`/api/stats`);
+    const data = await resp.json();
+    const statsEl = qa$('qaEmptyStats');
+    if (statsEl && data.total_records) {
+      statsEl.innerHTML = `
+        <span>📊 ${data.total_records.toLocaleString()} 条情报</span>
+        <span>🧠 ${data.indexed_records.toLocaleString()} 条已索引</span>
+        <span>🕸️ ${data.graph_nodes || 0} 个知识节点</span>
+      `;
+    }
+  } catch (e) {
+    // Silent fail
+  }
+}
+
+// ── Conversation persistence (localStorage) ──
+function saveConversationsToStorage() {
+  try {
+    // Only save conversations that have messages (skip empty ones)
+    const toSave = qaState.conversations
+      .filter(c => c.messages.length > 0)
+      .slice(0, 50) // Keep at most 50 conversations
+      .map(c => ({
+        id: c.id,
+        title: c.title,
+        messages: c.messages.map(m => ({
+          role: m.role,
+          content: m.content,
+          citations: m.citations || [],
+          searched_record_ids: m.searched_record_ids || [],
+          cited_record_ids: m.cited_record_ids || [],
+          // TK-13/TK-10 (codex-review B2 P2): evidence card + user warning
+          // must survive a page reload, not just the live session
+          claims: m.claims || [],
+          user_warning: m.user_warning || '',
+          answer_status: m.answer_status || null,
+          evidence_summary: m.evidence_summary || null,
+          stop_reason: m.stop_reason || null,
+          trace_id: m.trace_id || null,
+        })),
+      }));
+    localStorage.setItem('qa_conversations', JSON.stringify(toSave));
+  } catch (e) {
+    // localStorage might be full, silently fail
+  }
+}
+
+function loadConversationsFromStorage() {
+  try {
+    const saved = localStorage.getItem('qa_conversations');
+    if (saved) {
+      const conversations = JSON.parse(saved);
+      if (Array.isArray(conversations) && conversations.length > 0) {
+        qaState.conversations = conversations;
+        renderConversationList();
+        // Don't auto-select any conversation - show empty state
+      }
+    }
+  } catch (e) {
+    // Parse error, ignore
+  }
+}
+
+// Export for global access（__testHooks 仅供构建期/CI 的 Node 单测使用）
+window.qaModule = {
+  switchToQAView,
+  switchFromQAView,
+  initQAView,
+  __testHooks: { sseFrameParser, handleSSEData, renderMarkdown, _qaSafeUrl, _qaSafeHref },
+};

@@ -37,6 +37,15 @@ class BreadthImportSession(Base):
     package_deduplicated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     replayed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     failed_titles: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # v2 变化包扩展计数：{added, updated, deleted, skipped_stale,
+    # skipped_unchanged, deleted_missing, gap_days}（旧字段语义不变）
+    details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 五.2（2026-10-01）发布序列链状态：每个已导入会话持久化其包序列，
+    # 链头 continuity 判定取 sequence 最大行——缺口（漏包）不阻塞数据
+    # 应用（per-key v 保护），后续包的 predecessor 对齐即可继续推进。
+    package_sequence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manifest_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    chain_head: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

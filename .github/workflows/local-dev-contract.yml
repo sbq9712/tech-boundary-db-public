@@ -3,10 +3,13 @@ name: Local development contracts
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
     paths:
       - "start_with_local_ai.sh"
       - "web/Dockerfile"
       - "scripts/hydrate_breadth_runtime.py"
+      - "scripts/sync_qa_index.py"
       - "scripts/build_breadth_alert_snapshot.py"
       - "scripts/build_breadth_category_counts.py"
       - "scripts/test_breadth_runtime_hydration.py"
@@ -35,6 +38,7 @@ jobs:
           node --check app.js
           python -m py_compile \
             scripts/hydrate_breadth_runtime.py \
+            scripts/sync_qa_index.py \
             scripts/build_breadth_alert_snapshot.py \
             scripts/build_breadth_category_counts.py \
             scripts/test_conversation_navigation.py

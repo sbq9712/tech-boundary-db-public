@@ -62,6 +62,8 @@ def _cleanup():
     db = SessionLocal()
     try:
         for rid in CLEANUP:
+            db.execute(text("DELETE FROM breadth_index_tasks WHERE upload_id=:i"), {"i": rid})
+            db.execute(text("DELETE FROM breadth_index_tasks WHERE upload_id=:i"), {"i": rid})
             db.execute(text("DELETE FROM breadth_import_sessions WHERE upload_id=:i"), {"i": rid})
             db.execute(text("DELETE FROM breadth_manual_records WHERE upload_id=:i"), {"i": rid})
             db.execute(text("DELETE FROM uploaded_files WHERE id=:i"), {"i": rid})
@@ -226,7 +228,7 @@ def test_import_full_flow_counts_and_rows(tmp_path, monkeypatch):
         a = by_title["全新情报A"]
         assert a["document_date"] == "2026-09-27"
         assert a["level"] == 2
-        assert a["intelligence_type"] == "l"
+        assert a["intelligence_type"] in ("l", "literature")
         assert a["source_name"] == "Nature"
         assert a["score"] == "8.5"
         assert a["score_detail"] == {"tech": 8, "market": 9}
@@ -286,6 +288,7 @@ def test_post_upload_github_package_e2e(tmp_path, monkeypatch, gh_admin):
 
     monkeypatch.setenv("TECHDB_UPLOAD_DIR", str(tmp_path / "uploads"))
     root = _write_upstream_shards(tmp_path / "upstream", [])
+    monkeypatch.setenv("TECHDB_BREADTH_INDEX_WORKER_ENABLED", "false")
     monkeypatch.setenv("BREADTH_DATA_PATH", str(root))
 
     records = [

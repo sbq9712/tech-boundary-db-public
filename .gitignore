@@ -29,7 +29,9 @@ Thumbs.db
 
 # Runtime state and logs
 pg_data/
+runtime/
 runtime-data/
+pipeline/breadth/
 uploads/*
 !uploads/.gitkeep
 *.log
@@ -105,3 +107,7 @@ pipeline/runtime/
 # QA 图谱服务稳定路径（管线运行时截断写，不入 Git）
 services/canonical-qa/graph-live/*
 !services/canonical-qa/graph-live/.gitkeep
+pipeline/triage_engine/.env
+pipeline/.engine_retriage_checkpoint.json
+pipeline/.engine_triage_work/
+pipeline/.engine_retriage_checkpoint.lock

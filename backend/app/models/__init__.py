@@ -9,6 +9,8 @@ from app.models.conversation import ConversationSession, ConversationMessage, Co
 from app.models.uploaded_file import UploadedFile
 from app.models.breadth_manual_record import BreadthManualRecord
 from app.models.breadth_import_session import BreadthImportSession
+from app.models.index_task import IndexTask
+from app.models.feed_tombstone import FeedTombstone
 
 __all__ = [
     "Domain", "InfoItem", "InfoItemDomain", "User",
@@ -20,4 +22,6 @@ __all__ = [
     "UploadedFile",
     "BreadthManualRecord",
     "BreadthImportSession",
+    "IndexTask",
+    "FeedTombstone",
 ]

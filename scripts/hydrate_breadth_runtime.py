@@ -199,7 +199,41 @@ def load_stamp(processed: Path) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+LOCAL_STAMP_NAME = ".runtime-source.json"
+LOCAL_PIPELINE_SCHEMA = "tech-boundary-breadth-runtime/v2"
+
+
+def load_local_stamp(processed: Path) -> dict:
+    """本地管线发布戳（auto_pipeline.publish_to_boundary 写入）。
+
+    存在即声明该运行时来自本仓库自有管线（而非 tech-db 钉住快照）。
+    合法性仍由 validate_structure + 清单自洽校验把关——这里只认来源。
+    """
+    path = processed / LOCAL_STAMP_NAME
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def validate_installed(processed: Path = PROCESSED_DIR) -> list[str]:
+    # 本地管线产物优先：publish_to_boundary 发布时写 .runtime-source.json。
+    # 只要结构完整 + 与戳自洽，就是「合法的新版本」——绝不能因为与 tech-db
+    # 钉住快照的常量不符而判定损坏（那会让启动 hydration 用旧数据覆盖新数据）。
+    local = load_local_stamp(processed)
+    if local.get("schema") == LOCAL_PIPELINE_SCHEMA and local.get("source") == "local-pipeline":
+        errors = validate_structure(
+            processed,
+            expected_records=int(local.get("records_total") or 0),
+            expected_shards=int(local.get("total_shards") or 0),
+            expected_data_version=str(local.get("data_version") or ""),
+            expected_upstream_files=None,
+        )
+        shards = sum(1 for p in processed.glob("lite-part-*.js") if p.is_file())
+        if shards != int(local.get("total_shards") or 0):
+            errors.append("local-pipeline stamp total_shards disagrees with lite shards on disk")
+        return errors
     errors = validate_structure(processed)
     stamp = load_stamp(processed)
     if stamp.get("repository") != UPSTREAM_REPOSITORY:
@@ -304,12 +338,117 @@ def install_candidate(candidate: Path, target: Path) -> None:
         temporary = target / f".{source.name}.hydrate-tmp"
         shutil.copy2(source, temporary)
         os.replace(temporary, target / source.name)
-    shutil.copy2(candidate / STAMP_NAME, target / STAMP_NAME)
+    if (candidate / STAMP_NAME).is_file():
+        # 仅钉住快照恢复路径携带 pinned 戳；本仓库自有管线恢复
+        # （hydrate_from_local_source）写的是 LOCAL_STAMP_NAME，随文件
+        # 一起安装，绝不给本地数据贴 tech-db 来源。
+        shutil.copy2(candidate / STAMP_NAME, target / STAMP_NAME)
 
     installed = {path.name for path in target.iterdir() if path.is_file()}
     missing = candidate_names - installed
     if missing:
         raise RuntimeValidationError(f"runtime install omitted files: {sorted(missing)}")
+
+
+def local_source_dir() -> Path | None:
+    """本仓库自有管线发布视图（auto_pipeline 的产物源）。
+
+    第七节（2026-09-30）：缺失/损坏恢复的首选源头——存在且完整
+    （lite 分片 + manifest-data.js + conferences.json）才返回。
+    """
+    candidate = ROOT / "pipeline" / "data" / "processed"
+    required = ("manifest-data.js", "conferences.json")
+    if not candidate.is_dir():
+        return None
+    if not any(candidate.glob("lite-part-*.js")):
+        return None
+    for name in required:
+        path = candidate / name
+        if not path.is_file() or path.stat().st_size <= 0:
+            return None
+    return candidate
+
+
+def hydrate_from_local_source(source: Path) -> None:
+    """从本仓库自有管线发布视图恢复运行时（不触旧仓库、不需外网）。
+
+    与 publish_to_boundary 的镜像式安装同构：分片/清单/会议逐文件复制，
+    重建派生快照（预警/分类计数），写 local-pipeline 来源戳。
+    """
+    print(
+        f"Restoring breadth runtime from the local pipeline view: {source}",
+        flush=True,
+    )
+    with tempfile.TemporaryDirectory(prefix="techdb-breadth-local-") as temp:
+        staged = Path(temp)
+        staged_processed = staged / "processed"
+        staged_processed.mkdir(parents=True)
+
+        mirror_globs = ("lite-part-*.js", "meta-part-*.js", "summary-part-*.js")
+        copied = 0
+        for pattern in mirror_globs:
+            for path in sorted(source.glob(pattern)):
+                shutil.copy2(path, staged_processed / path.name)
+                copied += 1
+        for path in sorted(source.glob("records-*.json")):
+            shutil.copy2(path, staged_processed / path.name)
+            copied += 1
+        for name in ("manifest.json", "intelligence.json", "identity_disambiguation.json",
+                     "kp_as_verification.json", "graph-export.json",
+                     *required_local_files()):
+            path = source / name
+            if path.is_file():
+                shutil.copy2(path, staged_processed / name)
+                copied += 1
+        if copied == 0:
+            raise RuntimeValidationError(f"local pipeline view is empty: {source}")
+
+        # 来源戳先写，让安装后的 validate_installed 走 local-pipeline 分支
+        # （不与 tech-db 钉住常量比对）。装前只做结构校验——派生快照
+        # （alert/category-counts）此刻尚不存在，由 build_derived 生成。
+        manifest = parse_manifest_data(staged_processed / "manifest-data.js") \
+            if (staged_processed / "manifest-data.js").is_file() else {}
+        meta = manifest.get("meta", {}) if isinstance(manifest, dict) else {}
+        local_stamp = {
+            "schema": LOCAL_PIPELINE_SCHEMA,
+            "source": "local-pipeline",
+            "records_total": int(meta.get("records_total") or 0),
+            "data_version": str(meta.get("data_version") or "")[:12],
+            "total_shards": sum(1 for p in staged_processed.glob("lite-part-*.js")),
+            "generator": "scripts/hydrate_breadth_runtime.hydrate_from_local_source",
+        }
+        (staged_processed / LOCAL_STAMP_NAME).write_text(
+            json.dumps(local_stamp, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8")
+
+        errors = validate_structure(
+            staged_processed,
+            expected_records=int(meta.get("records_total") or 0),
+            expected_shards=sum(1 for p in staged_processed.glob("lite-part-*.js")),
+            expected_data_version=str(meta.get("data_version") or "")[:12],
+            expected_upstream_files=None,
+        )
+        if errors:
+            raise RuntimeValidationError(
+                "local-source runtime failed structure validation:\n- "
+                + "\n- ".join(errors))
+
+        build_derived(staged_data_dir(staged_processed))
+        install_candidate(staged_processed, PROCESSED_DIR)
+
+    errors = validate_installed()
+    if errors:
+        raise RuntimeValidationError(
+            "installed runtime failed validation:\n- " + "\n- ".join(errors))
+
+
+def required_local_files() -> tuple:
+    return ("manifest-data.js", "conferences.json")
+
+
+def staged_data_dir(staged_processed: Path) -> Path:
+    """build_derived 期望 --data-dir 指向 processed 的上级。"""
+    return staged_processed.parent
 
 
 def hydrate() -> None:
@@ -380,7 +519,13 @@ def main() -> int:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="download and replace the pinned runtime even when the current copy is valid",
+        help="restore the runtime even when the current copy is valid",
+    )
+    parser.add_argument(
+        "--legacy-upstream",
+        action="store_true",
+        help="(旧路径，显式选择) 从 tech-db 钉住快照下载。第七节起默认恢复"
+             "顺序不再访问旧仓库：优先本仓库自有管线发布视图重建。",
     )
     args = parser.parse_args()
 
@@ -404,6 +549,27 @@ def main() -> int:
             print(f"- {error}")
         if len(errors) > 12:
             print(f"- ... and {len(errors) - 12} more")
+    # 七节恢复顺序（2026-09-30）：① 本仓库自有管线发布视图（无外网、
+    # 不触旧仓库）→ ② 显式 --legacy-upstream 才下载 tech-db 钉住快照。
+    # 两者都不可用时给出明确处置指引，绝不静默依赖旧仓库。
+    if not args.legacy_upstream:
+        source = local_source_dir()
+        if source is not None:
+            try:
+                hydrate_from_local_source(source)
+            except (OSError, RuntimeValidationError, subprocess.CalledProcessError) as exc:
+                print(f"Local-source hydration failed: {exc}", file=sys.stderr)
+                return 1
+            print("Breadth runtime restored from the local pipeline view.", flush=True)
+            return 0
+        print(
+            "Local pipeline view missing (pipeline/data/processed needs lite "
+            "shards + manifest-data.js).\nRun `pipeline/auto_pipeline.py` to "
+            "publish, or pass --legacy-upstream to download the pinned "
+            "snapshot.",
+            file=sys.stderr,
+        )
+        return 1
     try:
         hydrate()
     except (OSError, RuntimeValidationError, subprocess.CalledProcessError) as exc:

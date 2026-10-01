@@ -85,6 +85,10 @@
         <button class="view-tab" data-view="reports" type="button">日报/周报/月报</button>
         <button class="view-tab" data-view="calendar" type="button">会议日历</button>
       </div>
+      <!-- 数据库问答（tech-db 原生视图，2026-10-01 完整接入） -->
+      <div class="view-tabs view-tabs-second" id="viewTabsSecond">
+        <button class="view-tab" data-view="qa" type="button">数据库问答</button>
+      </div>
       <div id="reportView" style="display:none">
         <div class="filter-block">
           <div class="filter-head"><span class="filter-title">报告类型</span></div>
@@ -134,6 +138,17 @@
         </div>
       </div>
 
+      <!-- 问答会话列表（qa 视图激活时显示） -->
+      <div id="qaSidebar" style="display:none">
+        <div class="filter-block">
+          <button class="qa-new-chat-btn" id="qaNewChatBtn" type="button">+ 新建对话</button>
+        </div>
+        <div class="filter-block qa-conv-block">
+          <div class="filter-head"><span class="filter-title">历史对话</span></div>
+          <div class="qa-conversation-list" id="qaConversationList"></div>
+        </div>
+      </div>
+
       <div class="filter-block">
         <div class="filter-head">
           <span class="filter-title">日期</span>
@@ -158,21 +173,14 @@
           <div class="type-inline-item" data-type-group="news">
             <span class="tree-checkbox checked" data-type-toggle="news"></span>
             <span class="type-inline-label" data-type-popover="news">新闻 <span class="type-inline-count" id="newsCount"></span> ▾</span>
-            <div class="type-popover" id="popover-news">
-              <div class="type-popover-item" data-type="news" data-tag="技术突破"><span class="tree-checkbox checked"></span>技术突破 <span class="leaf-count" id="cnt-tech"></span></div>
-              <div class="type-popover-item" data-type="news" data-tag="产业进展"><span class="tree-checkbox checked"></span>产业进展 <span class="leaf-count" id="cnt-industry"></span></div>
-              <div class="type-popover-item" data-type="news" data-tag="政策监管"><span class="tree-checkbox checked"></span>政策监管 <span class="leaf-count" id="cnt-policy"></span></div>
-              <div class="type-popover-item" data-type="news" data-tag="资本运作"><span class="tree-checkbox checked"></span>资本运作 <span class="leaf-count" id="cnt-capital"></span></div>
-              <div class="type-popover-item" data-type="news" data-tag="行业观察"><span class="tree-checkbox checked"></span>行业观察 <span class="leaf-count" id="cnt-observe"></span></div>
-            </div>
+            <!-- 子类列表由 app.js renderTypePopovers() 按 triage_engine v1.11 展示分类动态渲染（新闻 7 类） -->
+            <div class="type-popover" id="popover-news"></div>
           </div>
           <div class="type-inline-item" data-type-group="literature">
             <span class="tree-checkbox checked" data-type-toggle="literature"></span>
             <span class="type-inline-label" data-type-popover="literature">文献 <span class="type-inline-count" id="litCount"></span> ▾</span>
-            <div class="type-popover" id="popover-literature">
-              <div class="type-popover-item" data-type="literature" data-tag="研究论文"><span class="tree-checkbox checked"></span>研究论文 <span class="leaf-count" id="cnt-paper"></span></div>
-              <div class="type-popover-item" data-type="literature" data-tag="观点评论"><span class="tree-checkbox checked"></span>观点评论 <span class="leaf-count" id="cnt-review"></span></div>
-            </div>
+            <!-- 子类列表由 app.js renderTypePopovers() 按 triage_engine v1.11 展示分类动态渲染（文献 4 类） -->
+            <div class="type-popover" id="popover-literature"></div>
           </div>
         </div>
       </div>
@@ -190,6 +198,28 @@
       </div>
 
     </aside>
+
+    <!-- 数据库问答视图（qa 激活时替换主内容区；tech-db 原生结构） -->
+    <div id="qaView" class="qa-view" style="display:none">
+      <div class="qa-main" id="qaMain">
+        <div class="qa-empty-state" id="qaEmptyState">
+          <div class="qa-graph-container" id="qaGraphContainer"></div>
+          <div class="qa-empty-tagline">基于 canonical-qa 混合检索（向量 + BM25 + 图谱）回答</div>
+          <div class="qa-empty-stats" id="qaEmptyStats"></div>
+          <div class="qa-example-questions" id="qaExampleQuestions">
+            <div class="qa-example-item" data-q="固态电池最新研究进展有哪些？">固态电池最新研究进展有哪些？</div>
+            <div class="qa-example-item" data-q="钙钛矿太阳能电池的效率纪录是多少？">钙钛矿太阳能电池的效率纪录是多少？</div>
+            <div class="qa-example-item" data-q="CO2电催化还原的最新催化剂有哪些？">CO₂电催化还原的最新催化剂有哪些？</div>
+            <div class="qa-example-item" data-q="锂电池回收技术有哪些新突破？">锂电池回收技术有哪些新突破？</div>
+          </div>
+        </div>
+        <div class="qa-messages" id="qaMessages" style="display:none"></div>
+        <div class="qa-input-area">
+          <textarea class="qa-input" id="qaInput" placeholder="输入你的问题..." rows="1"></textarea>
+          <button class="qa-send-btn" id="qaSendBtn" type="button">发送</button>
+        </div>
+      </div>
+    </div>
 
     <main class="content">
       <div class="content-toolbar">
@@ -395,6 +425,7 @@
   <script src="data/category-order-data.js"></script>
   <script>/* 分类目录内嵌兜底：即使外部 category-order-data.js 与 category-order.json 均加载失败，分类树也能渲染。 */window.__CATEGORY_ORDER_INLINE__={"categories":["零碳产业/能量转化/能源测/一次能源转化/燃料转化（热/电）/化石燃料","零碳产业/能量转化/能源测/一次能源转化/燃料转化（热/电）/生物质燃料","零碳产业/能量转化/能源测/一次能源转化/太阳能转化/光伏","零碳产业/能量转化/能源测/一次能源转化/太阳能转化/光热","零碳产业/能量转化/能源测/一次能源转化/核电/聚变","零碳产业/能量转化/能源测/一次能源转化/核电/裂变","零碳产业/能量转化/能源测/一次能源转化/核电/核电池","零碳产业/能量转化/能源测/一次能源转化/水电","零碳产业/能量转化/能源测/一次能源转化/风电","零碳产业/能量转化/能源测/一次能源转化/其他发电技术","零碳产业/能量转化/能源测/二次能源利用/燃料电池","零碳产业/能量转化/能源测/二次能源利用/电加热/热泵","零碳产业/能量转化/能源测/二次能源利用/电加热/电锅炉","零碳产业/能量转化/能源测/二次能源利用/电加热/直接电加热（电阻/电弧加热）","零碳产业/能量转化/能源测/二次能源利用/制冷散热技术","零碳产业/能量转化/能源测/二次能源利用/电驱动（电机）","零碳产业/能量转化/能源测/二次能源利用/热驱动（热机）/内燃机","零碳产业/能量转化/能源测/二次能源利用/热驱动（热机）/外燃机","零碳产业/能量转化/能源测/二次能源利用/工业余热回收","零碳产业/能量转化/能量存储/电化学储能/二次电池/传统蓄电池/有机体系/锂电","零碳产业/能量转化/能量存储/电化学储能/二次电池/传统蓄电池/有机体系/钠电","零碳产业/能量转化/能量存储/电化学储能/二次电池/传统蓄电池/有机体系/其它体系","零碳产业/能量转化/能量存储/电化学储能/二次电池/传统蓄电池/水系","零碳产业/能量转化/能量存储/电化学储能/二次电池/传统蓄电池/固态电池","零碳产业/能量转化/能量存储/电化学储能/二次电池/液流电池","零碳产业/能量转化/能量存储/电化学储能/二次电池/其它电池体系","零碳产业/能量转化/能量存储/电化学储能/一次电池","零碳产业/能量转化/能量存储/电化学储能/超级电容器","零碳产业/能量转化/能量存储/储热/液态储热/水/油储热","零碳产业/能量转化/能量存储/储热/液态储热/熔盐储热","零碳产业/能量转化/能量存储/储热/固态储热","零碳产业/能量转化/能量存储/储热/压缩气体","零碳产业/能量转化/能量存储/储热/其他储热技术","零碳产业/能量转化/能量存储/化学能/氢基能源/氢能","零碳产业/能量转化/能量存储/化学能/氢基能源/可再生燃料/绿氨","零碳产业/能量转化/能量存储/化学能/氢基能源/可再生燃料/绿甲醇","零碳产业/能量转化/能量存储/化学能/氢基能源/可再生燃料/绿色油品","零碳产业/能量转化/能量存储/化学能/金属储能","零碳产业/能量转化/能量存储/化学能/其他化学能储能","零碳产业/能量转化/能量存储/机械能/重力储能","零碳产业/能量转化/能量存储/机械能/飞轮储能","零碳产业/能量转化/能量存储/其它储能技术","零碳产业/能量转化/能量分配与运输/电网相关技术","零碳产业/能量转化/能量分配与运输/虚拟电厂与电力交易","零碳产业/能量转化/能量分配与运输/能源载体管网/天然气管网","零碳产业/能量转化/能量分配与运输/能源载体管网/氢气管网","零碳产业/能量转化/能量分配与运输/能源载体管网/输油管道","零碳产业/能量转化/能量分配与运输/其它能量分配技术","零碳产业/物质循环/资源获取/勘探技术","零碳产业/物质循环/资源获取/开采技术","零碳产业/物质循环/资源获取/种植养殖技术","零碳产业/物质循环/资源加工/有机物/平台化工品/合成气平台","零碳产业/物质循环/资源加工/有机物/平台化工品/甲醇","零碳产业/物质循环/资源加工/有机物/平台化工品/氨","零碳产业/物质循环/资源加工/有机物/平台化工品/乙烯/丙烯/丁二烯","零碳产业/物质循环/资源加工/有机物/平台化工品/苯/甲苯/二甲苯","零碳产业/物质循环/资源加工/有机物/平台化工品/其它平台化工品","零碳产业/物质循环/资源加工/有机物/大宗化工产品/塑料","零碳产业/物质循环/资源加工/有机物/大宗化工产品/橡胶","零碳产业/物质循环/资源加工/有机物/大宗化工产品/纤维","零碳产业/物质循环/资源加工/有机物/大宗化工产品/其它大宗化工产品","零碳产业/物质循环/资源加工/无机物/金属/钢铁","零碳产业/物质循环/资源加工/无机物/金属/铝业","零碳产业/物质循环/资源加工/无机物/金属/铜业","零碳产业/物质循环/资源加工/无机物/金属/稀土产业","零碳产业/物质循环/资源加工/无机物/金属/其它金属产业","零碳产业/物质循环/资源加工/无机物/非金属/水泥","零碳产业/物质循环/资源加工/无机物/非金属/玻璃","零碳产业/物质循环/资源加工/无机物/非金属/陶瓷","零碳产业/物质循环/资源加工/无机物/非金属/其它无机非金属","零碳产业/物质循环/资源加工/无机物/无机化工/酸","零碳产业/物质循环/资源加工/无机物/无机化工/碱","零碳产业/物质循环/资源加工/无机物/无机化工/尿素","零碳产业/物质循环/资源回收利用与排放治理/物质回收","零碳产业/物质循环/资源回收利用与排放治理/梯次利用","零碳产业/物质循环/资源回收利用与排放治理/碳捕集/液态碱性吸收","零碳产业/物质循环/资源回收利用与排放治理/碳捕集/固态胺吸附","零碳产业/物质循环/资源回收利用与排放治理/碳捕集/膜分离","零碳产业/物质循环/资源回收利用与排放治理/碳捕集/矿化技术","零碳产业/物质循环/资源回收利用与排放治理/碳捕集/ph swing","零碳产业/物质循环/资源回收利用与排放治理/碳捕集/其它碳捕集技术","零碳产业/物质循环/资源回收利用与排放治理/固废处理","零碳产业/物质循环/资源回收利用与排放治理/污水处理","零碳产业/物质循环/资源回收利用与排放治理/其他环境治理","AI与智能科技/AI软件层/底座大模型/文本模型","AI与智能科技/AI软件层/底座大模型/多模态模型","AI与智能科技/AI软件层/工程改进","AI与智能科技/AI软件层/AI4S","AI与智能科技/AI硬件层/半导体","AI与智能科技/AI硬件层/芯片","AI与智能科技/AI硬件层/计算集群","AI与智能科技/AI硬件层/数据中心","AI与智能科技/AI硬件层/算力能源基础设施","AI与智能科技/其它智能科技/脑机接口和神经科学","AI与智能科技/其它智能科技/量子信息和量子计算","AI与智能科技/具身智能/模型和具身操作系统","AI与智能科技/具身智能/硬件和控制","AI与智能科技/具身智能/供能和换电生态","通用技术/检测和表征/先进科学仪器","通用技术/检测和表征/传感器","通用技术/通信和运输/信息传输/微波","通用技术/通信和运输/信息传输/光纤","通用技术/通信和运输/信息传输/其它信息传输技术","通用技术/通信和运输/物质运输/航天","通用技术/通信和运输/物质运输/航空","通用技术/通信和运输/物质运输/陆路运输","通用技术/通信和运输/物质运输/水路运输","通用技术/基础学科/数学","通用技术/基础学科/基础物理","通用技术/基础学科/基础化学","通用技术/基础学科/医学&生物学","通用技术/计算仿真技术/原子层级/第一性原理","通用技术/计算仿真技术/原子层级/分子动力学","通用技术/计算仿真技术/宏观/经验关系式","通用技术/计算仿真技术/宏观/偏微分方程数值求解","通用技术/材料工程/特种功能材料/介电/导电材料","通用技术/材料工程/特种功能材料/导热/耐热材料","通用技术/材料工程/特种功能材料/磁性材料","通用技术/材料工程/特种功能材料/催化材料","通用技术/材料工程/特种功能材料/结构强度材料","通用技术/材料工程/特种功能材料/隔离材料（膜材料/密封材料）","通用技术/材料工程/纳米工程","通用技术/材料工程/防腐蚀技术","通用技术/材料工程/其它先进材料","通用技术/工艺和工程"]};</script>
   <script src="app.js?v=150"></script>
+  <script src="qa.js?v=1"></script>
   <script>
     // Information Sources Panel Data
     window.__SOURCES__ = {

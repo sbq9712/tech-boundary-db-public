@@ -30,8 +30,18 @@ def main() -> None:
     processed = args.data_dir / "processed"
     output = processed / "alert-records.json"
 
-    manifest = json.loads((processed / "manifest.json").read_text(encoding="utf-8"))
-    generated_at = manifest.get("meta", {}).get("processed_at", "")
+    # 与 build_breadth_category_counts.manifest_meta 对齐：优先内联 manifest-data.js
+    # （现行数据契约），回退旧 manifest.json；两者皆无 → 空 meta（冷启动容错）。
+    inline_path = processed / "manifest-data.js"
+    manifest_path = processed / "manifest.json"
+    generated_at = ""
+    if inline_path.exists():
+        raw = inline_path.read_text(encoding="utf-8")
+        start, end = raw.find("{"), raw.rfind("}")
+        if start >= 0 and end >= start:
+            generated_at = json.loads(raw[start:end + 1]).get("meta", {}).get("processed_at", "")
+    elif manifest_path.exists():
+        generated_at = json.loads(manifest_path.read_text(encoding="utf-8")).get("meta", {}).get("processed_at", "")
 
     raw_records: list[dict] = []
     for path in sorted(processed.glob("lite-part-*.js"), key=part_number):

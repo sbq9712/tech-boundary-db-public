@@ -1,0 +1,31 @@
+== A 冷启动（三源 7 行）==
+  PASS A 管线退出码 0/3（部分维护失败允许）
+  PASS A lite 恰有 7 条
+  PASS A 新闻入库
+  PASS A 文献入库（载体 l）
+  PASS A 微信入库
+  PASS A 引擎分诊落地（至少 1 条获得分类/不相关判定）
+  PASS A 离线降级：无伪造摘要
+  PASS F manifest 记录总数 = 7
+  PASS F 分片族 lite 非空
+  PASS F 分片族 meta 非空
+  PASS F 分片族 summary 非空
+  PASS F state 只提交成功文件
+== B 记录更新（news 文件修订，a1 内容改写）==
+  PASS B 退出码 0/3
+  PASS B 检测到内容修订（[rev]）
+  PASS B a1 更新后正文含 40%
+  PASS B 总数仍 7（更新不重复入库）
+== C 记录删除（wechat 删 1 行）==
+  PASS C 退出码 0/3
+  PASS C 被删记录已从 lite 移除
+  PASS C 总数 6
+== D 新增文件（news 09-16）==
+  PASS D 退出码 0/3
+  PASS D 新记录入库（总数 7）
+== E QA 三路索引同步（真实 sync_qa_index → 隔离替身）==
+  PASS E 退出码 0/3
+  PASS E 收尾维护执行（报告/同步）
+  PASS F 报告目录生成（daily/weekly/monthly 或空容错）
+
+==== 结果：24/24 通过 ====

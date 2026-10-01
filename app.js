@@ -790,8 +790,8 @@ function renderKnowledgeGraphCanvas(container,data){
        仅选中态的关联线逐条用双色渐变 + 底层辉光——视觉无差，帧成本大降 */
       if(!focus){ctx.strokeStyle='rgba(99,112,180,.07)';ctx.lineWidth=1.1/transform.scale;ctx.beginPath();edges.forEach((edge,ei)=>{const geo=edgeGeom(ei);ctx.moveTo(geo.a.x,geo.a.y);ctx.quadraticCurveTo(geo.cx,geo.cy,geo.b.x,geo.b.y);});ctx.stroke();}
       else{edges.forEach((edge,ei)=>{const geo=edgeGeom(ei);const a=geo.a,b=geo.b;const lit=(a===focus||b===focus);const al=lit?.55:.06;
-        if(lit){/* 关联线辉光：宽笔低透明底层 + 双色渐变主线 */ctx.save();ctx.globalAlpha=.26;ctx.lineWidth=3.4/transform.scale;ctx.strokeStyle='rgba(99,102,241,.5)';ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(geo.cx,geo.cy,b.x,b.y);ctx.stroke();ctx.restore();}
-        const g=ctx.createLinearGradient(a.x,a.y,b.x,b.y);g.addColorStop(0,withAlpha(a.color,al));g.addColorStop(1,withAlpha(b.color,al));ctx.strokeStyle=g;ctx.lineWidth=(lit?1.7:1.1)/transform.scale;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(geo.cx,geo.cy,b.x,b.y);ctx.stroke();});}if(edges.length){if(pulses.length<24&&Math.random()<.1)pulses.push({ei:(Math.random()*edges.length)|0,t:0,sp:.005+Math.random()*.007});for(let pi=pulses.length-1;pi>=0;pi--){const pu=pulses[pi];pu.t+=pu.sp;if(pu.t>=1){pulses.splice(pi,1);continue;}const geo=edgeGeom(pu.ei);const u=1-pu.t;const px=u*u*geo.a.x+2*u*pu.t*geo.cx+pu.t*pu.t*geo.b.x;const py=u*u*geo.a.y+2*u*pu.t*geo.cy+pu.t*pu.t*geo.b.y;const pg=ctx.createRadialGradient(px,py,0,px,py,5);pg.addColorStop(0,'rgba(129,140,248,.55)');pg.addColorStop(1,'rgba(129,140,248,0)');ctx.fillStyle=pg;ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(px,py,1.7,0,Math.PI*2);ctx.fillStyle='rgba(165,180,252,.95)';ctx.fill();ctx.beginPath();ctx.arc(px,py,.85,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.95)';ctx.fill();}}nodes.forEach(node=>{const tw=.8+.2*Math.sin(t*.0012*node.tw+node.phase);const glint=.5+.5*Math.sin(t*.0016*node.tw+node.phase*1.7);if(node===focus){ctx.beginPath();ctx.arc(node.x,node.y,node.radius+7,0,Math.PI*2);ctx.fillStyle='rgba(99,102,241,.07)';ctx.fill();ctx.beginPath();ctx.arc(node.x,node.y,node.radius+3.5,0,Math.PI*2);ctx.strokeStyle='rgba(99,102,241,.45)';ctx.lineWidth=1.4/transform.scale;ctx.stroke();}
+        if(lit){/* 关联线辉光：细描边柔光 + 双色渐变主线（选中态适度加粗，不过分笨重） */ctx.save();ctx.globalAlpha=.20;ctx.lineWidth=2.1/transform.scale;ctx.strokeStyle='rgba(99,102,241,.42)';ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(geo.cx,geo.cy,b.x,b.y);ctx.stroke();ctx.restore();}
+        const g=ctx.createLinearGradient(a.x,a.y,b.x,b.y);g.addColorStop(0,withAlpha(a.color,al));g.addColorStop(1,withAlpha(b.color,al));ctx.strokeStyle=g;ctx.lineWidth=(lit?1.35:1.1)/transform.scale;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(geo.cx,geo.cy,b.x,b.y);ctx.stroke();});}if(edges.length){if(pulses.length<24&&Math.random()<.1)pulses.push({ei:(Math.random()*edges.length)|0,t:0,sp:.005+Math.random()*.007});for(let pi=pulses.length-1;pi>=0;pi--){const pu=pulses[pi];pu.t+=pu.sp;if(pu.t>=1){pulses.splice(pi,1);continue;}const geo=edgeGeom(pu.ei);const u=1-pu.t;const px=u*u*geo.a.x+2*u*pu.t*geo.cx+pu.t*pu.t*geo.b.x;const py=u*u*geo.a.y+2*u*pu.t*geo.cy+pu.t*pu.t*geo.b.y;const pg=ctx.createRadialGradient(px,py,0,px,py,5);pg.addColorStop(0,'rgba(129,140,248,.55)');pg.addColorStop(1,'rgba(129,140,248,0)');ctx.fillStyle=pg;ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(px,py,1.7,0,Math.PI*2);ctx.fillStyle='rgba(165,180,252,.95)';ctx.fill();ctx.beginPath();ctx.arc(px,py,.85,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.95)';ctx.fill();}}nodes.forEach(node=>{const tw=.8+.2*Math.sin(t*.0012*node.tw+node.phase);const glint=.5+.5*Math.sin(t*.0016*node.tw+node.phase*1.7);if(node===focus){ctx.beginPath();ctx.arc(node.x,node.y,node.radius+7,0,Math.PI*2);ctx.fillStyle='rgba(99,102,241,.07)';ctx.fill();ctx.beginPath();ctx.arc(node.x,node.y,node.radius+3.5,0,Math.PI*2);ctx.strokeStyle='rgba(99,102,241,.45)';ctx.lineWidth=1.4/transform.scale;ctx.stroke();}
       /* 分层光晕：内圈润泽 + 外圈弥漫 */
       if(node.radius>=5.5){const halo=ctx.createRadialGradient(node.x,node.y,node.radius*.35,node.x,node.y,node.radius*3);halo.addColorStop(0,withAlpha(node.color,.22*tw));halo.addColorStop(.55,withAlpha(node.color,.07*tw));halo.addColorStop(1,withAlpha(node.color,0));ctx.fillStyle=halo;ctx.beginPath();ctx.arc(node.x,node.y,node.radius*3,0,Math.PI*2);ctx.fill();}
       /* 衍射星芒：主星十字四芒（亮度随闪烁呼吸），大星加短斜芒 */
@@ -2344,11 +2344,20 @@ function openUploadModal(section,sub){
     <div class="lib-upload-body">
       <div class="lib-upload-drop" id="upDrop"><input id="upInput" type="file" multiple hidden><div class="lib-upload-hint">拖曳文件至此处，或 <button class="lib-upload-pick" id="upPick" type="button">点击选择文件</button></div><div class="lib-upload-types">支持当前 Docling 文档格式（含扫描件、图片与演示文稿），后台完成解析与索引</div></div>
       <div class="lib-upload-tablewrap" id="upTableWrap" hidden><table class="lib-upload-table"><thead><tr><th>文件</th><th>资料标题</th><th>资料日期</th><th>行业图景节点</th><th>备注</th><th></th></tr></thead><tbody id="upList"></tbody></table></div>
+      <div id="upSyncBreadthWrap" style="display:none;margin-top:10px;font-size:13px;color:var(--text-secondary,#475467);">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="upSyncBreadth">
+          同步上传到广度情报（资料保留在当前栏目，同时在广度追踪显示并可被问答检索）
+        </label>
+      </div>
+      <div id="upRowMapWrap" hidden style="margin-top:10px;"></div>
       <div class="lib-upload-result" id="upResult" style="display:none;"></div>
     </div>
     <div class="lib-upload-actions"><button class="secondary-btn" id="upCancel" type="button">取消</button><button class="primary-btn" id="upSubmit" type="button" disabled>上传</button></div>
   </div>`;
   document.body.appendChild(overlay);
+  const syncWrap=document.getElementById("upSyncBreadthWrap");
+  if(syncWrap)syncWrap.style.display=(upSection==="industry"||upSection==="atsc")?"block":"none";
   const drop=document.getElementById("upDrop"),input=document.getElementById("upInput");
   apiFetch("/api/uploads/formats").then(r=>r&&r.ok?r.json():null).then(data=>{
     if(!data)return;
@@ -2460,12 +2469,108 @@ function bindUpDateSegments(tr,f){
   });}
   box.classList.add("bound");
 }
+function upIsTableRowFile(name){
+  return /\.(xlsx|csv)$/i.test(name||"");
+}
+/* 表格逐行模式（三.2，2026-10-01 重构）：预览/导入方式/工作表/列映射全部
+   按文件独立——此前所有表格文件共享 #upRowMapWrap 且固定读 sheets[0]，
+   多文件相互覆盖配置、无法选用非首个工作表。配置状态保存在各自文件条目：
+   f._previewSheets（全部工作表）、f.rowMode、f.rowSheet、f.rowMapping；
+   提交时逐文件使用自己的配置。 */
+function upGuessMapping(headers){
+  const aliases={title:["标题","题目","title","名称"],date:["日期","date","时间"],url:["链接","网址","url"],body:["正文","内容","body"],summary:["摘要","summary"],level:["等级","级别","level"],source:["来源","媒体","source"],category:["分类","类别","行业","category"]};
+  const m={};
+  for(const slot of Object.keys(aliases)){
+    for(const k of aliases[slot]){const hit=headers.find(h=>h.toLowerCase().includes(k));if(hit){m[slot]=hit;break;}}
+  }
+  if(!m.title)m.title=headers[0]||""; /* title 必映射：兜底取首列 */
+  return m;
+}
+async function upLoadRowPreview(f){
+  const token=window.Auth&&typeof Auth.getToken==='function'?Auth.getToken():(localStorage.getItem('auth_token')||'');
+  try{
+    const fd=new FormData();fd.append("file",f);
+    const resp=await fetch('/api/uploads/row-preview',{method:'POST',body:fd,headers:token?{'Authorization':'Bearer '+token}:{}});
+    if(!resp.ok){const j=await resp.json().catch(()=>({}));f._previewError=(j.detail||resp.status);upRenderList();upShowResult("表格预览失败："+(j.detail||resp.status),"err");return;}
+    const data=await resp.json();
+    if(!data.sheets||!data.sheets.length){f._previewError="没有可用工作表";upRenderList();upShowResult("表格中没有可用工作表","err");return;}
+    f._previewSheets=data.sheets;delete f._previewError;
+    f.rowMode=f.rowMode||"row";
+    f.rowSheet=f.rowSheet||data.sheets[0].name;
+    f.rowMapping=f.rowMapping||upGuessMapping(data.sheets[0].headers||[]);
+    upRenderList();
+  }catch(e){f._previewError=String(e);upRenderList();upShowResult("表格预览失败："+e,"err");}
+}
+/* 单个表格文件的独立配置弹窗（三.2）：工作表下拉（含非首个工作表）+
+   导入方式 + 语义槽位列映射，全部读写该文件条目自身的状态。 */
+function upOpenRowCfg(idx){
+  const f=upPending[idx];if(!f)return;
+  if(!f._previewSheets){upLoadRowPreview(f).then(()=>{if(f._previewSheets)upOpenRowCfg(idx);});return;}
+  const sheets=f._previewSheets;
+  document.getElementById("upRowCfgOverlay")?.remove();
+  const ov=document.createElement("div");
+  ov.id="upRowCfgOverlay";
+  ov.style.cssText="position:fixed;inset:0;z-index:1010;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:24px 16px;";
+  const slotRows=(headers)=>["title","date","url","body","summary","level","source","category"].map(slot=>{
+    const label={title:"标题 *",date:"日期",url:"链接",body:"正文",summary:"摘要",level:"等级",source:"来源",category:"分类"}[slot];
+    const opts='<option value="">（不映射）</option>'+headers.map(h=>`<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join("");
+    const cur=(f.rowMapping||{})[slot]||"";
+    return `<tr><td>${label}</td><td><select data-slot="${slot}">${opts}</select></td></tr>`;
+  }).join("");
+  const renderBody=(sheetName)=>{
+    const sheet=sheets.find(s=>s.name===sheetName)||sheets[0];
+    const headers=sheet.headers||[];
+    return `<div style="margin-bottom:10px;"><label style="font-size:13px;">工作表：
+      <select id="upCfgSheet" style="margin-left:6px;">${sheets.map(s=>`<option value="${escapeHtml(s.name)}" ${s.name===sheet.name?"selected":""}>${escapeHtml(s.name)}（${s.total_rows??(s.rows||[]).length} 行）</option>`).join("")}</select></label></div>
+      <div style="margin-bottom:10px;font-size:13px;">导入方式：
+      <label style="margin-right:14px;"><input type="radio" name="upCfgMode" value="row" ${(f.rowMode||"row")==="row"?"checked":""}> 每行一个情报</label>
+      <label><input type="radio" name="upCfgMode" value="file" ${f.rowMode==="file"?"checked":""}> 整个文件一个情报</label></div>
+      <div class="lib-upload-tablewrap" style="max-height:300px;overflow:auto;"><table class="lib-upload-table"><thead><tr><th>语义槽位</th><th>表格列（必映射：标题）</th></tr></thead><tbody>${slotRows(headers)}</tbody></table></div>`;
+  };
+  ov.innerHTML=`<div class="lib-upload-dialog" role="dialog" aria-modal="true" aria-label="表格导入配置" style="margin:auto;max-width:560px;width:100%;">
+    <div class="lib-upload-head"><h2>表格导入配置：${escapeHtml(f.name)}</h2><button class="lib-upload-close" id="upCfgClose" type="button" aria-label="关闭">✕</button></div>
+    <div class="lib-upload-body" id="upCfgBody">${renderBody(f.rowSheet)}</div>
+    <div class="lib-upload-actions"><button class="secondary-btn" id="upCfgCancel" type="button">取消</button><button class="primary-btn" id="upCfgSave" type="button">保存配置</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const bindBody=()=>{
+    ov.querySelector("#upCfgSheet").addEventListener("change",(e)=>{
+      const ns=e.target.value;const sheet=sheets.find(s=>s.name===ns);
+      /* 换工作表：保留在新表头中仍存在的已选列，缺失槽位重新猜测 */
+      const headers=sheet.headers||[];const old=f.rowMapping||{};
+      const kept={};for(const k of Object.keys(old)){if(headers.includes(old[k]))kept[k]=old[k];}
+      f.rowSheet=ns;
+      f.rowMapping=Object.assign(upGuessMapping(headers),kept);
+      ov.querySelector("#upCfgBody").innerHTML=renderBody(ns);
+      const sel=ov.querySelector("#upCfgBody");
+      for(const slot of Object.keys(f.rowMapping)){const el=sel.querySelector(`[data-slot="${slot}"]`);if(el&&f.rowMapping[slot])el.value=f.rowMapping[slot];}
+      bindBody();
+    });
+  };
+  for(const slot of Object.keys(f.rowMapping||{})){const el=ov.querySelector(`[data-slot="${slot}"]`);if(el&&f.rowMapping[slot])el.value=f.rowMapping[slot];}
+  bindBody();
+  ov.querySelector("#upCfgClose").onclick=()=>ov.remove();
+  ov.querySelector("#upCfgCancel").onclick=()=>ov.remove();
+  ov.querySelector("#upCfgSave").onclick=()=>{
+    f.rowMode=ov.querySelector('input[name="upCfgMode"]:checked').value;
+    f.rowSheet=ov.querySelector("#upCfgSheet").value;
+    const m={};ov.querySelectorAll("[data-slot]").forEach(sel=>{if(sel.value)m[sel.dataset.slot]=sel.value;});
+    f.rowMapping=m;
+    ov.remove();upRenderList();
+  };
+}
+function upRowCfgLabel(f){
+  if(f._previewError)return "预览失败";
+  if(!f._previewSheets)return "读取中…";
+  return f.rowMode==="file"?"整文件导入":(f.rowSheet||"配置映射");
+}
 function upAddFiles(fileList){
   const duplicated=[];
   for(const f of fileList){
 
     if(upPending.some(x=>x.name===f.name&&x.size===f.size)){duplicated.push(f.name);continue;}
     upPending.push(f);
+    if(upIsTableRowFile(f.name))upLoadRowPreview(f);
   }
   if(duplicated.length)upShowResult("已添加过（未重复加入）："+duplicated.join("、"),"");
   upRenderList();
@@ -2487,17 +2592,20 @@ function upRenderList(){
   if(dialog)dialog.classList.toggle("has-table",has);
   list.innerHTML=upPending.map((f,i)=>{
     const meta=upRowStateMeta(f);
+    const rowLocked=upIsTableRowFile(f.name)&&(f.rowMode||"row")==="row"&&f.rowSheet; /* 逐行模式：日期来自各行 */
     return `<tr data-up-row="${i}" class="${meta.cls.trim()}">
       <td class="lib-up-fname" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}<small>${libFmtSize(f.size)}</small></td>
       <td><input class="lib-upload-input lib-up-title" type="text" placeholder="留空则自动识别" aria-label="资料标题" value="${escapeHtml(f.upTitle||"")}"></td>
-      <td><div class="lib-up-datebox" data-up-datebox="${i}">
+      <td><div class="lib-up-datebox" data-up-datebox="${i}" ${rowLocked?'title="逐行模式：日期取自每行的日期列，无需文件级日期"':""}>
+        <fieldset ${rowLocked?'disabled':""} style="border:0;padding:0;margin:0;display:inline;">
         <input class="lib-upload-input lib-up-seg lib-up-seg-y" inputmode="numeric" maxlength="4" placeholder="YYYY" aria-label="资料日期 年" value="${escapeHtml(f.upY||"")}">/<input class="lib-upload-input lib-up-seg lib-up-seg-m" inputmode="numeric" maxlength="2" placeholder="MM" aria-label="资料日期 月" value="${escapeHtml(f.upM||"")}">/<input class="lib-upload-input lib-up-seg lib-up-seg-d" inputmode="numeric" maxlength="2" placeholder="DD" aria-label="资料日期 日" value="${escapeHtml(f.upD||"")}">
         <input class="lib-up-native-date" type="date" tabindex="-1" aria-hidden="true" value="${escapeHtml(f.upDate||"")}">
         <button class="lib-up-cal" type="button" aria-label="打开日历选择资料日期" title="日历选择"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
+        </fieldset>
       </div></td>
       <td><select class="lib-upload-input lib-up-cat" aria-label="行业图景节点">${upTaxonomy?upTaxonomyOptions():'<option value="">不指定，通过AI自动识别</option>'}</select></td>
       <td><input class="lib-upload-input lib-up-note" type="text" placeholder="选填" aria-label="备注" value="${escapeHtml(f.upNote||"")}"></td>
-      <td class="lib-up-op"><span class="lib-up-state">${escapeHtml(meta.text)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
+      <td class="lib-up-op">${upIsTableRowFile(f.name)?`<button class="lib-upload-rm" type="button" data-up-cfg="${i}" title="导入方式 / 工作表 / 列映射">${escapeHtml(upRowCfgLabel(f))}</button>`:""}<span class="lib-up-state">${escapeHtml(meta.text)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
     </tr>`;}).join("");
   /* 已选分类回显（value 不能直接内联在 select 上） */
   list.querySelectorAll("[data-up-row]").forEach(tr=>{
@@ -2505,6 +2613,7 @@ function upRenderList(){
     if(f&&f.upCat){const sel=tr.querySelector(".lib-up-cat");if(sel)sel.value=f.upCat;}
   });
   list.querySelectorAll("button[data-up-rm]").forEach(b=>b.onclick=()=>{upPending.splice(Number(b.dataset.upRm),1);upRenderList();});
+  list.querySelectorAll("button[data-up-cfg]").forEach(b=>b.onclick=()=>upOpenRowCfg(Number(b.dataset.upCfg)));
   upBindRowInputs();
   const submit=document.getElementById("upSubmit");
   if(submit)submit.disabled=upPending.length===0;
@@ -2555,14 +2664,45 @@ async function upSubmit(){
   if(!targets.length)return;
   let dateErr=0;
   for(const f of targets){
+    /* 逐行模式的表格文件：日期来自各行，不要求/不提交文件级日期（四.2） */
+    if(upIsTableRowFile(f.name)&&(f.rowMode||"row")==="row"&&f.rowSheet)continue;
     if(upNormalizeDate(f.upDate)==null){f.upState="err";f.upMsg="✗ 日期";dateErr++;}
   }
   if(dateErr){upRenderList();upShowResult(`${dateErr} 行的资料日期不合法——已标红，请修正后再上传`,"err");submit.disabled=false;return;}
   submit.disabled=true;cancel.disabled=true;
   upShowResult("正在上传…","");
   let ok=0,fail=0;
+  const syncBreadthEl=document.getElementById("upSyncBreadth");
+  const syncBreadth=!!(syncBreadthEl&&syncBreadthEl.checked);
   for(const f of targets){
     const fd=new FormData();
+    /* 表格逐行模式（.xlsx/.csv，四.1 可选）：每行一个情报；首次添加该文件时
+       已取得列映射。f.rowMode==="file" 时走通用文件路径（Docling 理解 + 分块，
+       可选文件级资料日期）。 */
+    if(upIsTableRowFile(f.name)&&(f.rowMode||"row")==="row"){
+      if(!f.rowMapping){fail++;f.upState="err";f.upMsg="✗ 缺少列映射";upRenderList();continue;}
+      fd.append("files",f);
+      fd.append("row_mode","true");
+      fd.append("column_mapping",JSON.stringify(f.rowMapping));
+      if(f.rowSheet)fd.append("sheet",f.rowSheet);
+      if(f.upTitle)fd.append("title",f.upTitle);
+      if(f.upNote)fd.append("note",f.upNote);
+      if(upSection)fd.append("primary_section",upSection);
+      if(upSection==="breadth"&&upSub)fd.append("breadth_source",upSub);
+      /* 三.1：行业/ATSC 逐行分支此前漏传同步开关——勾选后行记录须同时进主导航广度 */
+      if(syncBreadth&&(upSection==="industry"||upSection==="atsc"))fd.append("sync_upload_to_breadth","true");
+      /* 不提交文件级日期：行日期缺失时行内为空，不静默替代（四.2/三.3） */
+      f.upState="uploading";f.upMsg="";
+      upRenderList();
+      try{
+        const r=await apiFetch("/api/uploads",{method:"POST",body:fd});
+        if(r&&r.ok){ok++;const j=await r.json().catch(()=>({}));const st=j.row_import||{};
+          f.upState="done";f.upMsg=`✓ ${st.imported??0} 行`+(st.skipped_duplicate?` 去重${st.skipped_duplicate}`:"")+(st.skipped_empty?` 空行${st.skipped_empty}`:"")+(st.rows_missing_date?` 空日期${st.rows_missing_date}`:"")+(st.rows_invalid_date?` 非法日期${st.rows_invalid_date}`:"");}
+        else{fail++;const j=r?await r.json().catch(()=>({})):{};f.upState="err";f.upMsg="✗ "+(j.detail||("HTTP "+(r?r.status:"")));}
+      }catch(e){fail++;f.upState="err";f.upMsg="✗ 网络错误";}
+      upRenderList();
+      continue;
+    }
     fd.append("files",f);
     if(f.upTitle)fd.append("title",f.upTitle);
     if(f.upCat)fd.append("primary_category",f.upCat);
@@ -2570,6 +2710,7 @@ async function upSubmit(){
     /* 分区归属：由当前入口决定，持久化到后端 */
     if(upSection)fd.append("primary_section",upSection);
     if(upSection==="breadth"&&upSub)fd.append("breadth_source",upSub);
+    if(syncBreadth&&(upSection==="industry"||upSection==="atsc"))fd.append("sync_upload_to_breadth","true");
     const docDate=upNormalizeDate(f.upDate);
     if(docDate)fd.append("document_date",docDate);
     f.upState="uploading";f.upMsg="";

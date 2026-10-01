@@ -20,6 +20,18 @@ function fuzzyMatch(haystack, q) {
   document.documentElement.setAttribute('data-theme', 'light');
 })();
 
+// triage_engine v1.11 展示分类。页面菜单以这 7+4 为主顺序，同时会
+// 自动显示数据中出现的未来新增分类；旧 5+2 仅作为尚未全量 retriage
+// 的历史记录兼容项，并明确标注“旧数据”。
+const TRIAGE_TYPE_TAGS = {
+  news: ['知识资产','工程与产业化','企业经营、合作与资本','资源、市场与产业链','政策、法规与标准','人才与组织动态','观点与交流'],
+  literature: ['综述','研究型','分析类','新闻/评论/观点'],
+};
+const LEGACY_TYPE_TAGS = {
+  news: new Set(['技术突破','产业进展','政策监管','资本运作','行业观察']),
+  literature: new Set(['研究论文','观点评论']),
+};
+
 const state = {
   manifest: null,
   records: [],
@@ -726,10 +738,12 @@ async function load() {
     // 搜索/分类/日期/等级视图/计数自动与上游记录一致，同一记录只出现一次。
     try {
       const token = (window.Auth && typeof Auth.getToken === 'function') ? Auth.getToken() : (localStorage.getItem('auth_token') || '');
-      // GitHub增量包导入后 manual-records 可能超过单页上限：分页拉全（每页 2000，至多 20 页）
+      // GitHub增量包导入后 manual-records 可能超过单页上限：分页拉全。
+      // 以服务端 count 为唯一停止条件（页数不设上限——固定页数上限会在
+      // 导入记录超过其值时静默漏显；2000×20=4万 即历史缺陷值）。
       const manual = [];
       let total = Infinity;
-      for (let page = 0; page < 20 && manual.length < total; page++) {
+      for (let page = 0; manual.length < total; page++) {
         const resp = await fetch('/api/breadth/manual-records?limit=2000&offset=' + (page * 2000), {
           headers: token ? { 'Authorization': 'Bearer ' + token } : {},
         });
@@ -752,7 +766,12 @@ async function load() {
             sc: m.sc, scd: (m.scd && typeof m.scd === 'object' && Object.keys(m.scd).length) ? m.scd : null,
             source: 'manual-import', lv_manual: true, upload_id: m.upload_id,
             record_id: m.id, kp: m.kp || [], hb: m.hb || 1,
-            b: m.body || '', fb: m.body || '', as: m.ai_summary || '',
+            // tg/tp/aip + wr/dp/cl 等 AI 链路字段：随 record_json 透出，
+            // 不再在合并层丢失（导入丢 AI 精选/标签/主题字段的修复）
+            tg: m.tg || '', tp: m.tp || '', aip: m.aip || 0,
+            wr: m.wr || '', dp: m.dp || 0,
+            cl: m.cl, cp: m.cp, cln: m.cln,
+            b: m.body || '', fb: m.body || '', as: m.ai_summary || m.as || '',
           });
         }
       }
@@ -951,10 +970,34 @@ function getFilteredForCounts(exclude = 'none') {
   });
 }
 
+function renderTypePopovers(tagCountsByType) {
+  for (const type of ['news', 'literature']) {
+    const pop = $('popover-' + type);
+    if (!pop) continue;
+    const counts = tagCountsByType[type] || {};
+    const canonical = TRIAGE_TYPE_TAGS[type] || [];
+    const canonicalSet = new Set(canonical);
+    const extras = Object.keys(counts)
+      .filter(tag => tag && !canonicalSet.has(tag))
+      .sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    const rows = [
+      ...canonical.map(tag => ({ tag, legacy: false })),
+      ...extras.map(tag => ({ tag, legacy: LEGACY_TYPE_TAGS[type]?.has(tag) || false })),
+    ];
+    pop.innerHTML = rows.map(({ tag, legacy }) => {
+      const count = counts[tag] || 0;
+      const label = legacy ? `${tag}（旧数据）` : tag;
+      return `<div class="type-popover-item" data-type="${type}" data-tag="${esc(tag)}"><span class="tree-checkbox checked"></span>${esc(label)} <span class="leaf-count">${count.toLocaleString()}</span></div>`;
+    }).join('');
+  }
+}
+
 function renderHeader() {
-  // Count by type/tag — exclude 'type' filter so type counts reflect other filters
+  // Count by type/tag — exclude 'type' filter so type counts reflect other filters.
+  // Tag counts are separated by carrier because triage_engine owns independent
+  // news/literature display taxonomies.
   const filtered = getFilteredForCounts('type');
-  const tagCounts = {};
+  const tagCounts = { news: {}, literature: {} };
   let newsTotal = 0, litTotal = 0;
   const isCrawl = state.alertLevel === 'crawl';
   for (const item of filtered) {
@@ -963,42 +1006,36 @@ function renderHeader() {
       if (item.cluster_parent === 1) continue;
       if (item.is_dup) continue;
     }
-    if (item.intelligence_type === 'news') newsTotal++;
-    if (item.intelligence_type === 'literature') litTotal++;
-    if (item.tag) tagCounts[item.tag] = (tagCounts[item.tag] || 0) + 1;
+    const type = item.intelligence_type;
+    if (type === 'news') newsTotal++;
+    if (type === 'literature') litTotal++;
+    if (item.tag && tagCounts[type]) {
+      tagCounts[type][item.tag] = (tagCounts[type][item.tag] || 0) + 1;
+    }
   }
 
-  // Update counts
   const setCnt = (id, val) => { const el = $(id); if (el) el.textContent = val || ''; };
   setCnt('newsCount', newsTotal.toLocaleString());
   setCnt('litCount', litTotal.toLocaleString());
-  setCnt('cnt-tech', tagCounts['技术突破'] || 0);
-  setCnt('cnt-industry', tagCounts['产业进展'] || 0);
-  setCnt('cnt-policy', tagCounts['政策监管'] || 0);
-  setCnt('cnt-capital', tagCounts['资本运作'] || 0);
-  setCnt('cnt-observe', tagCounts['行业观察'] || 0);
-  setCnt('cnt-paper', tagCounts['研究论文'] || 0);
-  setCnt('cnt-review', tagCounts['观点评论'] || 0);
+  renderTypePopovers(tagCounts);
 
   // Sync checkbox visual state with state
   document.querySelectorAll('[data-type-toggle]').forEach((cb) => {
     const t = cb.dataset.typeToggle;
     cb.classList.toggle('checked', !!state.selectedTypes[t]);
   });
-  // Sync popover sub-tag checkboxes
+  // Sync dynamically rendered sub-tag checkboxes
   document.querySelectorAll('.type-popover-item').forEach((item) => {
     const t = item.dataset.type;
     const tag = item.dataset.tag;
     const cb = item.querySelector('.tree-checkbox');
     if (cb) {
       const tags = state.selectedTags[t];
-      // Checked if type is on and (no specific tags selected = all, OR this tag is selected)
       const isChecked = state.selectedTypes[t] && (!tags || tags.size === 0 || tags.has(tag));
       cb.classList.toggle('checked', isChecked);
     }
   });
 }
-
 function isCategorySelected(cat) {
   if (!state.selectedCategories) return true; // null = all
   // Check if cat is a selected leaf

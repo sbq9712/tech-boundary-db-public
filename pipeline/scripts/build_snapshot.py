@@ -79,7 +79,11 @@ def build_snapshot(records: list[dict]) -> int:
                 encoding="utf-8",
             )
 
-        manifest = load_manifest()
+        # 八.冷启动：首次发布无既有 manifest 时从空结构开始（避免冷启动崩溃）
+        if MANIFEST_PATH.exists():
+            manifest = load_manifest()
+        else:
+            manifest = {"meta": {}}
         manifest.setdefault("meta", {})["records_total"] = len(records)
         manifest["meta"]["total_shards"] = shard_count
         manifest["meta"]["data_version"] = data_version

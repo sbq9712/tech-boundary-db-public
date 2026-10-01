@@ -554,7 +554,8 @@ def test_delete_uploaded_file_removes_index_disk_and_record(tmp_path, monkeypatc
 
     result = upload_ingestion.delete_uploaded_file(db, record)
 
-    assert result == {"ok": True, "removed_chunks": 2, "index_skipped": False}
+    assert result == {"ok": True, "removed_chunks": 2, "index_skipped": False,
+                      "queued_record_deletes": 0}
     assert calls[0] == str(file_id), "必须先删除问答索引"
     assert "db-delete" in calls and "db-commit" in calls
     assert not stored.exists(), "落盘文件必须被删除"
