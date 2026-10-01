@@ -27,6 +27,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -123,6 +124,32 @@ def normalize(rec: dict, date: str) -> dict:
             if k in out and isinstance(out[k], (str, int, float, bool, list, dict, type(None)))}
 
 
+# 五.2（2026-10-01）公开来源准入（发布侧）：URL 可公开访问 ≠ 内容可公开
+# 发布——内网/本机定位符、本地路径、内嵌凭据的记录一律拒绝导出；与导入端
+# github_import._check_public_url、独立校验器公开准入检查同一规则集。
+_PRIVATE_URL_RE = re.compile(
+    r"(?i)localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+"
+    r"|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|\.local\b|file://|/home/|/root/"
+    r"|C:\\\\Users|C:\\\\Users|[?&](token|key|secret|password|sig)=",)
+
+
+def public_refusal_reason(norm: dict) -> str | None:
+    """返回拒绝导出的原因；None = 通过公开准入。"""
+    u = str(norm.get("u", ""))
+    if u and u != "no-url" and not u.startswith("sha256:"):
+        if _PRIVATE_URL_RE.search(u):
+            return "非公开 URL（内网/本机/本地路径/内嵌凭据）"
+        if not (u.startswith("http://") or u.startswith("https://")):
+            return f"非 http(s) 定位符：{u[:60]!r}"
+    # 白名单内字段不允许藏凭据形态的字符串（导出前最后一道闸）
+    for field in ("t", "as", "b", "a", "wr"):
+        val = str(norm.get(field, "") or "")
+        if re.search(r"(?i)(ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}"
+                     r"|-----BEGIN [A-Z ]*PRIVATE KEY-----)", val):
+            return f"{field} 含凭据形态字符串"
+    return None
+
+
 def dedup_key(rec: dict) -> tuple[str, str, str]:
     return (str(rec.get("t", "")).strip(), str(rec.get("d", "")), str(rec.get("u", "")))
 
@@ -156,14 +183,25 @@ def diff_against_watermark(records: list[dict], wm: dict) -> dict:
     """
     hashes: dict[str, str] = {}
     by_key: dict[str, dict] = {}
+    refused: list[str] = []
     for rec in records:
         date = record_date(rec)
         if not date:
             continue  # 无日期记录不进公开包（与 v1 一致）
         norm = normalize(rec, date)
+        # 五.2 公开来源准入：内网/本地/凭据形态的记录不进公开包，
+        # 也不进水印（已发布记录若变为不合格 → 自然产出 DELETE 变更）
+        reason = public_refusal_reason(norm)
+        if reason:
+            refused.append(f"{norm.get('id', '')}: {reason}")
+            continue
         key = "|".join(dedup_key(norm))
         hashes[key] = content_hash(norm)
         by_key.setdefault(key, norm)
+    if refused:
+        print(f"[feed] 公开准入拒绝 {len(refused)} 条记录（不入公开包/水印）:")
+        for line in refused[:10]:
+            print(f"  - {line}")
     old: dict[str, str] = dict(wm.get("hashes", {}))
     # 六.1 一次性迁移：旧无 URL 占位键（t|d|sha256:<内容>，占位含内容哈希，
     # 内容更新即漂移）→ 新 t|d|no-url 键。占位哈希基于旧内容、无法由当前
@@ -186,7 +224,7 @@ def diff_against_watermark(records: list[dict], wm: dict) -> dict:
     updated = [k for k in hashes if k in old and old[k] != hashes[k]]
     deleted = [k for k in old if k not in hashes]
     return {"added": added, "updated": updated, "deleted": deleted,
-            "hashes": hashes, "by_key": by_key}
+            "hashes": hashes, "by_key": by_key, "refused": refused}
 
 
 def build_changes_slice(records: list[dict], wm: dict) -> tuple[bytes, int, dict]:
@@ -224,6 +262,11 @@ def build_changes_slice(records: list[dict], wm: dict) -> tuple[bytes, int, dict
         "change_count": len(changes),
         "added": len(d["added"]), "updated": len(d["updated"]), "deleted": len(d["deleted"]),
         "records_sha256": hashlib.sha256(records_json.encode("utf-8")).hexdigest(),
+        # 五.2（2026-10-01）：changes.json 字节绑定进 manifest（受
+        # manifest_digest/chain 覆盖）——篡改变更条目（如 v 1→99）在
+        # 校验器/导入端即刻哈希不一致，不再只靠计数对账。
+        "changes_sha256": hashlib.sha256(
+            json.dumps(changes, ensure_ascii=False, indent=1).encode("utf-8")).hexdigest(),
         "data_version": _DATA_VERSION,
         "generated_at": datetime.now(CST).isoformat(),
         "depends_on": "LATEST.json 全部先前包（漏包可按日期检测补齐）",
@@ -240,7 +283,11 @@ def build_changes_slice(records: list[dict], wm: dict) -> tuple[bytes, int, dict
         "chain": "",
     }
     # 六.3：链值计算（digest 基于除自引用字段外的 manifest 规范序列化）
-    canon = {k: v for k, v in manifest.items() if k not in ("manifest_digest", "chain")}
+    # 五.2：generated_at 是打包时刻、不是包内容——排除出 digest，同输入
+    # 同水印重出的包链值逐字节一致（可复现包）。完整性由 records/changes
+    # 哈希与接收端前驱对齐保证，打包时刻不参与身份。
+    canon = {k: v for k, v in manifest.items()
+             if k not in ("manifest_digest", "chain", "generated_at")}
     manifest["manifest_digest"] = hashlib.sha256(
         json.dumps(canon, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
     manifest["chain"] = hashlib.sha256(
@@ -250,13 +297,15 @@ def build_changes_slice(records: list[dict], wm: dict) -> tuple[bytes, int, dict
     with zipfile.ZipFile(buf.name, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
         zf.writestr("records.json", records_json)
+        # 与 changes_sha256 完全同字节（哈希与写入共用同一次序列化）
         zf.writestr("changes.json", json.dumps(changes, ensure_ascii=False, indent=1))
     data = Path(buf.name).read_bytes()
     os.unlink(buf.name)
     summary = {"added": len(d["added"]), "updated": len(d["updated"]),
                "deleted": len(d["deleted"]), "hashes": d["hashes"], "versions": versions,
                "sequence": manifest["sequence"], "chain": manifest["chain"],
-               "manifest_date": manifest["date"]}
+               "manifest_date": manifest["date"],
+               "refused_private": len(d.get("refused", []))}
     return data, len(out_records), summary
 
 
@@ -400,9 +449,13 @@ def _main_since_last_locked(records: list[dict], no_push: bool) -> int:
                                 capture_output=True)
         if staged.returncode == 0:
             log("feed 仓库无变化（同数据重复生成，幂等跳过推送）")
+            # 五.2：未发布任何包——sequence/chain 不推进（推进会产生
+            # 幽灵链头：下一真包的前驱在接收端永远对不上）。只刷新
+            # hashes/versions（内容基线与本轮计算一致）。
             save_watermark({"hashes": summary["hashes"], "versions": summary["versions"],
                             "updated_at": datetime.now(CST).isoformat(),
-                            "sequence": summary["sequence"], "chain": summary["chain"]})
+                            "sequence": wm.get("sequence", 0),
+                            "chain": wm.get("chain", "")})
             return 0
         commit = subprocess.run(
             ["git", "-C", str(repo_dir), "commit", "-m",

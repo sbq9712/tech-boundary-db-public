@@ -46,6 +46,57 @@ REQUIRED_MANIFEST_KEYS = (
 )
 REQUIRED_RECORD_KEYS = ("id", "t", "d")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+# 五.2（2026-10-01）独立校验：嵌套字段形态与公开来源准入（与导入端
+# github_import._validate_record_shapes / 生成端 public_refusal_reason 同规则）
+SCD_SLOTS = ("b", "i", "r", "d", "t")
+_LIST_LIMITS = {"kp": (200, 512), "cp": (64, 512)}
+_PRIVATE_URL_RE = re.compile(
+    r"(?i)localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+"
+    r"|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|\.local\b|file://|/home/|/root/"
+    r"|C:\\\\Users|[?&](token|key|secret|password|sig)=")
+
+
+def _shape_errors(rec: dict) -> list[str]:
+    """记录级深层形态校验（白名单之外的值域约束）。返回错误串列表。"""
+    errs: list[str] = []
+    for field, (max_len, max_item) in _LIST_LIMITS.items():
+        v = rec.get(field)
+        if v is None:
+            continue
+        if not isinstance(v, list):
+            # 历史形态容忍：kp 曾以整串字符串出现（导入端按标量入库）
+            if isinstance(v, str) and len(v) <= max_item:
+                continue
+            errs.append(f"{field} 必须为列表（实际 {type(v).__name__}）")
+            continue
+        if len(v) > max_len:
+            errs.append(f"{field} 条目数 {len(v)} 超上限 {max_len}")
+        for item in v:
+            if not isinstance(item, (str, int, float)) or isinstance(item, bool) \
+                    or len(str(item)) > max_item:
+                errs.append(f"{field} 含非法/超长条目")
+                break
+    v = rec.get("scd")
+    if v is not None:
+        if isinstance(v, dict):
+            if not v or len(v) > len(SCD_SLOTS) or set(v) - set(SCD_SLOTS):
+                errs.append(f"scd 键必须为 {SCD_SLOTS} 子集且非空")
+            else:
+                for k2, v2 in v.items():
+                    if not isinstance(v2, (int, float)) or isinstance(v2, bool):
+                        errs.append(f"scd[{k2}] 必须为数值（不许嵌套）")
+                        break
+        elif isinstance(v, str) and len(v) <= 512:
+            pass  # 历史标量容忍
+        else:
+            errs.append("scd 必须为五槽对象（b/i/r/d/t）或历史标量")
+    u = str(rec.get("u", ""))
+    if u and u != "no-url" and not u.startswith("sha256:"):
+        if _PRIVATE_URL_RE.search(u):
+            errs.append("u 指向非公开来源（内网/本机/本地路径/内嵌凭据）")
+        elif not (u.startswith("http://") or u.startswith("https://")):
+            errs.append(f"u 非 http(s) 定位符：{u[:60]!r}")
+    return errs
 
 
 def content_hash(rec: dict) -> str:
@@ -134,9 +185,11 @@ def validate(zip_path: Path, strict: bool = False) -> Report:
             return rep
         records_raw = zf.read("records.json")
         changes = None
+        changes_raw = None
         if "changes.json" in names:
+            changes_raw = zf.read("changes.json")
             try:
-                changes = json.loads(zf.read("changes.json"))
+                changes = json.loads(changes_raw)
             except (ValueError, UnicodeDecodeError) as exc:
                 rep.fail(f"changes.json 不是合法 JSON：{exc}")
                 return rep
@@ -174,6 +227,35 @@ def validate(zip_path: Path, strict: bool = False) -> Report:
         rep.fail("records_sha256 与 records.json 实际哈希不一致")
     else:
         rep.ok("records_sha256 一致")
+    # 五.2：changes.json 字节绑定——篡改变更条目（v 1→99）即刻可判。
+    if changes_raw is not None:
+        actual_changes_sha = hashlib.sha256(changes_raw).hexdigest()
+        if manifest.get("changes_sha256") is None:
+            rep.warn("manifest 缺 changes_sha256（旧版生成器产物，建议用新生成器重出）")
+        elif manifest.get("changes_sha256") != actual_changes_sha:
+            rep.fail("changes_sha256 与 changes.json 实际哈希不一致（changes.json 被篡改）")
+        else:
+            rep.ok("changes_sha256 一致")
+    # 五.2：发布序列自洽性（sequence/predecessor/manifest_digest/chain）。
+    # 字段存在即校验（空串/缺失对同侧字段视为不完整包——伪造者不能以
+    # 空串绕过哈希核对）；canon 排除 generated_at（打包时刻不参与身份）。
+    if "manifest_digest" in manifest or "chain" in manifest:
+        canon = {k: v for k, v in manifest.items()
+                 if k not in ("manifest_digest", "chain", "generated_at")}
+        expect_digest = hashlib.sha256(
+            json.dumps(canon, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+        if manifest.get("manifest_digest") != expect_digest:
+            rep.fail("manifest_digest 与 manifest 规范哈希不一致（manifest 被篡改）")
+        else:
+            expect_chain = hashlib.sha256(
+                (str(manifest.get("predecessor", "")) + expect_digest).encode("utf-8")).hexdigest()
+            if manifest.get("chain") != expect_chain:
+                rep.fail("chain 与 sha256(predecessor+manifest_digest) 不一致（链被伪造/插包）")
+            else:
+                rep.ok(f"发布序列自洽（sequence={manifest.get('sequence')}）")
+        if manifest.get("sequence") is not None and \
+                (not isinstance(manifest.get("sequence"), int) or manifest["sequence"] < 1):
+            rep.fail(f"sequence 非法：{manifest.get('sequence')!r}")
     if manifest.get("record_count") != len(records):
         rep.fail(f"record_count {manifest.get('record_count')} != 实际 {len(records)}")
     else:
@@ -194,6 +276,8 @@ def validate(zip_path: Path, strict: bool = False) -> Report:
         if rec_id and rec_id != stable_id(str(rec.get("t", "")), str(rec.get("d", "")),
                                           str(rec.get("u", ""))):
             rep.fail(f"records[{i}] id 与 sha256(t|d|u)[:16] 不一致（键漂移或伪造）")
+        for msg in _shape_errors(rec):
+            rep.fail(f"records[{i}] {msg}")
         u = str(rec.get("u", ""))
         if strict and u.startswith("sha256:"):
             rep.warn(f"records[{i}] 无 URL（u 为内容占位，键随内容变化）")

@@ -51,7 +51,8 @@ def _rec(i: int, **overrides) -> dict:
         "tg": "tag",
         "tp": "topic",
         "sc": "7.8",
-        "scd": {"novelty": 8, "credibility": 7},
+        # 五.2：scd = 引擎评分卡五槽 {"b","i","r","d","t"}（与真实数据同形）
+        "scd": {"b": 8.0, "i": 6.0, "r": 0.0, "d": 0.0, "t": 6.0},
         "aip": 1,
         "as": "摘要",
         "kp": ["参数"],
@@ -107,6 +108,7 @@ def _build_v2_zip(records: list[dict], changes: list[dict] | None = None,
                     "key": f"{r.get('t','')}|{r.get('d','')}|{r.get('u','')}",
                     "v": 1} for r in out_records]
     records_json = json.dumps(out_records, ensure_ascii=False, indent=1)
+    changes_json = json.dumps(changes, ensure_ascii=False, indent=1)
     manifest = {
         "schema": "tech-boundary-feed-package/v2",
         "generator": "tech-boundary-feed-package/v2 test",
@@ -118,6 +120,7 @@ def _build_v2_zip(records: list[dict], changes: list[dict] | None = None,
         "updated": sum(1 for c in changes if c["op"] == "UPDATE"),
         "deleted": sum(1 for c in changes if c["op"] == "DELETE"),
         "records_sha256": hashlib.sha256(records_json.encode("utf-8")).hexdigest(),
+        "changes_sha256": hashlib.sha256(changes_json.encode("utf-8")).hexdigest(),
         "data_version": "test" + hashlib.sha256(b"dv").hexdigest()[:8],
         "generated_at": datetime.now().isoformat(),
     }
@@ -127,7 +130,7 @@ def _build_v2_zip(records: list[dict], changes: list[dict] | None = None,
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
         zf.writestr("records.json", records_json)
-        zf.writestr("changes.json", json.dumps(changes, ensure_ascii=False, indent=1))
+        zf.writestr("changes.json", changes_json)
     return buf.getvalue()
 
 
@@ -203,6 +206,180 @@ class TestValidatorRoundtrip(unittest.TestCase):
         rep = validator.validate(self._tmp_zip(out.getvalue()))
         self.assertTrue(any("恶意路径" in e for e in rep.errors))
         self.assertTrue(any("schema" in e for e in rep.errors))
+
+
+class TestSectionFiveContracts(unittest.TestCase):
+    """五.2 契约：changes 字节绑定 / 链自洽 / scd 五槽 / 公开准入 /
+    包字节可复现 / 推送失败水印不推进。"""
+
+    def _tmp_zip(self, data: bytes) -> Path:
+        import tempfile
+        f = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+        f.write(data)
+        f.close()
+        self.addCleanup(Path(f.name).unlink)
+        return Path(f.name)
+
+    def test_generated_package_carries_changes_sha256(self):
+        recs = [_rec(1)]
+        zip_bytes, n, summary = builder.build_changes_slice(recs, {})
+        import io
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            manifest = json.loads(zf.read("manifest.json"))
+            changes_raw = zf.read("changes.json")
+        self.assertIn("changes_sha256", manifest)
+        self.assertEqual(manifest["changes_sha256"],
+                         hashlib.sha256(changes_raw).hexdigest())
+        self.assertEqual(summary.get("refused_private", 0), 0)
+
+    def test_changes_sha_tamper_detected_by_validator(self):
+        import io
+        recs = [_rec(1)]
+        zip_bytes, _, _ = builder.build_changes_slice(recs, {})
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            manifest = json.loads(zf.read("manifest.json"))
+            records_raw = zf.read("records.json")
+            changes = json.loads(zf.read("changes.json"))
+        changes[0]["v"] = 99  # 篡改版本号（1→99）
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("records.json", records_raw)
+            zf.writestr("changes.json", json.dumps(changes, ensure_ascii=False, indent=1))
+        rep = validator.validate(self._tmp_zip(out.getvalue()))
+        self.assertTrue(any("changes_sha256" in e for e in rep.errors), rep.render())
+
+    def test_real_shape_scd_passes_all_three(self):
+        """真实五槽 scd 三方一致通过（回归：导入端曾按 ≤1 键误拒）。"""
+        recs = [_rec(1), _rec(2, u="")]
+        zip_bytes, _, _ = builder.build_changes_slice(recs, {})
+        rep = validator.validate(self._tmp_zip(zip_bytes))
+        self.assertEqual(rep.errors, [], rep.render())
+        if not _BACKEND_IMPORTABLE:
+            self.skipTest(_DOCKER_SKIP)
+        import tempfile
+        p = self._tmp_zip(zip_bytes)
+        manifest, records, changes = github_import._read_package(p)
+        self.assertEqual(manifest["record_count"], 2)
+        self.assertEqual(records[0]["scd"]["t"], 6.0)
+
+    def test_publisher_refuses_private_records(self):
+        recs = [_rec(1),
+                _rec(2, u="http://192.168.1.10:8080/内部系统/报告"),
+                _rec(3, b="sk-ABCDEFGHijklmnOPQRSTUVwx0000 凭据泄漏在正文")]
+        _, n, summary = builder.build_changes_slice(recs, {})
+        self.assertEqual(n, 1)
+        self.assertEqual(summary.get("refused_private", 0), 2)
+        # 被拒记录不进水印 hashes（后续修复后可正常新增，不残留幽灵键）
+        self.assertFalse(any("192.168" in k for k in summary["hashes"]))
+
+    def test_validator_rejects_private_url(self):
+        import io
+        data = _build_v2_zip([_rec(1, u="http://localhost:9000/admin")])
+        rep = validator.validate(self._tmp_zip(data))
+        self.assertTrue(any("非公开" in e for e in rep.errors), rep.render())
+
+    def test_chain_self_consistency_enforced(self):
+        import io
+        recs = [_rec(1)]
+        manifest = {
+            "sequence": 1, "predecessor": "", "manifest_digest": "", "chain": "",
+        }
+        data = _build_v2_zip(recs, manifest_overrides=manifest)
+        rep = validator.validate(self._tmp_zip(data))
+        self.assertTrue(any("manifest_digest" in e for e in rep.errors), rep.render())
+        # 导入端同样拒绝
+        if not _BACKEND_IMPORTABLE:
+            self.skipTest(_DOCKER_SKIP)
+        import tempfile
+        with self.assertRaises(Exception):
+            github_import._read_package(self._tmp_zip(data))
+
+    def test_package_bytes_reproducible(self):
+        """同输入同水印 → 包字节可复现（除 generated_at 外逐字节一致）。"""
+        recs = [_rec(1), _rec(2)]
+        wm = {}
+        z1, n1, s1 = builder.build_changes_slice(recs, dict(wm))
+        z2, n2, s2 = builder.build_changes_slice(recs, dict(wm))
+        self.assertEqual(n1, n2)
+        import io
+        def members(z):
+            with zipfile.ZipFile(io.BytesIO(z)) as zf:
+                return {name: zf.read(name) for name in zf.namelist()}
+        m1, m2 = members(z1), members(z2)
+        self.assertEqual(set(m1), set(m2))
+        for name in m1:
+            if name == "manifest.json":
+                d1 = json.loads(m1[name]); d2 = json.loads(m2[name])
+                # generated_at（打包时刻）与 digest/chain 不再含它——
+                # 理想情况下全部字段一致；兜底排除打包时刻对比
+                for k in ("generated_at",):
+                    d1.pop(k, None); d2.pop(k, None)
+                self.assertEqual(d1, d2, name)
+            else:
+                self.assertEqual(m1[name], m2[name], name)
+
+    def test_watermark_not_advanced_when_push_fails(self):
+        """推送失败 → 退出码 1 且水印不推进（发布成功才提交 watermark，
+        sequence/chain 不前进——失败重发不会跳号）。"""
+        import os as _os
+        import subprocess as _sp
+        import tempfile as _tf
+
+        with _tf.TemporaryDirectory() as td:
+            wm_path = Path(td) / "feed_state.json"
+            # 先把水印路径指到沙箱，再写入起始水印（不碰真实水印文件）
+            orig_wm = builder.WATERMARK_PATH
+            builder.WATERMARK_PATH = wm_path
+            builder.save_watermark({"sequence": 3, "chain": "chainX",
+                                    "hashes": {}, "versions": {}})
+            try:
+                wm = builder.load_watermark()
+                self.assertEqual(wm.get("sequence"), 3)
+
+                real_run = _sp.run
+
+                def fake_run(cmd, *a, **k):
+                    """git -C <dir> <sub>… 形态：sub 在 args[3]；git clone 在 args[1]。
+                    text=True 时输出用 str（与真实 subprocess 语义一致）。"""
+                    text_mode = bool(k.get("text"))
+                    out = "" if text_mode else b""
+                    args = [str(c) for c in cmd]
+                    if args[:2] == ["git", "clone"]:
+                        Path(args[-1]).mkdir(parents=True, exist_ok=True)
+                        return _sp.CompletedProcess(cmd, 0, b"", b"")
+                    sub = args[3] if len(args) > 3 and args[:2] == ["git", "-C"] else None
+                    if sub == "push":
+                        return _sp.CompletedProcess(cmd, 1, b"", "push rejected")
+                    if sub == "fetch":
+                        return _sp.CompletedProcess(cmd, 0, b"", b"")
+                    if sub == "rebase":
+                        return _sp.CompletedProcess(cmd, 1, b"", "rebase conflict")
+                    if sub == "diff":
+                        # --cached --quiet：退出码 1 = 暂存区有变化（继续提交）
+                        return _sp.CompletedProcess(cmd, 1, out, out)
+                    return _sp.CompletedProcess(cmd, 0, b"", b"")  # add/commit 等
+
+                orig_run = builder.subprocess.run
+                builder.subprocess.run = fake_run
+                try:
+                    env_token = _os.environ.get("GH_TOKEN")
+                    _os.environ["GH_TOKEN"] = "test-token"
+                    recs = [_rec(9)]
+                    rc = builder._main_since_last_locked(recs, no_push=False)
+                finally:
+                    builder.subprocess.run = orig_run
+                    if env_token is None:
+                        _os.environ.pop("GH_TOKEN", None)
+                    else:
+                        _os.environ["GH_TOKEN"] = env_token
+                self.assertEqual(rc, 1)
+                wm_after = builder.load_watermark()
+                self.assertEqual(wm_after.get("sequence"), 3)
+                self.assertEqual(wm_after.get("chain"), "chainX")
+            finally:
+                builder.WATERMARK_PATH = orig_wm
+                builder.WATERMARK_PATH.with_suffix(".json.tmp").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

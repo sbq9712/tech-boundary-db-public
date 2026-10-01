@@ -25,6 +25,13 @@ from app.db.session import SessionLocal
 from app.models.uploaded_file import UploadedFile
 from app.services import breadth_index_queue as bq
 from app.services import github_import as gi
+
+import sys as _sys
+from pathlib import Path as _Path
+_VALIDATOR_DIR = str(_Path(__file__).resolve().parents[2] / "scripts")
+if _VALIDATOR_DIR not in _sys.path:
+    _sys.path.insert(0, _VALIDATOR_DIR)
+import validate_feed_package as validator  # noqa: E402
 from app.services.github_import import (
     GitHubPackageError,
     _read_package,
@@ -66,6 +73,9 @@ def _build_v2(
     dup_member: bool = False,
     evil_member: bool = False,
     huge_member: bool = False,
+    sequence: int | None = None,
+    predecessor: str = "",
+    with_changes_sha: bool = True,
 ) -> bytes:
     out_records = [
         r for r in records if any(
@@ -73,6 +83,7 @@ def _build_v2(
         )
     ]
     records_json = json.dumps(out_records, ensure_ascii=False, separators=(",", ":"))
+    changes_json = json.dumps(changes, ensure_ascii=False)
     manifest = {
         "schema": "tech-boundary-feed-package/v2",
         "generator": "feed-pkg/v2",
@@ -87,11 +98,24 @@ def _build_v2(
         "data_version": "dv-test-v2",
         "generated_at": "2026-09-28T05:00:00+08:00",
     }
+    if with_changes_sha:
+        manifest["changes_sha256"] = hashlib.sha256(changes_json.encode("utf-8")).hexdigest()
+    if sequence is not None:
+        manifest["sequence"] = sequence
+        manifest["predecessor"] = predecessor
+        # 与生成端一致：canon 排除 generated_at（打包时刻不参与身份）
+        canon = {k: v for k, v in manifest.items()
+                 if k not in ("manifest_digest", "chain", "generated_at")}
+        manifest["manifest_digest"] = hashlib.sha256(
+            json.dumps(canon, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        manifest["chain"] = hashlib.sha256(
+            (predecessor + manifest["manifest_digest"]).encode("utf-8")).hexdigest()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.json", json.dumps(manifest, indent=2))
         zf.writestr("records.json", records_json)
-        zf.writestr("changes.json", json.dumps(changes, ensure_ascii=False))
+        zf.writestr("changes.json", changes_json)
         if dup_member:
             zf.writestr("records.json", "[]")
         if evil_member:
@@ -317,7 +341,9 @@ def test_delete_protects_manual_rows(tmp_path, monkeypatch):
             "VALUES (:i, :u, 'feedv2-test', '同键记录', '2026-09-28', 'https://m/1', 0, 'news', 0)"
         ), {"i": str(uuid.uuid4()), "u": str(manual_upload.id)})
         db.commit()
-        changes = [{"op": "DELETE", "id": "0" * 16, "key": "同键记录|2026-09-28|https://m/1", "v": 5}]
+        # 五.2：DELETE id 必须等于 key(t|d|u) 推导的稳定 ID（与真实生成端一致）
+        del_id = _stable_id("同键记录", "2026-09-28", "https://m/1")
+        changes = [{"op": "DELETE", "id": del_id, "key": "同键记录|2026-09-28|https://m/1", "v": 5}]
         upload = _mk_upload(db, checksum=hashlib.sha256(b"zip-e").hexdigest())
         payload = _import(db, upload, _tmp_zip(tmp_path, _build_v2([], changes)))
         assert payload["details"]["skipped_protected"] == 1
@@ -1058,5 +1084,248 @@ def test_delete_task_without_identity_fails_honestly(monkeypatch, tmp_path):
         assert status in ("pending", "failed"), status
         assert attempts >= 1
         assert "缺少统一身份" in (err or "")
+    finally:
+        db.close()
+
+
+# ── 五.2：scd 五槽形态 / 标题含竖线身份 / changes 字节绑定 / 发布序列链 ──
+
+
+def _mk_rec(i, **kw):
+    rec = {
+        "t": kw.pop("t", f"五.2测试情报{i}"),
+        "d": "2026-09-28",
+        "u": kw.pop("u", f"https://example.com/f52/{i}"),
+        "c": "固态电池", "a": "测试源", "i": "n",
+        "sc": "7.8",
+        "scd": {"b": 8.0, "i": 6.0, "r": 0.0, "d": 0.0, "t": 6.0},
+        "kp": ["能量密度[300Wh/kg]: 达标"],
+        "as": "摘要", "b": "正文", "aip": 1,
+    }
+    rec.update(kw)
+    out = {k: rec[k] for k in gi.PUBLIC_FIELDS if k in rec}
+    out["id"] = _stable_id(str(out.get("t", "")), str(out.get("d", "")),
+                           str(out.get("u", "")))
+    return out
+
+
+def _changes_for(recs, base_v=1):
+    return [{"op": "ADD", "id": r["id"],
+             "key": f"{r['t']}|{r['d']}|{r['u']}", "v": base_v}
+            for r in recs]
+
+
+def test_scd_five_slot_dict_accepted(tmp_path, monkeypatch):
+    """五.2 修复回归：真实五槽 scd（b/i/r/d/t）必须通过校验并落库
+    （修复前 _LIST_LIMITS["scd"]=(1,64) 把 5 键当超限，整包被拒）。"""
+    monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
+    recs = [_mk_rec(1), _mk_rec(2)]
+    data = _build_v2(recs, _changes_for(recs))
+    manifest, out_records, out_changes = gi._read_package(_tmp_zip(tmp_path, data))
+    assert manifest["record_count"] == 2
+    assert out_records[0]["scd"]["b"] == 8.0
+
+    db = SessionLocal()
+    try:
+        up = _mk_upload(db, checksum=hashlib.sha256(data).hexdigest())
+        res = gi.import_github_package(db, up, _tmp_zip(tmp_path, data))
+        assert res["imported"] == 2, res
+    finally:
+        db.close()
+
+
+def test_scd_unknown_slot_and_nested_rejected(tmp_path):
+    recs = [_mk_rec(1, scd={"b": 1.0, "x": 2.0})]
+    with pytest.raises(GitHubPackageError, match="scd"):
+        gi._read_package(_tmp_zip(tmp_path, _build_v2(recs, _changes_for(recs))))
+    recs2 = [_mk_rec(1, scd={"b": {"nested": 1}})]
+    with pytest.raises(GitHubPackageError, match="scd"):
+        gi._read_package(_tmp_zip(tmp_path, _build_v2(recs2, _changes_for(recs2))))
+
+
+def test_title_with_pipe_key_roundtrip(tmp_path, monkeypatch):
+    """五.2：标题含 "|"（真实库 920 条）——ADD/DELETE 身份按右侧切两段，
+    与水印/上游键一致；修复前左 split 把身份切错。"""
+    monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
+    title = "研发|产业化双线推进的固态电池项目"
+    recs = [_mk_rec(1, t=title)]
+    ch = [{"op": "ADD", "id": recs[0]["id"], "key": f"{title}|2026-09-28|{recs[0]['u']}",
+           "v": 1}]
+    data = _build_v2(recs, ch)
+    manifest, out_records, out_changes = gi._read_package(_tmp_zip(tmp_path, data))
+
+    db = SessionLocal()
+    try:
+        up = _mk_upload(db, checksum=hashlib.sha256(data).hexdigest())
+        res = gi.import_github_package(db, up, _tmp_zip(tmp_path, data))
+        assert res["imported"] == 1, res
+        row = db.execute(text(
+            "SELECT title, feed_key_digest FROM breadth_manual_records "
+            "WHERE title=:t"), {"t": title}).one()
+        # 键必须与生成端 t|d|u 全串同源（digest 一致）
+        expect = gi._feed_key_digest_hex(f"{title}|2026-09-28|{recs[0]['u']}")
+        assert row.feed_key_digest == expect
+        # DELETE 同标题：身份对得上，删除传播
+        recs2 = []
+        ch2 = [{"op": "DELETE", "id": recs[0]["id"],
+                "key": f"{title}|2026-09-28|{recs[0]['u']}", "v": 2}]
+        data2 = _build_v2(recs2, ch2)
+        up2 = _mk_upload(db, checksum=hashlib.sha256(data2).hexdigest())
+        res2 = gi.import_github_package(db, up2, _tmp_zip(tmp_path, data2))
+        assert res2["details"]["deleted"] == 1, res2
+    finally:
+        db.close()
+
+
+def test_delete_change_id_must_match_key(tmp_path):
+    recs = []
+    ch = [{"op": "DELETE", "id": "0" * 16,
+           "key": "某记录|2026-09-28|https://example.com/x", "v": 1}]
+    with pytest.raises(GitHubPackageError, match="伪造删除"):
+        gi._read_package(_tmp_zip(tmp_path, _build_v2(recs, ch)))
+
+
+def test_changes_sha256_tamper_rejected(tmp_path):
+    """五.2：changes.json 条目被篡改（v 1→99）→ changes_sha256 不一致，
+    独立校验器与导入端都必须拒绝。"""
+    recs = [_mk_rec(1)]
+    data = _build_v2(recs, _changes_for(recs))
+    buf = io.BytesIO(data)
+    with zipfile.ZipFile(buf) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+        records_raw = zf.read("records.json")
+        changes_raw = zf.read("changes.json")
+    changes = json.loads(changes_raw)
+    changes[0]["v"] = 99  # 篡改版本号
+    tampered_changes = json.dumps(changes, ensure_ascii=False)
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as zf:
+        zf.writestr("manifest.json", json.dumps(manifest))
+        zf.writestr("records.json", records_raw)
+        zf.writestr("changes.json", tampered_changes)
+    # 导入端拒绝
+    with pytest.raises(GitHubPackageError, match="changes_sha256"):
+        gi._read_package(_tmp_zip(tmp_path, out.getvalue()))
+    # 独立校验器拒绝
+    rep = validator.validate(_tmp_zip(tmp_path, out.getvalue(), name="pkg-v.zip"))
+    assert any("changes_sha256" in e for e in rep.errors), rep.render()
+
+
+def test_chain_sequence_flow(tmp_path, monkeypatch):
+    """五.2 发布序列链：seq1 干净引导 → seq2 前驱对齐推进 →
+    seq2 重出（同序号新 checksum）stale_sequence 标记不回退 →
+    seq4（跳过 seq3）chain_gap 标记仍应用 → 伪造 seq3 前驱对不上拒绝。"""
+    monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
+    db = SessionLocal()
+    try:
+        def pkg(n, recs, changes, predecessor=""):
+            return _build_v2(recs, changes, date="2026-09-28", sequence=n,
+                             predecessor=predecessor)
+
+        r1 = [_mk_rec(1)]
+        d1 = pkg(1, r1, _changes_for(r1))
+        up1 = _mk_upload(db, checksum=hashlib.sha256(d1).hexdigest())
+        s1 = gi.import_github_package(db, up1, _tmp_zip(tmp_path, d1, name="p1.zip"))
+        assert s1["imported"] == 1 and "chain_gap" not in (s1["details"] or {})
+        m1 = json.loads(zipfile.ZipFile(io.BytesIO(d1)).read("manifest.json"))
+        chain1 = m1["chain"]
+
+        r2 = [_mk_rec(2)]
+        d2 = pkg(2, r2, _changes_for(r2), predecessor=chain1)
+        up2 = _mk_upload(db, checksum=hashlib.sha256(d2).hexdigest())
+        s2 = gi.import_github_package(db, up2, _tmp_zip(tmp_path, d2, name="p2.zip"))
+        assert s2["imported"] == 1 and "chain_gap" not in (s2["details"] or {})
+        m2 = json.loads(zipfile.ZipFile(io.BytesIO(d2)).read("manifest.json"))
+        chain2 = m2["chain"]
+
+        # 同序号重出（内容不同 → checksum 不同）：stale_sequence 标记，幂等应用
+        r2b = [_mk_rec(2, b="修订正文")]
+        d2b = pkg(2, r2b, _changes_for(r2b, base_v=2), predecessor=chain1)
+        up2b = _mk_upload(db, checksum=hashlib.sha256(d2b).hexdigest())
+        s2b = gi.import_github_package(db, up2b, _tmp_zip(tmp_path, d2b, name="p2b.zip"))
+        assert s2b["details"].get("stale_sequence") == 2
+
+        # 跳过 seq3 → seq4：chain_gap 标记但数据照常应用（per-key v 保护）
+        r4 = [_mk_rec(4)]
+        d4 = pkg(4, r4, _changes_for(r4), predecessor=chain2 + "deadbeef")
+        up4 = _mk_upload(db, checksum=hashlib.sha256(d4).hexdigest())
+        s4 = gi.import_github_package(db, up4, _tmp_zip(tmp_path, d4, name="p4.zip"))
+        assert s4["details"].get("chain_gap", {}).get("expected") == 3
+        assert s4["imported"] == 1
+
+        # 伪造 seq3（前驱对不上当前链头 seq4）→ 导入前拒绝
+        m4 = json.loads(zipfile.ZipFile(io.BytesIO(d4)).read("manifest.json"))
+        chain4 = m4["chain"]
+        r3 = [_mk_rec(3)]
+        d3 = pkg(3, r3, _changes_for(r3), predecessor=chain2)  # 真实 seq3 应该用 chain2
+        # 当前链头已推进到 seq4 → 真实 seq3 也对不上（迟到包按 stale 分支放行）
+        up3 = _mk_upload(db, checksum=hashlib.sha256(d3).hexdigest())
+        s3 = gi.import_github_package(db, up3, _tmp_zip(tmp_path, d3, name="p3.zip"))
+        assert s3["details"].get("stale_sequence") == 3
+        # 伪造「下一个」包：seq5 前驱用错链头 → 链断裂拒绝
+        r5 = [_mk_rec(5)]
+        d5 = pkg(5, r5, _changes_for(r5), predecessor=chain2)
+        up5 = _mk_upload(db, checksum=hashlib.sha256(d5).hexdigest())
+        with pytest.raises(GitHubPackageError, match="链断裂"):
+            gi.import_github_package(db, up5, _tmp_zip(tmp_path, d5, name="p5.zip"))
+    finally:
+        db.close()
+
+
+def test_quiet_day_no_false_gap_alarm(tmp_path, monkeypatch):
+    """五.2：发布端安静日（无变化不发包）后下一包链干净推进 →
+    日期差 ≥2 不再误报 gap_days（漏包风险由 sequence/chain 判定）。"""
+    monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
+    db = SessionLocal()
+    try:
+        r1 = [_mk_rec(1)]
+        d1 = _build_v2(r1, _changes_for(r1), date="2026-09-28", sequence=1)
+        up1 = _mk_upload(db, checksum=hashlib.sha256(d1).hexdigest())
+        gi.import_github_package(db, up1, _tmp_zip(tmp_path, d1, name="q1.zip"))
+        m1 = json.loads(zipfile.ZipFile(io.BytesIO(d1)).read("manifest.json"))
+        r2 = [_mk_rec(2)]
+        d2 = _build_v2(r2, _changes_for(r2), date="2026-09-30", sequence=2,
+                       predecessor=m1["chain"])
+        up2 = _mk_upload(db, checksum=hashlib.sha256(d2).hexdigest())
+        s2 = gi.import_github_package(db, up2, _tmp_zip(tmp_path, d2, name="q2.zip"))
+        assert (s2["details"] or {}).get("gap_days") is None
+        assert "chain_gap" not in (s2["details"] or {})
+    finally:
+        db.close()
+
+
+def test_v1_still_gap_days(tmp_path, monkeypatch):
+    """v1 包（无 sequence）：日期差提示保留（漏包检测退回日期启发）。"""
+    monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
+    db = SessionLocal()
+    try:
+        recs = [_mk_rec(9)]
+        records_json = json.dumps(recs, ensure_ascii=False, separators=(",", ":"))
+        manifest = {
+            "schema": "tech-boundary-feed-package/v1", "generator": "v1-test",
+            "mode": "full", "date": "2026-09-20", "record_count": 1,
+            "records_sha256": hashlib.sha256(records_json.encode("utf-8")).hexdigest(),
+            "data_version": "dv-v1", "generated_at": "2026-09-20T05:00:00+08:00",
+        }
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("records.json", records_json)
+        d1 = buf.getvalue()
+        up1 = _mk_upload(db, checksum=hashlib.sha256(d1).hexdigest())
+        s1 = gi.import_github_package(db, up1, _tmp_zip(tmp_path, d1, name="v1a.zip"))
+        r2 = [_mk_rec(10)]
+        records_json2 = json.dumps(r2, ensure_ascii=False, separators=(",", ":"))
+        manifest2 = dict(manifest, date="2026-09-28", record_count=1,
+                         records_sha256=hashlib.sha256(
+                             records_json2.encode("utf-8")).hexdigest())
+        buf2 = io.BytesIO()
+        with zipfile.ZipFile(buf2, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest2))
+            zf.writestr("records.json", records_json2)
+        d2 = buf2.getvalue()
+        up2 = _mk_upload(db, checksum=hashlib.sha256(d2).hexdigest())
+        s2 = gi.import_github_package(db, up2, _tmp_zip(tmp_path, d2, name="v1b.zip"))
+        assert (s2["details"] or {}).get("gap_days") == 8
     finally:
         db.close()

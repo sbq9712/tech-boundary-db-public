@@ -251,6 +251,35 @@ def _read_package(zip_path: Path) -> tuple[dict, list[dict], list[dict] | None]:
             raise GitHubPackageError("v2 包 manifest.mode 必须为 changes")
         if changes_json is None:
             raise GitHubPackageError("v2 包缺少 changes.json")
+        # 五.2（2026-10-01）：changes.json 字节绑定 + 发布序列自洽性。
+        # changes_sha256 缺失=旧生成器产物（诚实放行并留待重出）；
+        # 存在则必须一致——篡改变更条目（如 v 1→99）即刻可判。
+        changes_sha = manifest.get("changes_sha256")
+        if changes_sha is not None \
+                and changes_sha != hashlib.sha256(changes_json.encode("utf-8")).hexdigest():
+            raise GitHubPackageError(
+                "changes_sha256 校验失败（changes.json 被篡改或与 manifest 不配套）")
+        if "manifest_digest" in manifest or "chain" in manifest:
+            # 字段存在即校验（空串不能绕过）；canon 排除 generated_at
+            canon = {k: v for k, v in manifest.items()
+                     if k not in ("manifest_digest", "chain", "generated_at")}
+            expect_digest = hashlib.sha256(
+                json.dumps(canon, sort_keys=True,
+                           ensure_ascii=False).encode("utf-8")).hexdigest()
+            if manifest.get("manifest_digest") != expect_digest:
+                raise GitHubPackageError(
+                    "manifest_digest 校验失败（manifest 被篡改）")
+            expect_chain = hashlib.sha256(
+                (str(manifest.get("predecessor", ""))
+                 + expect_digest).encode("utf-8")).hexdigest()
+            if manifest.get("chain") != expect_chain:
+                raise GitHubPackageError(
+                    "chain 校验失败（sha256(predecessor+manifest_digest) 不一致——"
+                    "链被伪造/插包/改包）")
+            seq = manifest.get("sequence")
+            if seq is not None and (isinstance(seq, bool) or not isinstance(seq, int)
+                                    or seq < 1):
+                raise GitHubPackageError(f"manifest.sequence 非法：{seq!r}")
         try:
             changes = json.loads(changes_json)
         except (ValueError, UnicodeDecodeError) as exc:
@@ -269,13 +298,19 @@ _FIELD_LIMITS = {
     "a": ("str", 512), "i": ("scalar", 4), "tg": ("str", 512), "tp": ("str", 512),
     # sc/i 的历史契约容忍标量（int/float/短字符串，如 sc=7.0、i=1）——消费端
     # str() 归一；六.2 校验按标量+限量约束而非硬性字符串。
-    "sc": ("scalar", 16), "as": ("str", 8000), "lv": ("str", 32), "wr": ("str", 512),
+    # 五.2 修复：lv 真实数据为 int 1/2/3（683 条）——原 ("str",32) 会整包误拒
+    "sc": ("scalar", 16), "as": ("str", 8000), "lv": ("scalar", 32), "wr": ("str", 512),
     # cl/cln/dp 同为标量容忍（历史包中可为数值，如 dp=3 聚类深度）
     "cl": ("scalar", 512), "cln": ("scalar", 512), "dp": ("scalar", 512),
     "b": ("str", _BODY_CAP), "hb": ("int", 2), "aip": ("int", 1),
 }
 _INT_RANGES = {"hb": (1, 2), "aip": (0, 1)}
-_LIST_LIMITS = {"kp": (200, 512), "cp": (64, 512), "scd": (1, 64)}
+_LIST_LIMITS = {"kp": (200, 512), "cp": (64, 512)}
+# 五.2 修复（2026-10-01）：scd 原挂在 _LIST_LIMITS["scd"]=(1,64)——校验把
+# 「键数 ≤ max_len=1」当上限，真实五维评分 {"b","i","r","d","t"} 全部被拒
+# （41,812/69,131 条真实记录形态），整包导入失败。scd 是固定五槽对象，
+# 单独校验：键 ⊆ 五槽、值数值、非空；历史标量形态（str ≤512）容忍。
+_SCD_SLOTS = ("b", "i", "r", "d", "t")
 # 公开来源准入（六.2）：私有/内网定位符不得进入公开包记录。
 _PRIVATE_URL_RE = re.compile(
     r"^(?!https?://)"                       # 仅接受 http(s)
@@ -342,27 +377,40 @@ def _validate_record_shapes(records: list) -> None:
             if field not in rec or rec[field] is None:
                 continue
             v = rec[field]
-            if field == "scd":
-                # 五维评分 dict：键受限、值必须为数值
-                if not isinstance(v, dict) or len(v) > max_len or not v:
+            if not isinstance(v, list):
+                # 历史形态容忍：kp 曾以整串字符串出现（按标量入库，
+                # 记录行构造时非列表折叠为 []，record_json 保留原值）
+                if isinstance(v, str) and len(v) <= max_item:
+                    continue
+                raise GitHubPackageError(
+                    f"records.json 第 {i} 项 {field} 必须为 ≤{max_len} 元数组")
+            if len(v) > max_len:
+                raise GitHubPackageError(
+                    f"records.json 第 {i} 项 {field} 必须为 ≤{max_len} 元数组")
+            for item in v:
+                # cp 历史包元素可为数值（如聚类编号 [1,2]）——标量容忍
+                if isinstance(item, bool) or not isinstance(item, (str, int, float)) \
+                        or len(str(item)) > max_item:
                     raise GitHubPackageError(
-                        f"records.json 第 {i} 项 scd 必须为非空对象（≤{max_len} 键）")
-                for k2, v2 in v.items():
-                    if not isinstance(k2, str) or len(k2) > 32:
-                        raise GitHubPackageError(f"records.json 第 {i} 项 scd 键非法")
+                        f"records.json 第 {i} 项 {field} 元素必须为 ≤{max_item} 字符标量")
+        scd = rec.get("scd")
+        if scd is not None:
+            # 五.2：scd = 引擎评分卡五槽 {"b","i","r","d","t"}（0-10 数值）。
+            # 键受限于五槽（未知槽=损坏/伪造包），值数值、禁止任意嵌套；
+            # 历史标量形态（短字符串）容忍。
+            if isinstance(scd, dict):
+                if not scd or len(scd) > len(_SCD_SLOTS) or set(scd) - set(_SCD_SLOTS):
+                    raise GitHubPackageError(
+                        f"records.json 第 {i} 项 scd 键必须为 {_SCD_SLOTS} 子集且非空")
+                for k2, v2 in scd.items():
                     if not isinstance(v2, (int, float)) or isinstance(v2, bool):
                         raise GitHubPackageError(
                             f"records.json 第 {i} 项 scd[{k2!r}] 必须为数值")
+            elif isinstance(scd, str) and len(scd) <= 512:
+                pass  # 历史标量容忍
             else:
-                if not isinstance(v, list) or len(v) > max_len:
-                    raise GitHubPackageError(
-                        f"records.json 第 {i} 项 {field} 必须为 ≤{max_len} 元数组")
-                for item in v:
-                    # cp 历史包元素可为数值（如聚类编号 [1,2]）——标量容忍
-                    if isinstance(item, bool) or not isinstance(item, (str, int, float)) \
-                            or len(str(item)) > max_item:
-                        raise GitHubPackageError(
-                            f"records.json 第 {i} 项 {field} 元素必须为 ≤{max_item} 字符标量")
+                raise GitHubPackageError(
+                    f"records.json 第 {i} 项 scd 必须为五槽对象（b/i/r/d/t）或历史标量")
         if "i" in rec and rec["i"] not in (None, "", "l", "n", 0, 1):
             raise GitHubPackageError(f"records.json 第 {i} 项 i 取值非法：{rec['i']!r}")
 
@@ -407,6 +455,13 @@ def _validate_changes(manifest: dict, records: list, changes: object) -> None:
             raise GitHubPackageError(f"changes.json 第 {i} 项 id 非法")
         if op in ("ADD", "UPDATE") and ch_id not in rec_ids:
             raise GitHubPackageError(f"changes.json {op} 的 id 在 records.json 中缺失：{ch_id}")
+        if op == "DELETE":
+            # 五.2：DELETE 无记录可对照——id 必须等于键规范串（右侧切两段，
+            # 标题可含 "|"）推导的稳定 ID，伪造删除即刻可判
+            parts = key.rsplit("|", 2)
+            if len(parts) != 3 or ch_id != _stable_id(parts[0], parts[1], parts[2]):
+                raise GitHubPackageError(
+                    f"changes.json 第 {i} 项 DELETE id 与 key(t|d|u) 推导不一致（伪造删除）")
         ops[op] += 1
     for field, count in (
         ("added", ops["ADD"]), ("updated", ops["UPDATE"]), ("deleted", ops["DELETE"]),
@@ -603,7 +658,10 @@ def _apply_changes(
                         skipped_tombstoned += 1  # 同版本同内容：幂等重放
                     continue
                 # v > tomb.deleted_version（或无墓碑）：合法（重新）上架
-                parts = key.split("|", 2)
+                # 五.2（2026-10-01）：标题可含 "|"（真实库 920 条）——键
+                # t|d|u 必须从右侧按 | 切两段（日期/URL 不含裸 "|"），
+                # 左 split 会把含竖线标题切错、身份对不上水印/上游。
+                parts = key.rsplit("|", 2)
                 parts += [""] * (3 - len(parts))
                 if _key_digest((parts[0], parts[1], parts[2])) in upstream:
                     skipped_upstream += 1
@@ -697,7 +755,8 @@ def _apply_v1(
             if row is not None:
                 skipped_upstream += 1
                 continue
-            parts = key.split("|", 2)
+            # 五.2：同上——键从右侧切（标题可含 "|"）
+            parts = key.rsplit("|", 2)
             parts += [""] * (3 - len(parts))
             if _key_digest((parts[0], parts[1], parts[2])) in upstream:
                 skipped_upstream += 1
@@ -815,7 +874,49 @@ def import_github_package(db: Session, record: UploadedFile, zip_path: Path) -> 
 
     details: dict = {k: v for k, v in result.items() if k not in ("failed_keys",)}
     gap = _gap_days(db, package_date)
-    if gap is not None and gap >= 2:
+    # 五.2：链状态可证明连续（同 sequence 体系、无缺口标记）时，安静日
+    # （发布端无变化不发包）不构成漏包——不再用日期差误报 gap_days。
+    # 仅 v1 包（无 sequence）或链上有真实缺口时保留日期差提示。
+    chain_continuous = False
+
+    # 五.2 发布序列链判定（v2 包且 manifest 带 sequence/chain 时）：
+    #   continuity 基准 = 已导入会话中 sequence 最大行；
+    #   - sequence == last+1 且 predecessor == last.chain_head → 干净推进；
+    #   - sequence == last+1 但前驱对不上 → 链分叉/伪造，导入前拒绝；
+    #   - sequence > last+1 → 缺口（漏包）：per-key v 保护下照常应用，
+    #     details.chain_gap 如实标记（不阻塞，后续补包可推进链）；
+    #   - sequence ≤ last → 迟到/重出旧包：应用幂等（v 保护），
+    #     details.stale_sequence 标记，链以更大 sequence 为准不回退。
+    seq = manifest.get("sequence")
+    pred = str(manifest.get("predecessor", "") or "")
+    seq_known = isinstance(seq, int) and not isinstance(seq, bool) and seq >= 1
+    if seq_known:
+        last = db.scalar(
+            select(BreadthImportSession)
+            .where(BreadthImportSession.package_sequence.is_not(None))
+            .order_by(BreadthImportSession.package_sequence.desc())
+            .limit(1)
+        )
+        if last is not None:
+            last_seq = int(last.package_sequence or 0)
+            if seq == last_seq + 1 and pred != str(last.chain_head or ""):
+                # 事务级 advisory 锁随回滚自动释放，直接抛错即可
+                raise GitHubPackageError(
+                    f"发布序列链断裂：包 sequence={seq} 的 predecessor 与已导入链头"
+                    f"（sequence={last_seq}）不一致——链被伪造/插包/改包，拒绝导入")
+            if seq > last_seq + 1:
+                details["chain_gap"] = {"expected": last_seq + 1, "got": seq}
+            elif seq <= last_seq:
+                details["stale_sequence"] = seq
+            else:
+                chain_continuous = True
+        else:
+            chain_continuous = True  # 链状态引导（首个带 sequence 的包）
+
+    if chain_continuous and gap is not None and gap >= 2:
+        # 链干净推进：安静日不算漏包，不误报
+        pass
+    elif gap is not None and gap >= 2:
         details["gap_days"] = gap
 
     session = BreadthImportSession(
@@ -833,6 +934,9 @@ def import_github_package(db: Session, record: UploadedFile, zip_path: Path) -> 
         replayed=False,
         failed_titles=result["failed_keys"][:50],
         details=details,
+        package_sequence=seq if seq_known else None,
+        manifest_digest=str(manifest.get("manifest_digest") or "") or None,
+        chain_head=str(manifest.get("chain") or "") or None,
     )
     db.add(session)
     db.commit()

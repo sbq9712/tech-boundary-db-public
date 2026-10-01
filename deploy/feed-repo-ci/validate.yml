@@ -1,0 +1,54 @@
+# tech-boundary-data-feed 独立包校验（复制到 feed 仓库 .github/workflows/）
+# 每次发布 push 自动校验全部增量包；手工篡改/契约漂移即刻红。
+name: validate-packages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 校验全部增量包（独立校验器）
+        run: |
+          set -e
+          count=0
+          fail=0
+          for z in $(find . -name "*.zip" -not -path "./.git/*" | sort); do
+            count=$((count+1))
+            echo "── $z"
+            if ! python3 scripts/validate_feed_package.py "$z" --strict; then
+              fail=$((fail+1))
+              echo "::error file=$z::package validation failed"
+            fi
+          done
+          echo "校验 $count 个包，失败 $fail"
+          [ "$fail" -eq 0 ] || exit 1
+          [ "$count" -gt 0 ] || echo "::warning::仓库内没有找到任何 .zip 包"
+      - name: LATEST.json 与包文件对账
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, sys
+          from pathlib import Path
+          latest = json.loads(Path("LATEST.json").read_text(encoding="utf-8"))
+          missing, bad = [], []
+          for p in latest.get("packages", []):
+              f = Path(p.get("file", ""))
+              if not f.exists():
+                  missing.append(str(f)); continue
+              if hashlib.sha256(f.read_bytes()).hexdigest() != p.get("sha256"):
+                  bad.append(str(f))
+          if missing or bad:
+              print("LATEST.json 引用缺失:", missing)
+              print("LATEST.json 哈希不符:", bad)
+              sys.exit(1)
+          print(f"LATEST.json 对账通过（{len(latest.get('packages', []))} 个包）")
+          PY
