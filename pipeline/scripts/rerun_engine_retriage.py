@@ -178,9 +178,15 @@ def main() -> int:
             if pending_publish >= PUBLISH_EVERY or idxs[-1] == todo[-1]:
                 pending_publish = 0
                 try:
-                    # publish_to_boundary 依赖 BOUNDARY_REPO 指向仓库根（脚本/派生快照定位）
+                    # publish_to_boundary 是「镜像安装」：只搬运 pipeline/data/processed
+                    # 下已生成的 lite-part 分片，不读 all-records-lite.json。重跑只改
+                    # lite 不重建分片时，发布会把旧分片原样装回去（2026-10-01 全量
+                    # 重分诊实测：lite 已 100% 新口径、线上分片仍是旧标签）。必须先
+                    # build_snapshot(lite) 再 publish，二者都复用主管线实现。
                     os.environ.setdefault("BOUNDARY_REPO", str(REPO))
                     import auto_pipeline as _ap  # 复用主管线发布逻辑（含派生快照与版本戳）
+                    from build_snapshot import build_snapshot
+                    build_snapshot(lite)
                     if not _ap.publish_to_boundary():
                         print("[WARN] publish failed this round (non-fatal, retried next round)", flush=True)
                 except Exception as exc:

@@ -110,3 +110,4 @@ services/canonical-qa/graph-live/*
 pipeline/triage_engine/.env
 pipeline/.engine_retriage_checkpoint.json
 pipeline/.engine_triage_work/
+pipeline/.engine_retriage_checkpoint.lock
