@@ -86,3 +86,16 @@ app.js renderMarkdown 的同款链接问题先于本次改动存在（portal 页
 环境备注：codex 依赖的本地 :4567 Responses 代理（systemd 用户服务
 codex-zai-proxy.service）在审查时已停止，重启后恢复（此后审查为真实调用，
 token 用量 1,213,429）。
+
+## 附：Codex 复审 R2–R4（2026-10-02，1b4e75a 及后续收口）
+
+- R2（REQUEST_CHANGES）：URL 控制字符混淆（`java\tscript:`/NUL 前缀）、SSE 空行
+  未复位事件名、exclude_ids 白名单拒绝真实语料 URL（约 6,246 条会 422）→
+  1b4e75a 修复（控制字符清洗、空行复位+CRLF、三形态收敛校验）。
+- R3（REQUEST_CHANGES，1 项）：escHtml（textContent→innerHTML）不转义引号，
+  相对 URL 中 `"` 可断开 href 属性注入 `onmouseover` → 修复为 %22 编码 +
+  引用卡片统一 `_qaSafeHref`（部署 techdb-web:1007）。
+- R4（**APPROVE**）：注入闭合确认、`_qaSafeHref` 与链接分支安全等价、
+  回归测试 24/24 真实通过。仅 INFO 级备注（一处冗余断言，不影响结论）。
+
+审查均为真实调用（z.ai 经本地 :4567 Responses 代理，codex-zai-proxy.service）。
