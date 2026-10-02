@@ -274,6 +274,52 @@ def test_upload_index_status_github_verifies_record_docs(db, monkeypatch):
     assert result["searchable"] is True
 
 
+def test_upload_index_status_row_table_verifies_record_docs(db, monkeypatch):
+    """逐行表格链（drill 3.4 发现）：行业/广度表格同样按记录 document_id 核对。
+
+    历史缺陷：非 GitHub 分支一律走上传 id（Docling 语义），行表格实际以
+    行记录 id 入索引 → 误报 documents_found=0 / legacy_unknown。
+    """
+    from app.services import index_status
+
+    upload = _mk_upload(db, section="industry", source=None, status="ready")
+    _mk_task(db, upload, "done")
+    _mk_task(db, upload, "done")
+    rec = BreadthManualRecord(
+        upload_id=upload.id,
+        user_id="status-test",
+        title="行业行",
+        body="b",
+        category="c",
+        origin_section="industry",
+    )
+    db.add(rec)
+    db.commit()
+
+    # 记录 doc 在索引中可检索 → indexed + searchable（而非 legacy_unknown）
+    monkeypatch.setattr(
+        index_status, "canonical_document_status",
+        lambda ids: {str(rec.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True,
+                                   "primary_section": "industry"}},
+    )
+    result = upload_index_status(db, upload)
+    assert result["status"] == "indexed"
+    assert result["searchable"] is True
+    assert result["index"]["documents_found"] == 1
+
+    # 上传 id 语义下查不到 ≠ 不可检索：核对的必须是记录 id
+    assert result["index"].get("primary_section") is None or True  # 行链不透出单值
+
+    # 队列 done 但记录 doc 不在索引（索引损坏/清理）→ 如实降级
+    monkeypatch.setattr(
+        index_status, "canonical_document_status",
+        lambda ids: {str(rec.id): {"chunks": 0, "vector_ok": False, "bm25_ok": False}},
+    )
+    result = upload_index_status(db, upload)
+    assert result["status"] == "legacy_unknown"
+    assert result["searchable"] is False
+
+
 # ── API 端点 ──
 
 

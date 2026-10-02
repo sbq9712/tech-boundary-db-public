@@ -208,7 +208,9 @@ def upload_index_status(db: Session, record: UploadedFile) -> dict:
             "replayed": bool(session.replayed),
         }
 
-    if is_github:
+    if is_github or live_records > 0:
+        # 行记录链（GitHub 增量包 / 逐行表格 / 行业·ATSC 表格）：
+        # document_id = 行记录 id（非上传 id）——canonical 权威核对须逐记录进行。
         status, detail = map_github_status(record, tasks, session, live_records)
         result["status"] = status
         result["queue"].update({k: v for k, v in detail.items() if k.startswith("tasks_")})
@@ -257,7 +259,7 @@ def upload_index_status(db: Session, record: UploadedFile) -> dict:
             }
             result["searchable"] = False
     else:
-        # Docling 链（PDF/表格）：document_id = 上传 id，同步写索引
+        # Docling 链（PDF 等文件级摄取）：document_id = 上传 id，同步写索引
         docs = canonical_document_status([str(record.id)])
         result["status"] = (
             "indexed" if record.embedding_status == "ready" else record.embedding_status
