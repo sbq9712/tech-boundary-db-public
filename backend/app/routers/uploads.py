@@ -807,15 +807,19 @@ def retry_upload_embedding(
             db.commit()
             background_tasks.add_task(process_batch)
             return {"id": str(record.id), "embedding_status": record.embedding_status}
-        if rows and not tasks:
+        if rows:
+            # 重试 = 真实恢复动作（drill 重启/损坏恢复发现）：行记录一律重入队。
+            # 旧行为只重置 failed/pending 任务——任务全 done 但索引内容丢失
+            # （损坏清空/重放缺失）时重试是 no-op，用户按钮无效。
+            # upsert 幂等（同内容指纹 canonical 侧去重），健康状态下重试只是浪费，
+            # 而 UI 只在异常态给重试按钮。
             enqueue_record_upserts(db, rows)
-        else:
-            for task in tasks:
-                if task.status in ("failed", "pending"):
-                    task.status = "pending"
-                    task.attempts = 0
-                    task.not_before = None
-                    task.last_error = None
+        for task in tasks:
+            if task.status in ("failed", "pending"):
+                task.status = "pending"
+                task.attempts = 0
+                task.not_before = None
+                task.last_error = None
         record.embedding_status = "queued"
         record.embedding_error = None
         db.commit()

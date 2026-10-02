@@ -298,7 +298,8 @@ def _scoped_fragment(scope: str) -> dict:
     rows_all = list(_incremental_index.meta)
     sig = _gfrag.fragment_signature(rows_all)
     cache = _SCOPED_FRAGMENT_CACHE
-    if cache["sig"] != sig:
+    # 自愈式缓存判定（演练窗口偶发 KeyError 'sig' → 降级为缓存未命中重建）
+    if cache.get("sig") != sig or "scopes" not in cache:
         cache.update({"sig": sig, "scopes": {}})
     hit = cache["scopes"].get(scope)
     if hit is not None:
