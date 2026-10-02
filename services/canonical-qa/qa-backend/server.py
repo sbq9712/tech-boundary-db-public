@@ -1605,8 +1605,10 @@ async def chat_stream(req: ChatRequest):
 
             # 检索编排（legacy_hybrid 等价）：拆解 → 多路检索 → 图谱扩展 →
             # novelty 排除 → 重排 → 证据评估；失败自动回落基线单路检索
+            # Codex P2-2 二轮：与 parse_sources 同口径——白名单含 unattributed
+            # （诊断值），不再被 VALID_SOURCES 过滤后回退全源。
             req_sources = tuple(x for x in (req.sources or [])
-                                if x in VALID_SOURCES) or None
+                                if x in VALID_SOURCES + (UNATTRIBUTED_SCOPE,)) or None
             search_results, evidence, retrieval_trace = await orchestrated_search(
                 req.query, exclude_ids=req.exclude_ids or None,
                 sources=req_sources)

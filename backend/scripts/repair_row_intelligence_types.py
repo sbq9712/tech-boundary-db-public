@@ -254,24 +254,34 @@ def main() -> None:
                 skipped.append((e["record_id"], f"并发改动（现值 {actual_old!r}），跳过"))
                 continue
             e["actual_old_type"] = actual_old  # 3) 覆盖前实际值
+            # 4) UPDATE + 重入队同一事务一次提交（Codex P1-7 二轮）：先
+            #    commit 再 enqueue 的话，enqueue 抛错/进程退出会留下
+            #    「已改型但无重索引任务」的半完成状态。
             try:
-                db.commit()
                 enqueue_record_upserts(db, [rec])
+                db.commit()
+                e["executed"] = True
                 fixed += 1
             except Exception as exc:  # noqa: BLE001 —— 单条失败不拖垮整批
                 db.rollback()
-                skipped.append((e["record_id"], f"入队失败：{exc}"))
+                e.pop("executed", None)
+                skipped.append((e["record_id"], f"UPDATE/入队未提交（已回滚）：{exc}"))
                 continue
     finally:
         db.close()
 
     if args.backup:
+        # 审计可区分：executed=true 已覆盖（actual_old_type 为覆盖前实值）；
+        # executed=false 规划后未执行/复核不一致/并发跳过（库值未被触碰）。
+        for e in plan:
+            e.setdefault("executed", False)
         Path(args.backup).write_text(json.dumps({
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "executed": fixed,
+            "skipped": [{"record_id": r, "reason": w} for r, w in skipped],
             "entries": plan,
         }, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"备份回写 {args.backup}（含 actual_old_type 实际覆盖值）")
+        print(f"备份回写 {args.backup}（executed 区分已执行/跳过）")
 
     print(f"修复完成：{fixed} 条已 UPDATE 并重入队")
     for rid, why in skipped:
