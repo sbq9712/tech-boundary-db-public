@@ -1369,3 +1369,18 @@ def test_scalar_int_cp_tolerated_in_record_shapes():
         _validate_record_shapes([dict(base, cp={"bad": 1})])
     with pytest.raises(GitHubPackageError):
         _validate_record_shapes([dict(base, cp=[i for i in range(100)])])
+
+
+def test_long_body_accepted_and_truncated():
+    """T12 演练发现（2026-10-02）：真实包正文可达 27k/91k（生成器曾原样导出）。
+
+    入口拒绝线与入库截断线分离：≤200k 通过（入库按 20k 截断），
+    >200k 才拒包。回归锚点：27k 正文不再让整包 400。
+    """
+    from app.services.github_import import _validate_record_shapes, GitHubPackageError
+
+    base = {"id": "r1", "t": "长正文", "d": "2026-10-02", "u": "https://q/1"}
+    _validate_record_shapes([dict(base, b="x" * 27_024)])    # 真实包实测值
+    _validate_record_shapes([dict(base, b="x" * 91_771)])    # 真实包最大值
+    with pytest.raises(GitHubPackageError):
+        _validate_record_shapes([dict(base, b="x" * 200_001)])

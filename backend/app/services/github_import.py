@@ -55,7 +55,10 @@ MAX_PACKAGE_RECORDS = 200_000
 MAX_MEMBERS = 64
 MAX_MEMBER_BYTES = 512 * 1024 * 1024
 MAX_TOTAL_UNCOMPRESSED = 1536 * 1024 * 1024
-_BODY_CAP = 20_000
+_BODY_CAP = 20_000          # 入库截断（record.body 实际上限）
+_BODY_HARD_REJECT = 200_000  # 入口拒绝线（T12：真实包存在 27k/91k 正文——
+                              # 自家生成器原样导出，20k 拒包会让每日增量全拒；
+                              # 入库侧仍按 _BODY_CAP 截断，两线分离）
 
 _UPSTREAM_CACHE_VERSIONS = 2
 _DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -302,7 +305,7 @@ _FIELD_LIMITS = {
     "sc": ("scalar", 16), "as": ("str", 8000), "lv": ("scalar", 32), "wr": ("str", 512),
     # cl/cln/dp 同为标量容忍（历史包中可为数值，如 dp=3 聚类深度）
     "cl": ("scalar", 512), "cln": ("scalar", 512), "dp": ("scalar", 512),
-    "b": ("str", _BODY_CAP), "hb": ("int", 2), "aip": ("int", 1),
+    "b": ("str", _BODY_HARD_REJECT), "hb": ("int", 2), "aip": ("int", 1),
 }
 _INT_RANGES = {"hb": (1, 2), "aip": (0, 1)}
 _LIST_LIMITS = {"kp": (200, 512), "cp": (64, 512)}

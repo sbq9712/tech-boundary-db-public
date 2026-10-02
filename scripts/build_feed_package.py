@@ -118,6 +118,12 @@ def normalize(rec: dict, date: str) -> dict:
     out["d"] = date
     if not str(out.get("u", "")).strip():
         out["u"] = "no-url"  # 六.1：身份占位与内容解耦（内容漂移修复）
+    # T12（2026-10-02）：导出前把正文截到入库上限（20k）——此前生成器原样
+    # 导出（实测最大 91k），导入端 20k 校验直接拒整包，每日增量链路断裂。
+    # 截断发生在 stable_id/白名单导出之前：content_hash 与导出内容始终一致。
+    b = out.get("b")
+    if isinstance(b, str) and len(b) > 20_000:
+        out["b"] = b[:20_000]
     out["id"] = stable_id(str(out.get("t", "")).strip(), date, str(out.get("u", "")))
     # 正向白名单：只导出公开语义字段（dict/list 嵌套保留，如 scd 五维分）
     return {k: out[k] for k in PUBLIC_FIELDS
