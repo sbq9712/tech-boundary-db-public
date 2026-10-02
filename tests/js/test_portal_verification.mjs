@@ -94,3 +94,32 @@ check('safety type 转义', !xss2.includes('<script>'));
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
+
+// ═══ 5. codex 审查（2026-10-02）：实时/历史字段提取等价性 ═══
+// 实时 done: extra{answer_status, knowledge_boundary(串), claim_check, safety_hits}
+// 历史加载: extra{answer_status←summary, knowledge_boundary←claim_check.boundary_message, ...}
+// 两条路径必须渲染出同一份核验 HTML（防复制两份提取逻辑漂移）。
+{
+  const claim_check = {
+    answer_status: 'PARTIALLY_SUPPORTED',
+    claims_total: 3, claims_supported: 2,
+    unsupported_major_claims: ['claim_2'],
+    boundary_message: '库内资料截止 2026-10-02，之后事件不覆盖',
+    safety_hits: [{ type: 'numeric_mismatch' }],
+  };
+  const realtimeExtra = {
+    answer_status: 'PARTIALLY_SUPPORTED',
+    knowledge_boundary: '库内资料截止 2026-10-02，之后事件不覆盖',
+    claim_check, safety_hits: [{ type: 'numeric_mismatch' }],
+  };
+  const historyExtra = {
+    answer_status: 'PARTIALLY_SUPPORTED',
+    knowledge_boundary: claim_check.boundary_message,
+    claim_check, safety_hits: [{ type: 'numeric_mismatch' }],
+  };
+  const a = rvs(realtimeExtra), b = rvs(historyExtra);
+  check('实时/历史提取路径渲染等价', a === b && a.includes('库内资料截止'));
+  // knowledge_boundary 为 null 时（降级路径）不出现 [object Object]
+  const c = rvs({ answer_status: 'UNVERIFIED', claim_check: { claims_total: 1 }, knowledge_boundary: null });
+  check('knowledge_boundary=null 无 [object Object]', !c.includes('[object Object]'));
+}

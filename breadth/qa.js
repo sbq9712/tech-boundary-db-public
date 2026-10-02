@@ -310,7 +310,7 @@ function renderAssistantMessage(msg, idx) {
         <div class="qa-citations-title">📎 来源引用（${citations.length}条）</div>
         ${citations.map(c => {
           return `
-          <div class="qa-citation-item" data-citation-num="${c.id}" data-record-id="${c.record_id}">
+          <div class="qa-citation-item" data-citation-num="${c.id}" data-record-id="${escAttr(String(c.record_id || ''))}">
             <div class="qa-citation-head">
               <span class="qa-citation-num">[${c.id}]</span>
               <a class="qa-citation-title" href="${_qaSafeHref(c.url)}" target="_blank" rel="noreferrer">${escHtml(c.title || '')}</a>
@@ -318,9 +318,9 @@ function renderAssistantMessage(msg, idx) {
             ${(Array.isArray(c.supports_claim_ids) && c.supports_claim_ids.length)
               ? `<span class="qa-ground-badge" title="该引用支撑的主张编号">🧩 支撑主张 ${c.supports_claim_ids.map(escHtml).join('、')}</span>` : ''}
             <div class="qa-citation-meta">
-              <span>📅 ${c.date || ''}</span>
+              <span>📅 ${escHtml(String(c.date || ''))}</span>
               <span>📰 ${escHtml(c.source || '')}</span>
-              ${c.score ? `<span>⭐ ${c.score}</span>` : ''}
+              ${c.score ? `<span>⭐ ${escHtml(String(c.score))}</span>` : ''}
               ${c.tag ? `<span>🏷️ ${escHtml(c.tag)}</span>` : ''}
               <a class="qa-citation-link" href="${_qaSafeHref(c.url)}" target="_blank" rel="noreferrer">🔗 原文</a>
             </div>
@@ -375,7 +375,12 @@ function renderAssistantMessage(msg, idx) {
     ? msg.claims
     : deriveClaimsFromCheck(msg, citations);
   const mappedCitations = citations.filter(c => Array.isArray(c.supports_claim_ids) && c.supports_claim_ids.length > 0);
-  const hasEvidence = !isStreaming && (citations.length > 0 || (claims.length > 0 && mappedCitations.length > 0));
+  // T6/codex 审查（2026-10-02）：零引用但存在 UNSUPPORTED 主张时，核验
+  // 结论（关键主张无证据）必须可见——卡片照渲染，不能整卡隐藏。
+  const hasUnsupported = claims.some(cl => cl && cl.status === 'UNSUPPORTED');
+  const hasEvidence = !isStreaming && (citations.length > 0
+    || (claims.length > 0 && mappedCitations.length > 0)
+    || (claims.length > 0 && hasUnsupported));
 
   // T033: Answer status badge (only when not streaming and status is present)
   if (!isStreaming && msg.answer_status) {
@@ -436,9 +441,10 @@ function renderAssistantMessage(msg, idx) {
 
   // TK-13 (Q13/R8): minimal evidence card — claim→citation mapping.
   // Graceful degrade: hidden entirely when supports_claim_ids are empty
-  // (legacy path), never a "no data" placeholder.
+  // (legacy path), never a "no data" placeholder — 例外：存在 UNSUPPORTED
+  // 主张时照渲染（关键未支持结论不能因零引用而消失，codex 审查 2026-10-02）。
   // (claims/mappedCitations hoisted above for the drawer trigger check.)
-  if (!isStreaming && claims.length > 0 && mappedCitations.length > 0) {
+  if (!isStreaming && claims.length > 0 && (mappedCitations.length > 0 || hasUnsupported)) {
     // 2026-09-20: citations referenced in the prose but never mapped to a
     // claim by the claim-mapper get their own explicit row, so the card
     // accounts for every [N] the answer text actually uses.
@@ -1086,6 +1092,14 @@ function escHtml(text) {
   return div.innerHTML;
 }
 
+// 属性上下文转义（codex 审查 2026-10-02）：textContent→innerHTML 序列化
+// 只转义 &<>，data-* 等属性插值必须连引号一起转义，防属性逃逸注入。
+// 文本上下文继续用 escHtml（多转义引号虽无害，但 url→%22 百分号编码
+// 契约会先于本函数执行，混用会让 renderMarkdown 的 %22 断言失效）。
+function escAttr(text) {
+  return escHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // 引用 URL 的 scheme 白名单：引用数据来自检索索引（含用户上传文档的 u 字段），
 // javascript:/data: 等一律降级为 '#'，防 LLM/数据侧诱导点击。
 // 注意必须先剔除 ASCII 控制字符：浏览器 URL 解析会剔除 TAB/LF/CR 与首尾
@@ -1592,6 +1606,6 @@ window.qaModule = {
   switchFromQAView,
   initQAView,
   __testHooks: { sseFrameParser, handleSSEData, renderMarkdown, _qaSafeUrl, _qaSafeHref,
-    getAnswerStatusConfig, deriveEvidenceSummary, deriveClaimsFromCheck, renderBoundaryAndSafety,
-    renderAssistantMessage },
+    escHtml, escAttr, getAnswerStatusConfig, deriveEvidenceSummary, deriveClaimsFromCheck,
+    renderBoundaryAndSafety, renderAssistantMessage },
 };

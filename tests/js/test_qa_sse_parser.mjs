@@ -49,6 +49,7 @@ const src = readFileSync(join(root, 'breadth', 'qa.js'), 'utf8');
 (0, eval)(src.replace(/^window\.qaModule/m, 'globalThis.qaModule'));
 const hooks = globalThis.qaModule.__testHooks ?? window.qaModule.__testHooks;
 const { sseFrameParser, handleSSEData, renderMarkdown, _qaSafeUrl, _qaSafeHref } = hooks;
+const { escHtml, escAttr } = hooks;
 
 let failures = 0;
 function check(name, cond) {
@@ -176,5 +177,18 @@ function check(name, cond) {
     && seen[1][0] === null && seen[1][1].text === 'y');
 }
 
+// ── 7. codex 审查（2026-10-02）：属性上下文转义 escAttr ─────────
+{
+  const attr = escAttr;
+  check('escAttr 可用', typeof attr === 'function');
+  check('escAttr 引号转义', attr('a"b\'c').includes('&quot;') && attr("a\"b'c").includes('&#39;'));
+  check('escAttr 文本语义同 escHtml（&<>）', attr('<i>&') === escHtml('<i>&'));
+  // renderMarkdown 契约不回归：URL 引号仍 %22 编码（不被 &quot; 污染）
+  const out = renderMarkdown('[x](/a" onmouseover="alert(1))');
+  const hrefVal = (out.match(/href="([^"]*)"/) || [])[1];
+  check('renderMarkdown URL 引号仍 %22（escAttr 不污染链接契约）', hrefVal === '/a%22 onmouseover=%22alert(1');
+}
+
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
+
