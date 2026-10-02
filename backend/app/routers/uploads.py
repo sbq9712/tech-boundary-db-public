@@ -28,6 +28,12 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_admin, require_upload
 from app.db.session import get_db
 from app.models.index_task import IndexTask
+from app.services.index_status import (
+    map_github_status,
+    queue_aggregate,
+    sessions_map,
+    upload_index_status,
+)
 from app.services.table_rows import (
     TableParseError,
     ALLOWED_SUFFIXES as ROW_MODE_SUFFIXES,
@@ -124,11 +130,21 @@ class ClassificationOverride(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
-def _serialize(record: UploadedFile) -> dict:
+def _serialize(record: UploadedFile, index_detail: dict | None = None) -> dict:
+    """序列化上传记录。
+
+    index_detail（列表页由单条 GROUP BY 批量预取，任务一 1.1）：GitHub
+    增量包分支的队列映射粗状态与会话计数——DB embedding_status 只表达
+    入队意图，真实可检索以 /uploads/{id}/index-status（canonical 权威）
+    为准。None 时退回旧行为（单条端点不带队列详情）。
+    """
     terminal = {"classified", "unclassified", "irrelevant", "legacy_unclassified"}
     if record.primary_section == "breadth" and record.breadth_source == "github":
-        # 增量包不是文档：不走 Docling/索引摄取，状态只表达导入结果
-        ingestion_status = "imported"
+        # 增量包不是文档：不走 Docling/索引摄取；状态=导入结果+索引队列映射
+        if index_detail is not None:
+            ingestion_status = index_detail["status"]
+        else:
+            ingestion_status = "imported"
     elif record.storage_status != "stored":
         ingestion_status = record.storage_status
     elif record.embedding_status == "processing" and not record.document_assets:
@@ -143,7 +159,7 @@ def _serialize(record: UploadedFile) -> dict:
         ingestion_status = "index_queued"
     else:
         ingestion_status = f"embedding_{record.embedding_status}"
-    return {
+    serialized = {
         "id": str(record.id),
         "document_id": str(record.id),
         "filename": record.original_filename,
@@ -184,6 +200,11 @@ def _serialize(record: UploadedFile) -> dict:
         "submitted_by": record.submitted_by,
         "created_at": record.created_at.isoformat() if record.created_at else None,
     }
+    if record.primary_section == "breadth" and record.breadth_source == "github" and index_detail is not None:
+        serialized["index_detail"] = {
+            k: v for k, v in index_detail.items() if k != "status"
+        }
+    return serialized
 
 
 def _uuid_or_400(file_id: str) -> uuid.UUID:
@@ -650,9 +671,32 @@ def list_uploads(
             .group_by(UploadedFile.breadth_source)
         ).all()
     )
+    # 任务一 1.1：GitHub 分支队列映射（单条 GROUP BY，无 N+1）+ 会话计数
+    github_rows = [r for r in rows if r.primary_section == "breadth" and r.breadth_source == "github"]
+    github_ids = [r.id for r in github_rows]
+    tasks_agg = queue_aggregate(db, github_ids)
+    sess_map = sessions_map(db, github_ids)
+    live_counts: dict = {}
+    if github_ids:
+        from app.models.breadth_manual_record import BreadthManualRecord as _BMR
+        for uid, cnt in db.execute(
+            select(_BMR.upload_id, func.count())
+            .where(_BMR.upload_id.in_(github_ids))
+            .group_by(_BMR.upload_id)
+        ).all():
+            if uid is not None:
+                live_counts[uid] = int(cnt)
+    index_details: dict = {}
+    for r in github_rows:
+        status, detail = map_github_status(
+            r, tasks_agg.get(r.id, {}), sess_map.get(r.id), live_counts.get(r.id))
+        detail["status"] = status
+        index_details[r.id] = detail
     return {
         "count": db.scalar(count_query) or 0,
-        "files": [_serialize(row) for row in rows],
+        "files": [
+            _serialize(row, index_details.get(row.id)) for row in rows
+        ],
         "counts": {
             "breadth": section_counts.get("breadth", 0),
             "industry": section_counts.get("industry", 0),
@@ -717,6 +761,35 @@ def retry_upload_embedding(
         rows = db.scalars(
             select(BreadthManualRecord).where(BreadthManualRecord.upload_id == record.id)
         ).all()
+        if not rows and not tasks and record.stored_filename:
+            # 任务一 1.2 恢复缺口：zip 已落盘但导入从未完成（无会话/无记录/
+            # 无任务，legacy_unknown）——重试 = 从存储对象重新导入（幂等：
+            # 包内记录与既有身份/墓碑按既有规则合并，重复执行无副作用）
+            from app.services.upload_ingestion import safe_upload_path as _safe_path
+
+            zip_path = _safe_path(record.stored_filename)
+            if not zip_path.exists():
+                raise HTTPException(409, "增量包存储对象缺失，无法重新导入；请删除后重新上传")
+            try:
+                payload = import_github_package(db, record, zip_path)
+                record.title = f"广度增量包 {payload['package_date']}"
+                record.document_date = payload["package_date"]
+                record.note = note_for_counts(payload)
+            except GitHubPackageError as exc:
+                db.rollback()
+                raise HTTPException(400, f"增量包不合规：{exc}") from exc
+            # 注意：不 refresh——上面 title/document_date/note 尚未落库，
+            # refresh 会丢弃未 flush 的赋值
+            new_rows = db.scalars(
+                select(BreadthManualRecord).where(BreadthManualRecord.upload_id == record.id)
+            ).all()
+            if new_rows:
+                enqueue_record_upserts(db, new_rows)
+            record.embedding_status = "queued" if new_rows else "skipped"
+            record.embedding_error = None
+            db.commit()
+            background_tasks.add_task(process_batch)
+            return {"id": str(record.id), "embedding_status": record.embedding_status}
         if rows and not tasks:
             enqueue_record_upserts(db, rows)
         else:
@@ -738,6 +811,26 @@ def retry_upload_embedding(
     db.commit()
     background_tasks.add_task(process_uploaded_file, str(record.id))
     return {"id": str(record.id), "embedding_status": "pending"}
+
+
+@router.get("/uploads/{file_id}/index-status")
+def get_upload_index_status(
+    file_id: str,
+    current_user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """任务一 1.1：单个上传的真实可检索状态（上传页轮询/展示的唯一数据源）。
+
+    聚合 DB + 持久队列 + 导入会话 + canonical-qa 增量索引逐文档确认；
+    canonical 不可达时 searchable=None（unknown），绝不假装可检索。
+    登录即可查看（与上传列表同权限面）；无跨用户隔离——上传对象本身
+    不含隐私载荷，且列表面板对所有登录用户可见。
+    """
+    record = db.get(UploadedFile, _uuid_or_400(file_id))
+    if record is None:
+        raise HTTPException(404, "文件不存在")
+    return upload_index_status(db, record)
+
 
 
 @router.put("/uploads/{file_id}/classification")
