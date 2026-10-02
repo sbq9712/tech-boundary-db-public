@@ -27,6 +27,18 @@ async def lifespan(_: FastAPI):
             "⚠️  SECRET_KEY 未通过环境变量配置，当前使用默认不安全值。"
             "生产环境请务必设置随机强密钥：SECRET_KEY=<随机字符串>"
         )
+    # T8（2026-10-02）：QA 索引写通道令牌未配置/占位符时，canonical-qa 侧
+    # 写端点会 503（广度问答增量索引写入全部失败）。启动时给出明确告警，
+    # 避免运维只看 api 日志时误判为「服务正常」。
+    _qa_index_token = os.getenv("TECHDB_QA_INDEX_TOKEN", "").strip()
+    if _qa_index_token in ("", "replace_with_a_random_internal_index_token"):
+        logger.warning(
+            "⚠️  TECHDB_QA_INDEX_TOKEN 未配置或仍为 .env.example 占位符，"
+            "canonical-qa 写端点（/api/index/upsert、/api/index/delete、"
+            "/api/index/record-mutate）将全部拒绝（503）。"
+            "请生成随机值：openssl rand -hex 32，写入 .env 并保持 "
+            "api 与 canonical-qa 同值后重启两服务。"
+        )
     try:
         db = SessionLocal()
         try:

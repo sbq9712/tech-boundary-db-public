@@ -1109,9 +1109,23 @@ class IndexUpsertRequest(BaseModel):
     chunks: list[IndexChunk]
 
 
+# T8（2026-10-02）：占位符/未配置的 token 视同「未配置」——写端点必须
+# 显式拒绝（503 + 指引），杜绝部署沿用 .env.example 默认值时内网写通道
+# 形同裸奔；读端点（health/search/chat）不受影响（Docker 内网边界）。
+_PLACEHOLDER_TOKENS = {
+    "", "replace_with_a_random_internal_index_token",
+}
+
+
 def _check_index_token(token: str | None) -> None:
     expected = os.getenv("TECHDB_QA_INDEX_TOKEN", "").strip()
-    if expected and not secrets.compare_digest(token or "", expected):
+    if expected in _PLACEHOLDER_TOKENS:
+        raise HTTPException(
+            status_code=503,
+            detail="TECHDB_QA_INDEX_TOKEN 未配置或仍为占位符——写端点已禁用。"
+                   "请生成随机值（openssl rand -hex 32）写入 .env 并保持 "
+                   "canonical-qa 与 api 同值，然后重启两服务。")
+    if not secrets.compare_digest(token or "", expected):
         raise HTTPException(status_code=401, detail="invalid index token")
 
 
