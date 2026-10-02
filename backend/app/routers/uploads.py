@@ -492,15 +492,19 @@ async def upload_files(
                 (section == "breadth" and bsource == "other")
                 or (sync_upload_to_breadth and section in ("industry", "atsc"))
             )
+            # 任务三 3.2：严格类型要求只作用于「其他广度情报」逐行导入——
+            # 行业/ATSC/GitHub 通道不受影响（未映射类型列时沿用原默认）。
             stats = import_rows(
                 db, record, sheets, mapping,
                 fallback_date=None,
                 category_fallback=manual_category,
                 in_breadth_nav=row_in_breadth_nav,
+                require_type=(section == "breadth" and bsource == "other"),
             )
             # 三.3：空日期与非法日期分开计数（行日期不再用文件日期静默兜底）
             record.note = (
                 f"逐行导入 {stats['imported']} 条"
+                + (f" · 更新 {stats['updated']}" if stats.get("updated") else "")
                 + (f" · 空标题跳过 {stats['skipped_empty']}" if stats["skipped_empty"] else "")
                 + (f" · 去重跳过 {stats['skipped_duplicate']}" if stats["skipped_duplicate"] else "")
                 + (f" · 空日期 {stats['rows_missing_date']}" if stats["rows_missing_date"] else "")

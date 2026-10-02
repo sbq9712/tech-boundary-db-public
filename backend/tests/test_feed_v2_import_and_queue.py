@@ -531,7 +531,7 @@ def test_table_rows_csv_mapping_and_dedup(tmp_path, monkeypatch):
         assert by_title["情报一"]["level"] == 2
         assert not by_title["情报二"]["document_date"]  # 三.3：空日期照常入库，不兜底
         assert not by_title["情报三"]["document_date"]  # 三.3：非法日期照常入库并计数
-        assert by_title["情报一"]["source_ref"]["row"] == 1        # 行号溯源（工作表内首个数据行）
+        assert by_title["情报一"]["source_ref"]["row"] == 2        # 物理行号溯源（表头占第 1 行，首个数据行=2）
         # 索引任务
         tasks = db.execute(text(
             "SELECT count(*) FROM breadth_index_tasks WHERE upload_id=:i"
@@ -581,10 +581,11 @@ def test_table_rows_per_sheet_row_numbers_and_nav_flag(tmp_path, monkeypatch):
             "WHERE upload_id=:i ORDER BY title"
         ), {"i": str(upload.id)}).mappings().all()
         by_title = {r["title"]: r for r in rows}
-        # 行号逐工作表从表头后重新计数（表二首条数据行 row=2，而不是累计 4）
-        assert by_title["甲-行1"]["source_ref"] == {"file": upload.original_filename, "sheet": "表一", "row": 1}
-        assert by_title["甲-行2"]["source_ref"]["sheet"] == "表一" and by_title["甲-行2"]["source_ref"]["row"] == 2
-        assert by_title["乙-行1"]["source_ref"] == {"file": upload.original_filename, "sheet": "表二", "row": 1}
+        # 物理行号溯源（任务三 3.2）：表头占第 1 行，首个数据行=2；
+        # 表二独立按其工作表物理行计（首个数据行=2），不跨表累计。
+        assert by_title["甲-行1"]["source_ref"] == {"file": upload.original_filename, "sheet": "表一", "row": 2}
+        assert by_title["甲-行2"]["source_ref"]["sheet"] == "表一" and by_title["甲-行2"]["source_ref"]["row"] == 3
+        assert by_title["乙-行1"]["source_ref"] == {"file": upload.original_filename, "sheet": "表二", "row": 2}
         # in_breadth_nav=False 落库
         assert all(r["in_breadth_nav"] is False for r in rows)
     finally:
