@@ -89,16 +89,24 @@ async def search_canonical_raw(
     query: str,
     top_k: int = 25,
     exclude_ids: list[str] | None = None,
+    sources: list[str] | None = None,
 ) -> dict[str, Any]:
     """检索原始载荷：citations 之外还带 evidence/retrieval_trace（编排层评估）。
 
     旧版 canonical-qa（无编排层）不返回这两个键，兼容降级为 {}。
+    sources（任务二 2.2）：来源子集（breadth/industry/atsc）——None=默认
+    三源全开；显式收窄时透传（用户/入口限定作用域，不静默丢源）。
     """
     base_url = _require_url()
     params: dict[str, Any] = {"q": query, "top_k": min(max(top_k, 1), 50)}
     novelty = [str(x).strip() for x in (exclude_ids or []) if str(x).strip()][:80]
     if novelty:
         params["exclude_ids"] = ",".join(novelty)
+    valid_sources = tuple(
+        str(x).strip().lower() for x in (sources or [])
+        if str(x).strip().lower() in ("breadth", "industry", "atsc"))
+    if valid_sources:
+        params["sources"] = ",".join(valid_sources)
     try:
         async with httpx.AsyncClient(timeout=qa_service_timeout()) as client:
             response = await client.get(f"{base_url}/api/search", params=params)
@@ -164,11 +172,16 @@ async def service_status() -> dict[str, Any]:
     }
 
 
-async def graph_snapshot(limit: int = 200) -> dict[str, Any]:
+async def graph_snapshot(limit: int = 200, scope: str = "breadth") -> dict[str, Any]:
+    """门户背景图谱（任务二 2.4）：默认 scope=breadth——服务端已按来源
+    过滤（度数/标签/计数不含行业/ATSC 贡献）；行业/ATSC 图谱只服务各自
+    栏目检索，不进门户背景。"""
     base_url = _require_url()
+    scope = scope if scope in ("breadth", "industry", "atsc") else "breadth"
     try:
         async with httpx.AsyncClient(timeout=qa_service_timeout()) as client:
-            response = await client.get(f"{base_url}/api/graph", params={"limit": min(max(limit, 1), 500)})
+            response = await client.get(f"{base_url}/api/graph", params={
+                "limit": min(max(limit, 1), 500), "scope": scope})
             response.raise_for_status()
             payload = response.json()
     except (httpx.HTTPError, ValueError, QAServiceError) as exc:

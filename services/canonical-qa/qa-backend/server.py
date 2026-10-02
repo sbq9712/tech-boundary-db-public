@@ -152,6 +152,47 @@ def _result_allowed(meta: dict, is_base: bool) -> bool:
     return True
 
 
+VALID_SOURCES = ("breadth", "industry", "atsc")
+# 任务二 2.1/2.2：未归属（回填前存量）记录在默认三源模式下保留召回机会
+# （避免静默丢证据），但 trace 如实计数；显式收窄来源子集时排除。
+UNATTRIBUTED_SCOPE = "unattributed"
+
+
+def parse_sources(raw: str | None) -> tuple | None:
+    """/api/search?sources= 解析：逗号分隔白名单子集；空/非法值 → None=默认全源。"""
+    if not raw:
+        return None
+    wanted = tuple(x.strip().lower() for x in raw.split(",") if x.strip())
+    if not wanted:
+        return None
+    valid = tuple(x for x in wanted if x in VALID_SOURCES)
+    if not valid:
+        return None
+    return valid
+
+
+def _meta_scope(meta: dict, is_base: bool) -> str:
+    """检索结果的来源归属（任务二 2.1）。
+
+    基础索引 = 管线发布的公开科技情报记录（广度域）；增量记录按
+    chunk_metadata.primary_section 归属，缺失记 unattributed（回填后趋零）。
+    """
+    if is_base:
+        return "breadth"
+    md = meta.get("chunk_metadata") or {}
+    section = str(md.get("primary_section") or "").strip().lower()
+    return section if section in VALID_SOURCES else UNATTRIBUTED_SCOPE
+
+
+def _scope_allowed(meta: dict, is_base: bool, sources: tuple | None) -> bool:
+    if sources is None:
+        return True
+    scope = _meta_scope(meta, is_base)
+    if scope == UNATTRIBUTED_SCOPE:
+        return UNATTRIBUTED_SCOPE in sources
+    return scope in sources
+
+
 _SHA_POSITIONS: dict = {}
 
 
@@ -234,7 +275,45 @@ def _fragment() -> dict:
         adjacency.setdefault(dst, []).append((src, rel))
     _FRAGMENT_CACHE.update({"data": data, "labels": labels, "adjacency": adjacency,
                             "sig": _gfrag.fragment_signature(rows), "dirty": False})
+    # 归属变化（metadata-patch/回填）可能改变 scope 视图——一并失效
+    _SCOPED_FRAGMENT_CACHE.update({"sig": "", "scopes": {}})
     return data
+
+
+_SCOPED_FRAGMENT_CACHE: dict = {"sig": "", "scopes": {}}
+
+
+def _scoped_fragment(scope: str) -> dict:
+    """按来源范围过滤的增量图谱碎片（任务二 2.2/2.4）。
+
+    计算前过滤（非渲染后隐藏）：节点/边/度数只统计 scope 内记录的实体
+    贡献。scope="unattributed" 覆盖回填前无归属存量（默认三源模式的
+    图谱路保留其召回，trace 计数）。
+    """
+    rows_all = list(_incremental_index.meta)
+    sig = _gfrag.fragment_signature(rows_all)
+    cache = _SCOPED_FRAGMENT_CACHE
+    if cache["sig"] != sig:
+        cache.update({"sig": sig, "scopes": {}})
+    hit = cache["scopes"].get(scope)
+    if hit is not None:
+        return hit
+    rows = [m for m in rows_all
+            if _meta_scope(m, is_base=False) == scope]
+    data = _gfrag.build_fragment(rows)
+    labels: list[tuple[str, str, int]] = []
+    adjacency: dict[str, list[tuple[str, str]]] = {}
+    for n in data["nodes"]:
+        labels.append((str(n["id"]), str(n["label"]), int(n.get("degree") or 0)))
+    for e in data["edges"]:
+        src, dst = str(e["source"]), str(e["target"])
+        rel = str(e.get("label") or "")
+        adjacency.setdefault(src, []).append((dst, rel))
+        adjacency.setdefault(dst, []).append((src, rel))
+    out = {"labels": labels, "adjacency": adjacency, "nodes": data["nodes"],
+           "edges": data["edges"]}
+    cache["scopes"][scope] = out
+    return out
 
 
 def _masked_key_shas() -> set:
@@ -305,8 +384,12 @@ def _governed_static() -> dict:
 _STATIC_GRAPH_STATE: dict = {"degraded": False, "reason": ""}
 
 
-def _merged_graph() -> tuple[list, dict]:
+def _merged_graph(scope: str = "breadth") -> tuple[list, dict]:
     """静态 graph-export 标签/邻接 ∪ 增量碎片（SEMANTIC_GRAPH 召回用）。
+
+    scope（任务二 2.2/2.4）：静态图只属 breadth（管线公开情报语料）；
+    industry/atsc 范围仅用各自增量碎片——行业/ATSC 图谱服务自身栏目
+    检索，不混入广度域扩展。
 
     六.5：静态侧先过版本/墓碑治理——已删除/被替换记录的实体不再参与
     实体匹配与邻居标签扩展（记录本身的屏蔽在 _result_allowed 已生效，
@@ -339,10 +422,13 @@ def _merged_graph() -> tuple[list, dict]:
         _STATIC_GRAPH_STATE["reason"] = f"governance failed: {exc}"
         print(f"[graph-govern] static graph excluded (governance failed): {exc}",
               flush=True)
-    frag = _fragment()
+    if scope != "breadth":
+        # 静态图是管线广度语料的实体贡献——行业/ATSC 范围不引入
+        s_labels, s_adj = [], {}
+    frag = _scoped_fragment(scope)
     if not frag["nodes"]:
         return s_labels, s_adj
-    f_labels, f_adj = _FRAGMENT_CACHE["labels"], _FRAGMENT_CACHE["adjacency"]
+    f_labels, f_adj = frag["labels"], frag["adjacency"]
     merged_adj = {k: list(v) for k, v in s_adj.items()}
     label_map = {lab: (nid, deg) for nid, lab, deg in s_labels}
     for nid, lab, deg in f_labels:
@@ -566,8 +652,15 @@ def remap_index_metadata():
     return status
 
 
-async def vector_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
-    """Search the vector index for the most similar records."""
+async def vector_search(query: str, top_k: int = RETRIEVAL_TOP_K,
+                        sources: tuple | None = None) -> list:
+    """Search the vector index for the most similar records.
+
+    sources（任务二 2.2）：候选获取阶段的来源过滤——None=默认全源
+    （含未归属回填前存量）；子集时基础索引仅在 breadth 域、增量按
+    chunk_metadata.primary_section 过滤。小体量源（行业/ATSC）不再被
+    广度 top-k 挤出（per-source 池在 orchestrated_search 层构建）。
+    """
     if _vector_index is None and not _incremental_index.record_count:
         return []
 
@@ -576,8 +669,9 @@ async def vector_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
     query_vec = np.array(query_emb[0], dtype=np.float32)
     query_vec = query_vec / max(np.linalg.norm(query_vec), 1e-8)
 
+    base_in_scope = sources is None or "breadth" in sources
     results = []
-    if _vector_index is not None:
+    if _vector_index is not None and base_in_scope:
         # Cosine similarity (embeddings are pre-normalized)
         scores = _vector_index @ query_vec
         top_indices = np.argsort(scores)[::-1]
@@ -592,18 +686,25 @@ async def vector_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
             results.append({"meta": meta, "score": float(scores[int(idx)])})
             kept += 1
     inc_results = _incremental_index.vector_search(query_vec, top_k * 3)
-    results.extend(r for r in inc_results if _result_allowed(r["meta"], is_base=False))
+    results.extend(r for r in inc_results
+                   if _result_allowed(r["meta"], is_base=False)
+                   and _scope_allowed(r["meta"], is_base=False, sources=sources))
     return sorted(results, key=lambda item: item["score"], reverse=True)[:top_k]
 
 
-def bm25_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
-    """Search the BM25 index for keyword matches."""
+def bm25_search(query: str, top_k: int = RETRIEVAL_TOP_K,
+                sources: tuple | None = None) -> list:
+    """Search the BM25 index for keyword matches.
+
+    sources（任务二 2.2）：同 vector_search——候选获取阶段按来源过滤。
+    """
     tokens = _bm25_query_tokens(query)
     if not tokens and _bm25_index is None:
         return []
 
+    base_in_scope = sources is None or "breadth" in sources
     base_results = []
-    if _bm25_index is not None and tokens:
+    if _bm25_index is not None and tokens and base_in_scope:
         scores = _bm25_index.get_scores(tokens)
         top_indices = np.argsort(scores)[::-1][:top_k * 3]
         for idx in top_indices:
@@ -617,7 +718,8 @@ def bm25_search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list:
                 break
     incremental_results = _incremental_index.bm25_search(" ".join(tokens), top_k * 3) if tokens else []
     incremental_results = [r for r in incremental_results
-                           if _result_allowed(r["meta"], is_base=False)]
+                           if _result_allowed(r["meta"], is_base=False)
+                           and _scope_allowed(r["meta"], is_base=False, sources=sources)]
     # BM25 scores from separately built corpora are not numerically comparable.
     # Interleave their ranked lists before the outer RRF fusion.
     results = []
@@ -670,15 +772,16 @@ def rrf_fuse(vec_results: list, bm25_results: list,
     } for item in fused]
 
 
-async def hybrid_search(query: str) -> tuple:
+async def hybrid_search(query: str, sources: tuple | None = None) -> tuple:
     """Hybrid retrieval: vector + BM25 → RRF fusion → dynamic cutoff.
 
     Returns (search_results, is_relevant) where is_relevant indicates
     whether results are good enough to generate an answer.
+    sources（任务二 2.2）：透传给两路候选获取的来源范围。
     """
     # Run both routes in parallel
-    vec_task = vector_search(query, top_k=RETRIEVAL_TOP_K)
-    bm25_task = asyncio.to_thread(bm25_search, query, RETRIEVAL_TOP_K)
+    vec_task = vector_search(query, top_k=RETRIEVAL_TOP_K, sources=sources)
+    bm25_task = asyncio.to_thread(bm25_search, query, RETRIEVAL_TOP_K, sources)
 
     vec_results, bm25_results = await asyncio.gather(vec_task, bm25_task)
 
@@ -700,10 +803,15 @@ async def hybrid_search(query: str) -> tuple:
     return results, is_relevant
 
 
-def _bm25_by_label(label: str, top_k: int = 6) -> list:
-    """SEMANTIC_GRAPH：以实体/关系邻居标签为词项的补充 BM25 检索。"""
+def _bm25_by_label(label: str, top_k: int = 6,
+                   sources: tuple | None = None) -> list:
+    """SEMANTIC_GRAPH：以实体/关系邻居标签为词项的补充 BM25 检索。
+
+    sources（任务二 2.2）：图谱扩展召回同样受来源范围约束（图谱证据
+    必须满足来源范围与版本约束）。
+    """
     try:
-        return bm25_search(label, top_k=top_k)
+        return bm25_search(label, top_k=top_k, sources=sources)
     except Exception:
         return []
 
@@ -758,70 +866,112 @@ def _hydrate_texts(results: list) -> list:
 
 
 async def orchestrated_search(query: str, exclude_ids: list | None = None,
-                              final_top_k: int = FINAL_TOP_K) -> tuple:
+                              final_top_k: int = FINAL_TOP_K,
+                              sources: tuple | None = None) -> tuple:
     """legacy_hybrid 等价检索编排（DECOMPOSITION → 多路检索 → 图谱扩展 →
     novelty 排除 → 重排 → 证据评估），全链各阶段 FAIL_SAFE 降级。
 
-    返回 (search_results, evidence, trace)。任何阶段异常都回落到单路
-    hybrid_search，保证检索永不因编排层失败而整体不可用。
+    任务二 2.2：三源三路检索矩阵。
+    - sources=None → 默认三源全开（breadth/industry/atsc，另含回填前
+      未归属存量的召回机会，trace 计数）；显式子集 → 收窄，未归属排除。
+    - 来源过滤在候选获取阶段：每个源独立 hybrid 池（向量+BM25），小体量
+      源（行业/ATSC）不被广度 top-k 挤出；跨源融合用 RRF（可解释排名，
+      不跨路/跨源加裸分）。
+    - 图谱路独立召回：hybrid 全空不再 early-return——实体匹配 → 邻居
+      扩展 → 原文记录召回照常执行（「无证据」≠「路失败」）。
+    - trace.source_route_matrix[source][route] = {executed, candidates,
+      duration_ms, degrade_reason}——九格可验证。
+    - 单路失败其余路继续；任何阶段异常回落单路基线检索。
+
+    返回 (search_results, evidence, trace)。
     """
     trace: dict = {"flags": {k: v for k, v in FLAGS.items() if v}}
     base = (query or "").strip()
+    if sources is None:
+        scopes = VALID_SOURCES + (UNATTRIBUTED_SCOPE,)
+        trace["sources"] = list(VALID_SOURCES)
+    else:
+        scopes = tuple(x for x in sources if x in VALID_SOURCES) or VALID_SOURCES
+        trace["sources"] = list(scopes)
+    matrix: dict = {sc: {"vector": {"executed": False, "candidates": 0, "duration_ms": 0},
+                         "keyword": {"executed": False, "candidates": 0, "duration_ms": 0},
+                         "graph": {"executed": False, "candidates": 0, "duration_ms": 0}}
+                    for sc in scopes}
+
+    def _scope_of(meta: dict) -> str:
+        # 增量 chunk kind=upload；基础记录无该标记（scope 恒 breadth）
+        return _meta_scope(meta, is_base=meta.get("kind") != "upload")
+
     try:
         # 1) Router + Decomposition：子查询拆分
         subqueries, dec_trace = _pl_decompose(base, FLAGS)
         trace["decomposition"] = dec_trace
 
-        # 2) ITERATIVE_RETRIEVAL：多路 hybrid 检索 + RRF 归并
-        #    （补齐 title/body 文本，供重排/证据评估/图谱闸门确定性判断）
-        rounds: list[list] = []
+        # 2) ITERATIVE_RETRIEVAL：按源分池的多路 hybrid 检索 + RRF 归并
+        #    （候选获取阶段过滤来源——每个源独立 top-k 池）
+        per_scope_rounds: dict[str, list] = {}
+        import time as _time
         for sub in subqueries[:4]:
-            results, _rel = await hybrid_search(sub)
-            if results:
-                rounds.append(_hydrate_texts(results))
-        if not rounds:
-            return [], {"status": "insufficient", "count": 0}, trace
-        merged = rounds[0] if len(rounds) == 1 else _pl_rrf_merge(rounds)
-        # 跨路去重：同一文章在不同批次/子查询下 record_idx 不同但实体相同
-        merged, cross_dup = dedup_search_results(merged)
-        trace["cross_round_dedup_dropped"] = cross_dup
-        trace["retrieval_rounds"] = len(rounds)
-        trace["merged_candidates"] = len(merged)
+            for sc in scopes:
+                sc_sources = (sc,)  # 每个源独立 top-k 池（含未归属池）
+                t0 = _time.monotonic()
+                results, _rel = await hybrid_search(sub, sources=sc_sources)
+                vec_n = len([r for r in results if r.get("vec_score")])
+                bm_n = len([r for r in results if r.get("bm25_score")])
+                m = matrix[sc]
+                m["vector"]["executed"] = True
+                m["vector"]["candidates"] += vec_n
+                m["vector"]["duration_ms"] += int((_time.monotonic() - t0) * 1000)
+                m["keyword"]["executed"] = True
+                m["keyword"]["candidates"] += bm_n
+                m["keyword"]["duration_ms"] += int((_time.monotonic() - t0) * 1000)
+                if results:
+                    per_scope_rounds.setdefault(sc, []).extend(_hydrate_texts(results))
+        rounds = [rs for rs in per_scope_rounds.values() if rs]
 
-        # 3) novelty exclusion：历史已引用记录不再重复召回（保底防饿死）
-        if FLAGS.get("ITERATIVE_RETRIEVAL_ENABLED"):
-            merged, excluded_n, excluded_ids = _pl_novelty(merged, exclude_ids)
-            trace["novelty_excluded"] = excluded_n
-            if excluded_ids:
-                trace["novelty_excluded_ids"] = excluded_ids[:10]
+        # 3) novelty exclusion 先于图谱扩展（已引用记录不重复进入证据窗）
+        if rounds and FLAGS.get("ITERATIVE_RETRIEVAL_ENABLED"):
+            kept_rounds = []
+            for rs in rounds:
+                filtered, excluded_n, excluded_ids = _pl_novelty(rs, exclude_ids)
+                if excluded_n and not trace.get("novelty_excluded"):
+                    trace["novelty_excluded"] = excluded_n
+                if filtered:
+                    kept_rounds.append(filtered)
+            rounds = kept_rounds
 
-        # 4) ENTITY_RESOLUTION + SEMANTIC_GRAPH：实体匹配 → 关系扩展 →
-        #    邻居标签补充检索（图谱真实参与召回，而非仅可视化）
+        # 4) ENTITY_RESOLUTION + SEMANTIC_GRAPH：图谱路【独立】召回——
+        #    hybrid 全空也执行（不再 early-return）；按源过滤碎片与扩展召回
         graph_extra: list = []
         if FLAGS.get("SEMANTIC_GRAPH_ENABLED"):
-            labels, adjacency = _merged_graph()
-            # 四：静态图绑定不可证明 → 降级口径如实写入 trace（无论本轮
-            # 是否命中实体；静态侧已整体退出，扩展仅剩增量碎片）
-            if _STATIC_GRAPH_STATE.get("degraded"):
-                trace["semantic_graph_degraded"] = {
-                    "reason": _STATIC_GRAPH_STATE.get("reason", ""),
-                    "scope": "fragment_only",
-                }
-            entities = _pl_match_entities(base, labels) if FLAGS.get("ENTITY_RESOLUTION_ENABLED") else []
-            trace["graph_entities"] = [e["label"] for e in entities]
-            if entities:
+            for sc in scopes:
+                t0 = _time.monotonic()
+                sc_sources = (sc,)
+                labels, adjacency = _merged_graph(sc)
+                entities = _pl_match_entities(base, labels) if FLAGS.get("ENTITY_RESOLUTION_ENABLED") else []
+                m = matrix[sc]["graph"]
+                m["executed"] = True
+                if sc == "breadth" and _STATIC_GRAPH_STATE.get("degraded"):
+                    m["degrade_reason"] = "static graph unbound; fragment-only"
+                if not entities:
+                    m["degrade_reason"] = m.get("degrade_reason") or "no entity matched"
+                    continue
                 neighbor_labels, paths = _pl_graph_expand(entities, adjacency)
-                trace["graph_expansion"] = paths[:8]
-                seen_ids = {_pl_result_key(r) for r in merged}
-                # 图谱扩展相关性闸门：邻居标签命中（或与查询词重叠）的记录
-                # 才作为补充证据，防止泛化共现边把无关记录带进证据窗
+                if sc == "breadth":
+                    trace.setdefault("graph_entities", []).extend(
+                        e["label"] for e in entities)
+                    trace.setdefault("graph_expansion", []).extend(paths[:4])
+                seen_ids = {_pl_result_key(r) for r in (
+                    [r for rs in rounds for r in rs] + graph_extra)}
                 from retrieval_pipeline import extract_query_terms as _eqt
                 gate_terms = set(_eqt(base)) | {e["label"] for e in entities}
+                sc_extra = 0
                 for lab in neighbor_labels[:6]:
                     label_hit = lab in base or any(t in lab for t in gate_terms)
-                    for r in _hydrate_texts(_bm25_by_label(lab)):
+                    for r in _hydrate_texts(_bm25_by_label(lab, sources=sc_sources)):
                         if _pl_result_key(r) in seen_ids:
                             continue
+                        # 增量/基础已在 bm25 候选获取阶段按源过滤（含未归属池）
                         text = str(r.get("title", "")) + str(r.get("body_snippet", ""))
                         if not label_hit and not any(t and t in text for t in gate_terms):
                             continue
@@ -829,10 +979,31 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
                         meta = r.get("meta") or {}
                         meta = dict(meta, via_graph=lab)
                         graph_extra.append(dict(r, meta=meta, score=float(r.get("score") or 0)))
-                trace["graph_extra_results"] = len(graph_extra)
-                if graph_extra:
-                    merged = _pl_rrf_merge([merged, graph_extra])
-                    merged, graph_dup = dedup_search_results(merged)
+                        sc_extra += 1
+                m["candidates"] += sc_extra
+                m["duration_ms"] += int((_time.monotonic() - t0) * 1000)
+            trace["graph_extra_results"] = len(graph_extra)
+
+        if not rounds and not graph_extra:
+            trace["source_route_matrix"] = matrix
+            return [], {"status": "insufficient", "count": 0}, trace
+        if rounds:
+            merged = rounds[0] if len(rounds) == 1 else _pl_rrf_merge(rounds)
+        else:
+            merged = []
+        if graph_extra:
+            merged = _pl_rrf_merge([merged, graph_extra]) if merged else list(graph_extra)
+            merged, graph_dup = dedup_search_results(merged)
+            trace["graph_route_fused"] = len(graph_extra)
+        # 跨池去重：同一文章在不同批次/子查询/来源池下实体相同
+        merged, cross_dup = dedup_search_results(merged)
+        trace["cross_round_dedup_dropped"] = cross_dup
+        trace["retrieval_rounds"] = len(rounds)
+        trace["merged_candidates"] = len(merged)
+        unattr_n = len([r for r in merged
+                        if _scope_of(r.get("meta") or {}) == UNATTRIBUTED_SCOPE])
+        if unattr_n:
+            trace["unattributed_included"] = unattr_n
 
         # 5) RERANKER（含 TEMPORAL / EVIDENCE_SELECTOR 窗口）
         ranked, rerank_trace = _pl_rerank(merged, base, FLAGS, cap=final_top_k)
@@ -845,15 +1016,17 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
                 [str(r.get("body_snippet", "")) for r in ranked[:5]])
         trace["provenance"] = {
             "subqueries": subqueries,
-            "graph_first": bool(graph_extra) and FLAGS.get("SEMANTIC_GRAPH_ENABLED"),
+            "graph_first": bool(graph_extra) and not rounds and FLAGS.get("SEMANTIC_GRAPH_ENABLED"),
             "exclude_ids_received": len(exclude_ids or []),
         }
+        trace["source_route_matrix"] = matrix
         return ranked, evidence, trace
     except Exception as exc:
         # FAIL_SAFE_VERIFY：编排层任何异常 → 回落单路基线检索
         print(f"[orchestrated-search] degraded to baseline: {exc.__class__.__name__}: {exc}", flush=True)
         trace["degraded"] = True
         trace["degrade_reason"] = f"{exc.__class__.__name__}"
+        trace["source_route_matrix"] = matrix
         try:
             results, _rel = await hybrid_search(base)
             results = _hydrate_texts(results)
@@ -979,10 +1152,18 @@ def build_context(search_results: list) -> tuple:
                                  "chunk_id": record.get("chunk_id"),
                                  "chunk_text": body,
                                  "chunk_metadata": record.get("chunk_metadata", {})}
+        # 任务二 2.1/2.3：引用级数据来源标注（答案 SOP 的唯一依据）——
+        # upload 链读 chunk_metadata.primary_section（导入时注入或回填）；
+        # 基线记录（管线快照语料）固定 breadth。
+        primary_section = "breadth"
+        if record.get("kind") == "upload":
+            primary_section = (record.get("chunk_metadata") or {}).get(
+                "primary_section") or "unattributed"
         # Add citation
         citations.append({
             "id": i + 1,
             "record_id": orig_idx,
+            "primary_section": primary_section,
             "title": title,
             "date": date,
             "source": source,
@@ -1005,8 +1186,10 @@ class ChatRequest(BaseModel):
     conversation_id: str = ""
     history: list = []
     # novelty exclusion：历史轮已引用的记录 ID（record_idx/document_id/url），
-    # 追问时不再重复召回；由调用方（backend agent_service）从会话历史提取。
+    # 追问时不再召回；由调用方（backend agent_service）从会话历史提取。
     exclude_ids: list = []
+    # 任务二 2.2：来源范围子集（breadth/industry/atsc）；空列表=默认三源全开
+    sources: list = []
 
 
 # ── Lifespan ──
@@ -1392,8 +1575,11 @@ async def chat_stream(req: ChatRequest):
 
             # 检索编排（legacy_hybrid 等价）：拆解 → 多路检索 → 图谱扩展 →
             # novelty 排除 → 重排 → 证据评估；失败自动回落基线单路检索
+            req_sources = tuple(x for x in (req.sources or [])
+                                if x in VALID_SOURCES) or None
             search_results, evidence, retrieval_trace = await orchestrated_search(
-                req.query, exclude_ids=req.exclude_ids or None)
+                req.query, exclude_ids=req.exclude_ids or None,
+                sources=req_sources)
 
             if not search_results or evidence.get("status") == "insufficient":
                 yield {"event": "done", "data": json.dumps({
@@ -1630,7 +1816,7 @@ async def chat_stream(req: ChatRequest):
 
 
 @app.get("/api/graph")
-async def get_graph(limit: int = 300):
+async def get_graph(limit: int = 300, scope: str = "breadth"):
     """Get knowledge graph data for visualization.
 
     2026-09-30（二.5）：静态 graph-export.json（管线发布）∪ 增量记录图谱
@@ -1638,13 +1824,27 @@ async def get_graph(limit: int = 300):
     描述；碎片节点附 records 证据定位（标题/链接/日期/统一记录身份）。
     2026-10-01（六.5）：静态侧先按版本/墓碑治理——已删除/被替换记录的
     实体节点与关联边在读取侧移除/降级（static_governance 透出计数），
-    静态节点附存活记录证据定位。"""
-    static = _governed_static()
-    frag = _fragment()
-    if static:
-        data = _gfrag.merge_into_static(static, frag)
+    静态节点附存活记录证据定位。
+    2026-10-02（任务二 2.4）：scope 来源视图——服务端在度数/标签/计数
+    计算前过滤（不是前端隐藏聚合）：breadth（默认，门户背景专用）=
+    治理后静态图 ∪ 广度碎片；industry/atsc = 各自增量碎片（行业/ATSC
+    图谱只服务自身栏目检索，不进门户背景）。scope=all 仅诊断用。"""
+    scope = (scope or "breadth").strip().lower()
+    if scope not in ("breadth", "industry", "atsc", "all"):
+        scope = "breadth"
+    static = _governed_static() if scope in ("breadth", "all") else {}
+    if scope in ("industry", "atsc"):
+        frag = _scoped_fragment(scope)
+        data = {"nodes": frag["nodes"], "edges": frag["edges"]}
     else:
-        data = frag
+        frag_all = _fragment()
+        frag = _scoped_fragment("breadth") if scope == "breadth" else frag_all
+        # breadth 视图 = 静态 ∪ 广度碎片（未归属存量不进 breadth 视图——
+        # 任务二 2.1 不猜测；all 诊断视图 = 静态 ∪ 全量碎片）
+        if static:
+            data = _gfrag.merge_into_static(static, frag)
+        else:
+            data = {"nodes": frag["nodes"], "edges": frag["edges"]}
     nodes = sorted(data.get("nodes", []), key=lambda n: n.get("degree", 0), reverse=True)
     if limit and len(nodes) > limit:
         top_node_ids = {n["id"] for n in nodes[:limit]}
@@ -1654,6 +1854,7 @@ async def get_graph(limit: int = 300):
     else:
         edges = data.get("edges", [])
     return {
+        "scope": scope,
         "nodes": nodes,
         "edges": edges,
         "total_nodes": len(data.get("nodes", [])),
@@ -1737,11 +1938,14 @@ def _content_fingerprint() -> "str | None":
 
 
 @app.get("/api/search")
-async def search(q: str, top_k: int = 10, exclude_ids: str = ""):
+async def search(q: str, top_k: int = 10, exclude_ids: str = "",
+                 sources: str = ""):
     """检索端点（backend agent_service 的证据来源）。
 
     编排检索（拆解/图谱扩展/novelty 排除/重排/证据评估）；
     exclude_ids 为逗号分隔的历史已引用记录 ID（追问时不重复召回）。
+    sources（任务二 2.2）：逗号分隔来源子集（breadth/industry/atsc）——
+    空=默认三源全开；显式收窄时未归属存量不参与。
     """
     if _vector_index is None and not _incremental_index.record_count:
         return JSONResponse(
@@ -1754,7 +1958,8 @@ async def search(q: str, top_k: int = 10, exclude_ids: str = ""):
     exclude_list = [x.strip() for x in (exclude_ids or "").split(",") if x.strip()][:80]
     results, evidence, trace = await orchestrated_search(
         q.strip(), exclude_ids=exclude_list or None,
-        final_top_k=min(max(top_k, 1), 50))
+        final_top_k=min(max(top_k, 1), 50),
+        sources=parse_sources(sources))
     is_relevant = evidence.get("status") != "insufficient"
     context, citations = build_context(results)
     return {

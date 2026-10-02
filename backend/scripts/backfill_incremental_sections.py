@@ -81,6 +81,17 @@ def _iter_document_attributions(db) -> Iterable[tuple[str, str]]:
         yield str(uid), section
 
 
+def _pipeline_lite_plan(docs: dict) -> dict[str, str]:
+    """pipeline-lite-* 文档：scripts/sync_qa_index.py 从广度管线快照同步的
+    增量副本，语义归属 breadth（DB 无 UploadedFile 行，不在可追溯清单）。"""
+    return {
+        did: "breadth"
+        for did in docs
+        if str(did).startswith("pipeline-lite-")
+        and docs.get(did, {}).get("primary_section") not in VALID
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -88,11 +99,16 @@ def main() -> None:
 
     db = SessionLocal()
     plan: dict[str, str] = {}
+    upload_states: dict[str, str] = {}
     try:
         for did, section in _iter_record_attributions(db):
             plan[did] = section
         for did, section in _iter_document_attributions(db):
             plan.setdefault(did, section)
+        for uid, section, emb in db.execute(
+            select(UploadedFile.id, UploadedFile.primary_section, UploadedFile.embedding_status)
+        ).all():
+            upload_states[str(uid)] = f"{section or '?'}/{emb}"
     finally:
         db.close()
 
@@ -103,6 +119,7 @@ def main() -> None:
             did: section for did, section in plan.items()
             if docs.get(did, {}).get("primary_section") != section
         }
+        todo.update(_pipeline_lite_plan(docs))
         unattributed = list(status.get("unattributed_document_ids") or [])
         print(f"增量索引文档 {len(docs)} · DB 可追溯 {len(plan)} · 待回填 {len(todo)}")
         print(f"canonical 无归属文档 {len(unattributed)}（不猜测；DB 已删记录的残留）")
@@ -120,9 +137,15 @@ def main() -> None:
                     timeout=60,
                 )
                 if r.status_code == 200:
-                    ok += 1
-                elif r.status_code == 404:
-                    miss += 1
+                    patched = int(r.json().get("patched_chunks") or 0)
+                    if patched > 0:
+                        ok += 1
+                    else:
+                        # 200 + patched_chunks=0：document_id 合法但不在索引
+                        # （上传已删除/未入索引），幂等跳过并单独计数
+                        miss += 1
+                        state = upload_states.get(did)
+                        print(f"  - {did} 不在索引（DB 状态: {state or '无上传行/记录已删'}）")
                 else:
                     err += 1
                     print(f"  ! {did} -> {section}: HTTP {r.status_code}")

@@ -108,6 +108,10 @@ async def breadth_qa_chat_stream(payload: BreadthQaChatIn):
         return JSONResponse(status_code=503, content={"detail": "检索服务未配置。"})
 
     upstream_body = payload.model_dump()
+    # 任务二 2.2/2.4：广度页面是广度域视图——检索固定 sources=["breadth"]，
+    # 图谱固定 scope=breadth。行业/ATSC 素材（即使同步到广度展示）只在
+    # 各自栏目问答中召回，不在广度视图混入。
+    upstream_body["sources"] = ["breadth"]
 
     async def relay():
         try:
@@ -144,7 +148,8 @@ async def breadth_qa_graph(limit: int = 200) -> Any:
     try:
         async with httpx.AsyncClient(timeout=qa_service_timeout()) as client:
             resp = await client.get(
-                f"{base}/api/graph", params={"limit": min(max(limit, 1), 500)}
+                f"{base}/api/graph",
+                params={"limit": min(max(limit, 1), 500), "scope": "breadth"},
             )
             resp.raise_for_status()
             return resp.json()
