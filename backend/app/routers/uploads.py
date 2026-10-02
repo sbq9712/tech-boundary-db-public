@@ -133,18 +133,18 @@ class ClassificationOverride(BaseModel):
 def _serialize(record: UploadedFile, index_detail: dict | None = None) -> dict:
     """序列化上传记录。
 
-    index_detail（列表页由单条 GROUP BY 批量预取，任务一 1.1）：GitHub
-    增量包分支的队列映射粗状态与会话计数——DB embedding_status 只表达
-    入队意图，真实可检索以 /uploads/{id}/index-status（canonical 权威）
-    为准。None 时退回旧行为（单条端点不带队列详情）。
+    index_detail（列表页由单条 GROUP BY 批量预取，任务一 1.1）：队列驱动
+    上传（GitHub 增量包/逐行表格）的映射状态与任务/会话计数——DB
+    embedding_status 只表达入队意图，真实可检索以 /uploads/{id}/
+    index-status（canonical 权威）为准。None 时退回旧行为。
     """
     terminal = {"classified", "unclassified", "irrelevant", "legacy_unclassified"}
-    if record.primary_section == "breadth" and record.breadth_source == "github":
-        # 增量包不是文档：不走 Docling/索引摄取；状态=导入结果+索引队列映射
-        if index_detail is not None:
-            ingestion_status = index_detail["status"]
-        else:
-            ingestion_status = "imported"
+    if index_detail is not None:
+        # 队列驱动上传（GitHub 增量包/逐行表格）：状态=导入结果+索引队列映射
+        ingestion_status = index_detail["status"]
+    elif record.primary_section == "breadth" and record.breadth_source == "github":
+        # 增量包不是文档：不走 Docling/索引摄取，状态只表达导入结果
+        ingestion_status = "imported"
     elif record.storage_status != "stored":
         ingestion_status = record.storage_status
     elif record.embedding_status == "processing" and not record.document_assets:
@@ -200,7 +200,7 @@ def _serialize(record: UploadedFile, index_detail: dict | None = None) -> dict:
         "submitted_by": record.submitted_by,
         "created_at": record.created_at.isoformat() if record.created_at else None,
     }
-    if record.primary_section == "breadth" and record.breadth_source == "github" and index_detail is not None:
+    if index_detail is not None:
         serialized["index_detail"] = {
             k: v for k, v in index_detail.items() if k != "status"
         }
@@ -671,25 +671,32 @@ def list_uploads(
             .group_by(UploadedFile.breadth_source)
         ).all()
     )
-    # 任务一 1.1：GitHub 分支队列映射（单条 GROUP BY，无 N+1）+ 会话计数
+    # 任务一 1.1：队列驱动上传（GitHub 增量包 + 逐行表格）的真实状态映射
+    # （单条 GROUP BY，无 N+1）+ 会话计数（仅 GitHub 包有会话）
     github_rows = [r for r in rows if r.primary_section == "breadth" and r.breadth_source == "github"]
     github_ids = [r.id for r in github_rows]
-    tasks_agg = queue_aggregate(db, github_ids)
+    tasks_agg = queue_aggregate(db, [r.id for r in rows])
     sess_map = sessions_map(db, github_ids)
     live_counts: dict = {}
-    if github_ids:
+    if rows:
         from app.models.breadth_manual_record import BreadthManualRecord as _BMR
         for uid, cnt in db.execute(
             select(_BMR.upload_id, func.count())
-            .where(_BMR.upload_id.in_(github_ids))
+            .where(_BMR.upload_id.in_([r.id for r in rows]))
             .group_by(_BMR.upload_id)
         ).all():
             if uid is not None:
                 live_counts[uid] = int(cnt)
     index_details: dict = {}
-    for r in github_rows:
+    for r in rows:
+        tasks = tasks_agg.get(r.id, {})
+        # GitHub 分支始终映射（legacy_unknown 也要显式暴露）；
+        # 其余分支仅有队列任务时映射——Docling 链走既有状态链
+        is_github_row = r.primary_section == "breadth" and r.breadth_source == "github"
+        if not is_github_row and not tasks:
+            continue
         status, detail = map_github_status(
-            r, tasks_agg.get(r.id, {}), sess_map.get(r.id), live_counts.get(r.id))
+            r, tasks, sess_map.get(r.id), live_counts.get(r.id))
         detail["status"] = status
         index_details[r.id] = detail
     return {

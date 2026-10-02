@@ -1940,7 +1940,7 @@ window.addEventListener("DOMContentLoaded",async()=>{await loadCurrentUser();ren
 
 /* ── 资料库（in-app 视图，替代独立页跳转，保留左侧导航） ── */
 let libRefreshTimer=null,libOffset=0,libTotal=0,libIsAdmin=false,libCanManage=false;
-const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引未完成",embedding_skipped:"索引未完成",embedding_legacy_unindexed:"历史未索引",ready:"可检索",imported:"已导入"};
+const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引未完成",embedding_skipped:"索引未完成",embedding_legacy_unindexed:"历史未索引",ready:"可检索",imported:"已导入",indexed:"已入索引",index_failed:"索引失败",index_processing:"索引构建中",index_queued:"排队待索引",import_failed:"导入失败",no_new_records:"零新增记录",legacy_unknown:"状态未知"};
 function reviewedEmptyCard(){return `<div class="dashboard-card reviewed-empty"><div class="reviewed-empty-mark">无</div><strong>暂无已审核报告</strong><span>深度调研完成审核后将展示在这里</span></div>`;}
 /* v7 资料库三分区：广度追踪(breadth) / 行业追踪(industry) / ATSC内部报告(atsc)。
    广度追踪下再分 GitHub广度情报(github) / 其他广度情报(other)。
@@ -2079,18 +2079,38 @@ async function loadLibrary(){
   if(tableWrap)tableWrap.style.display=data.files.length?"":"none";
   if(footEl)footEl.style.display=data.files.length?"":"none";
   if(isGithub){
-    /* GitHub增量包页：仅 5 列（资料/状态/上传者/上传时间/原文件），无人工等级与分类控件 */
+    /* GitHub增量包页：仅 5 列（资料/状态/上传者/上传时间/原文件），无人工等级与分类控件。
+       任务一 1.1/1.3：状态=队列映射真实状态（index_detail），失败/未知可重试，排队/构建中自动轮询 */
     tb.innerHTML=data.files.map(f=>{
       const status=f.ingestion_status||f.classification_status||"legacy_unclassified";
+      const idx=f.index_detail||{};
+      const parts=[];
+      if(idx.tasks_total!=null){
+        parts.push(`任务 ${idx.tasks_done||0}/${idx.tasks_total}`);
+        if(idx.tasks_failed)parts.push(`失败 ${idx.tasks_failed}`);
+      }
+      if(idx.session){
+        const s=idx.session;
+        if(s.replayed)parts.push("重复包回放");
+        if(s.package_deduplicated)parts.push("包级去重");
+        if(s.imported)parts.push(`导入 ${s.imported}`);
+        if(s.skipped_duplicate)parts.push(`重复 ${s.skipped_duplicate}`);
+        if(s.skipped_upstream_conflict)parts.push(`上游持有 ${s.skipped_upstream_conflict}`);
+        if(s.failed)parts.push(`失败 ${s.failed}`);
+      }
+      const statusSub=parts.length?`<div class="status-sub">${escapeHtml(parts.join(" · "))}</div>`:"";
+      const canRetryIdx=libIsAdmin&&["index_failed","import_failed","legacy_unknown","index_queued"].includes(status);
       return `<tr>
       <td class="fname">${escapeHtml(f.title||f.original_filename)}${f.note?`<small>${escapeHtml(f.note)}</small>`:""}</td>
-      <td><span class="status ${escapeHtml(status)}">${escapeHtml(libStatusLabels[status]||status)}</span></td>
+      <td><span class="status ${escapeHtml(status)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub}${canRetryIdx?`<div class="cat-actions"><button class="secondary-btn" data-retry-index="${escapeHtml(f.id)}">重试构建索引</button></div>`:""}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
       <td>${escapeHtml(f.original_filename)}</td>
     </tr>`;}).join("");
     const countInfo=document.getElementById("countInfo");
     if(countInfo)countInfo.textContent="共 "+libTotal+" 个增量包";
+    /* 任务一 1.3：GitHub 分支提前 return，重试按钮需在此绑定 */
+    tb.querySelectorAll("button[data-retry-index]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retryIndex,"embedding/retry",b));
     return;
   }
   tb.innerHTML=data.files.map(f=>{
@@ -2136,7 +2156,7 @@ async function loadLibrary(){
   tb.querySelectorAll("button[data-lib-delete]").forEach(b=>b.onclick=()=>libDelete(b.dataset.libDelete,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-classify]").forEach(b=>b.onclick=()=>libClassify(b.dataset.libClassify,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-asset]").forEach(b=>b.onclick=()=>{const [id,asset]=b.dataset.libAsset.split("|");libAsset(id,asset,b.dataset.libName,b);});
-  if(data.files.some(f=>["pending","processing"].includes(f.classification_status)||["pending","processing"].includes(f.embedding_status)))libRefreshTimer=setTimeout(loadLibrary,3000);
+  if(data.files.some(f=>["pending","processing"].includes(f.classification_status)||["pending","processing"].includes(f.embedding_status)||["index_queued","index_processing"].includes(f.ingestion_status)))libRefreshTimer=setTimeout(loadLibrary,3000);
 }
 function libAsset(id,asset,name,button){
   if(button)button.disabled=true;

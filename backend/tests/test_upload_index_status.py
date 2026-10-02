@@ -390,3 +390,35 @@ def test_retry_reimport_zero_new_records_settles_skipped(db, tmp_path, monkeypat
     finally:
         from app.main import app
         app.dependency_overrides.clear()
+
+
+def test_list_maps_table_row_uploads_by_queue(db):
+    """逐行表格上传（行业/ATSC/广度其他）同样走持久队列——列表映射真实状态。"""
+    upload = _mk_upload(db, section="industry", source=None, status="ready")
+    _mk_task(db, upload, "done")
+    _mk_task(db, upload, "done")
+    client = _client()
+    try:
+        r = client.get("/api/uploads?section=industry")
+        assert r.status_code == 200
+        files = [f for f in r.json()["files"] if f["id"] == str(upload.id)]
+        assert files and files[0]["status"] == "indexed"
+        assert files[0]["index_detail"]["tasks_total"] == 2
+    finally:
+        from app.main import app
+        app.dependency_overrides.clear()
+
+
+def test_list_docling_uploads_without_tasks_keep_legacy_chain(db):
+    """Docling 链（无队列任务）沿用既有状态链，不产生 index_detail。"""
+    upload = _mk_upload(db, section="atsc", source=None, status="ready")
+    client = _client()
+    try:
+        r = client.get("/api/uploads?section=atsc")
+        assert r.status_code == 200
+        files = [f for f in r.json()["files"] if f["id"] == str(upload.id)]
+        assert files and files[0]["status"] == "ready"
+        assert "index_detail" not in files[0]
+    finally:
+        from app.main import app
+        app.dependency_overrides.clear()
