@@ -2546,9 +2546,17 @@ function upGuessMapping(headers){
   for(const slot of Object.keys(aliases)){
     for(const k of aliases[slot]){const hit=headers.find(h=>h.toLowerCase().includes(k));if(hit){m[slot]=hit;break;}}
   }
+  /* 任务三 3.1：「情报类型」列仅精确识别（去空白全等），禁子串匹配——
+     「新闻类型/分类/行业类别」不得被误认成类型列。 */
+  const norm=h=>String(h==null?"":h).replace(/^[\s　]+|[\s　]+$/g,"");
+  const typeHit=headers.find(h=>norm(h)==="情报类型");
+  if(typeHit!==undefined)m.type=typeHit;
   if(!m.title)m.title=headers[0]||""; /* title 必映射：兜底取首列 */
   return m;
 }
+/* 严格类型模式判定：仅「资料库→广度追踪→其他广度情报」的逐行导入要求
+   「情报类型」列（任务三 3.1/3.2）；行业/ATSC/GitHub/整文件入口不受影响。 */
+function upTypeStrict(f){return upSection==="breadth"&&upSub==="other"&&((f&&f.rowMode)||"row")==="row";}
 async function upLoadRowPreview(f){
   const token=window.Auth&&typeof Auth.getToken==='function'?Auth.getToken():(localStorage.getItem('auth_token')||'');
   try{
@@ -2574,12 +2582,34 @@ function upOpenRowCfg(idx){
   const ov=document.createElement("div");
   ov.id="upRowCfgOverlay";
   ov.style.cssText="position:fixed;inset:0;z-index:1010;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:24px 16px;";
-  const slotRows=(headers)=>["title","date","url","body","summary","level","source","category"].map(slot=>{
-    const label={title:"标题 *",date:"日期",url:"链接",body:"正文",summary:"摘要",level:"等级",source:"来源",category:"分类"}[slot];
-    const opts='<option value="">（不映射）</option>'+headers.map(h=>`<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join("");
-    const cur=(f.rowMapping||{})[slot]||"";
-    return `<tr><td>${label}</td><td><select data-slot="${slot}">${opts}</select></td></tr>`;
-  }).join("");
+  const slotRows=(headers)=>{
+    const strict=upTypeStrict(f);
+    const rows=["type","title","date","url","body","summary","level","source","category"].map(slot=>{
+      const label={type:"情报类型"+(strict?" *":""),title:"标题 *",date:"日期",url:"链接",body:"正文",summary:"摘要",level:"等级",source:"来源",category:"分类"}[slot];
+      const hint=slot==="type"?(strict?"（仅允许：新闻/文献；缺列/空值/非法值整文件拒收）":"（映射后按 新闻/文献 严格取值）"):"";
+      const opts='<option value="">（不映射）</option>'+headers.map(h=>`<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join("");
+      return `<tr><td>${label}${hint?`<small style="color:#b45309;display:block;">${hint}</small>`:""}</td><td><select data-slot="${slot}">${opts}</select></td></tr>`;
+    });
+    return rows.join("");
+  };
+  /* 任务三 3.1 前端预检（仅提示，后端全量校验为准）：按当前映射即时
+     标出 类型未映射/空值/非法值 的预览行（含物理行号）。 */
+  const typePreview=(sheet,fmap)=>{
+    if(!upTypeStrict(f))return "";
+    const sheetObj=sheet;const headers=sheetObj.headers||[];
+    const col=(fmap||{}).type||"";
+    const rows=sheetObj.rows||[];const nos=sheetObj.row_nos||rows.map((_,i)=>i+2);
+    const boxStyle="margin-top:10px;padding:8px 10px;border-radius:8px;font-size:13px;";
+    if(!col)return `<div class="up-type-preview" style="${boxStyle}border:1px solid #f59e0b;background:#fffbeb;color:#92400e;">⚠ 尚未映射「情报类型」列——保存后将无法导入（请把 情报类型 槽位映射到表格列）。</div>`;
+    if(!headers.includes(col))return "";
+    let bad=0,first=[];
+    rows.forEach((r,i)=>{
+      const v=String(r[col]==null?"":r[col]).replace(/^[\s　]+|[\s　]+$/g,"");
+      if(v!=="新闻"&&v!=="文献"){bad++;if(first.length<5)first.push(`第 ${nos[i]??i+2} 行「${v||"（空）"}」`);}
+    });
+    if(!bad)return `<div class="up-type-preview" style="${boxStyle}border:1px solid #16a34a;background:#f0fdf4;color:#166534;">✓ 预览行（前 ${rows.length} 行）情报类型均为 新闻/文献。</div>`;
+    return `<div class="up-type-preview" style="${boxStyle}border:1px solid #dc2626;background:#fef2f2;color:#991b1b;">✗ 类型问题 ${bad} 行（预览范围）：${first.join("、")}${bad>first.length?" 等":""}——后端将整文件拒收，请修正后重传。</div>`;
+  };
   const renderBody=(sheetName)=>{
     const sheet=sheets.find(s=>s.name===sheetName)||sheets[0];
     const headers=sheet.headers||[];
@@ -2588,7 +2618,8 @@ function upOpenRowCfg(idx){
       <div style="margin-bottom:10px;font-size:13px;">导入方式：
       <label style="margin-right:14px;"><input type="radio" name="upCfgMode" value="row" ${(f.rowMode||"row")==="row"?"checked":""}> 每行一个情报</label>
       <label><input type="radio" name="upCfgMode" value="file" ${f.rowMode==="file"?"checked":""}> 整个文件一个情报</label></div>
-      <div class="lib-upload-tablewrap" style="max-height:300px;overflow:auto;"><table class="lib-upload-table"><thead><tr><th>语义槽位</th><th>表格列（必映射：标题）</th></tr></thead><tbody>${slotRows(headers)}</tbody></table></div>`;
+      <div class="lib-upload-tablewrap" style="max-height:300px;overflow:auto;"><table class="lib-upload-table"><thead><tr><th>语义槽位</th><th>表格列（必映射：标题${upTypeStrict(f)?"、情报类型":""}）</th></tr></thead><tbody>${slotRows(headers)}</tbody></table></div>
+      ${typePreview(sheet,f.rowMapping)}`;
   };
   ov.innerHTML=`<div class="lib-upload-dialog" role="dialog" aria-modal="true" aria-label="表格导入配置" style="margin:auto;max-width:560px;width:100%;">
     <div class="lib-upload-head"><h2>表格导入配置：${escapeHtml(f.name)}</h2><button class="lib-upload-close" id="upCfgClose" type="button" aria-label="关闭">✕</button></div>
@@ -2597,6 +2628,20 @@ function upOpenRowCfg(idx){
   </div>`;
   document.body.appendChild(ov);
   const bindBody=()=>{
+    /* 任务三 3.1：情报类型槽位即时联动预检提示（改映射立刻重估）。 */
+    ov.querySelectorAll("[data-slot]").forEach(sel=>{
+      sel.addEventListener("change",()=>{
+        const body=ov.querySelector("#upCfgBody");if(!body)return;
+        const sheetName=ov.querySelector("#upCfgSheet").value;
+        const sheet=sheets.find(s=>s.name===sheetName)||sheets[0];
+        const m={};ov.querySelectorAll("[data-slot]").forEach(x=>{if(x.value)m[x.dataset.slot]=x.value;});
+        const old=body.querySelector(".up-type-preview");
+        const box=document.createElement("div");
+        const tmp=document.createElement("div");tmp.innerHTML=typePreview(sheet,m);
+        const fresh=tmp.firstElementChild;if(fresh)fresh.classList.add("up-type-preview");
+        if(old&&fresh)old.replaceWith(fresh);else if(fresh)body.appendChild(fresh);
+      });
+    });
     ov.querySelector("#upCfgSheet").addEventListener("change",(e)=>{
       const ns=e.target.value;const sheet=sheets.find(s=>s.name===ns);
       /* 换工作表：保留在新表头中仍存在的已选列，缺失槽位重新猜测 */
@@ -2751,6 +2796,9 @@ async function upSubmit(){
        可选文件级资料日期）。 */
     if(upIsTableRowFile(f.name)&&(f.rowMode||"row")==="row"){
       if(!f.rowMapping){fail++;f.upState="err";f.upMsg="✗ 缺少列映射";upRenderList();continue;}
+      /* 任务三 3.1：广度/其他广度情报 逐行模式必须映射「情报类型」——
+         前端拦截（后端仍全量校验兜底）。 */
+      if(upTypeStrict(f)&&!(f.rowMapping&&f.rowMapping.type)){fail++;f.upState="err";f.upMsg="✗ 缺少「情报类型」列映射（请在导入配置中映射，取值：新闻/文献）";upRenderList();continue;}
       fd.append("files",f);
       fd.append("row_mode","true");
       fd.append("column_mapping",JSON.stringify(f.rowMapping));
@@ -2768,7 +2816,7 @@ async function upSubmit(){
       try{
         const r=await apiFetch("/api/uploads",{method:"POST",body:fd});
         if(r&&r.ok){ok++;const j=await r.json().catch(()=>({}));const st=j.row_import||{};
-          f.upState="done";f.upMsg=`✓ ${st.imported??0} 行`+(st.skipped_duplicate?` 去重${st.skipped_duplicate}`:"")+(st.skipped_empty?` 空行${st.skipped_empty}`:"")+(st.rows_missing_date?` 空日期${st.rows_missing_date}`:"")+(st.rows_invalid_date?` 非法日期${st.rows_invalid_date}`:"");}
+          f.upState="done";f.upMsg=`✓ ${st.imported??0} 行`+(st.updated?` 更新${st.updated}`:"")+(st.skipped_upstream_conflict?` 上游冲突${st.skipped_upstream_conflict}`:"")+(st.skipped_duplicate?` 去重${st.skipped_duplicate}`:"")+(st.skipped_empty?` 空行${st.skipped_empty}`:"")+(st.rows_missing_date?` 空日期${st.rows_missing_date}`:"")+(st.rows_invalid_date?` 非法日期${st.rows_invalid_date}`:"");}
         else{fail++;const j=r?await r.json().catch(()=>({})):{};f.upState="err";f.upMsg="✗ "+(j.detail||("HTTP "+(r?r.status:"")));}
       }catch(e){fail++;f.upState="err";f.upMsg="✗ 网络错误";}
       upRenderList();
