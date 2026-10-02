@@ -2126,7 +2126,9 @@ async function libToggleIndexDetail(fileId,btn){
 function libRestoreIdxDetails(tb){
   /* 轮询重渲染后恢复展开中的详情行（顺带刷新四态，构建进度可见）。 */
   if(!tb)return;
-  libIdxDetailOpen.forEach(id=>{
+  /* Codex#5：forEach 内 delete 未访问条目会被迭代跳过（ECMAScript 语义，
+     [1,3,4] 复现已证实）——先拍快照再清理。 */
+  Array.from(libIdxDetailOpen).forEach(id=>{
     const b=tb.querySelector(`button[data-lib-idx-detail="${CSS.escape(id)}"]`);
     if(b)libOpenIdxDetail(id,b);
     else libIdxDetailOpen.delete(id); /* 翻页后行不存在则清出 */

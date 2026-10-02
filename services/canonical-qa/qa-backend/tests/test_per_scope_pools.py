@@ -206,5 +206,53 @@ def test_server_search_wires_allowed_into_candidate_stage():
     assert m_orc, "缺 orchestrated_search"
     body = m_orc.group(0)
     assert "await _hybrid_routes(" in body
-    assert 'm[route_name]["candidates"] += int(info.get("raw_candidates") or 0)' in body
+    # Codex#3 后合并逻辑抽为 _merge_route_info（终态语义），接线断言同步：
+    assert "_merge_route_info(m[route_name]," in body
     assert "succeeded" in body  # 成功零命中 ≠ 失败的区分字段
+
+
+def test_matrix_final_state_survives_later_subquery_failure():
+    """Codex#3：子查询间失败不回退已成功状态——矩阵单元是终态语义。
+
+    sub1 成功（candidates=3）→ sub2 失败：单元最终 succeeded=True
+    （成功证据不被最后一次失败抹掉）；全程失败才 succeeded=False。
+    """
+    src = SERVER_SRC.read_text(encoding="utf-8")
+    fns = []
+    for name in ("_matrix_cell", "_merge_route_info"):
+        m = re.search(rf"^def {name}\(.*?(?=^async |^def |^class )", src,
+                      re.S | re.M)
+        assert m, f"server.py 缺少 {name}，请同步更新测试截取"
+        fns.append(m.group(0))
+    ns: dict[str, Any] = {}
+    exec("\n\n".join(fns), ns)
+    cell = ns["_matrix_cell"]()
+
+    # sub1：vector 成功 3 候选
+    ns["_merge_route_info"](cell, {"executed": True, "succeeded": True,
+                                   "raw_candidates": 3, "duration_ms": 10,
+                                   "error": None})
+    assert cell["succeeded"] is True and cell["candidates"] == 3
+    # sub2：vector 失败（成功状态不得回退；error 记录但不降级）
+    ns["_merge_route_info"](cell, {"executed": True, "succeeded": False,
+                                   "raw_candidates": 0, "duration_ms": 8,
+                                   "error": "RuntimeError: embed down"})
+    assert cell["succeeded"] is True, "后续子查询失败不得抹掉已成功状态"
+    assert cell["candidates"] == 3, "成功候选证据保留"
+    assert cell["error"] == "RuntimeError: embed down", "失败原因仍可审计"
+    # sub3：vector 再次成功 → error 清除（终态语义：恢复）
+    ns["_merge_route_info"](cell, {"executed": True, "succeeded": True,
+                                   "raw_candidates": 1, "duration_ms": 5,
+                                   "error": None})
+    assert cell["succeeded"] is True and cell["error"] is None
+    assert cell["candidates"] == 4 and cell["duration_ms"] == 23
+
+    # 对照：全程失败 → 终态 False
+    cell2 = ns["_matrix_cell"]()
+    ns["_merge_route_info"](cell2, {"executed": True, "succeeded": False,
+                                    "raw_candidates": 0, "duration_ms": 3,
+                                    "error": "boom"})
+    ns["_merge_route_info"](cell2, {"executed": True, "succeeded": False,
+                                    "raw_candidates": 0, "duration_ms": 2,
+                                    "error": "boom2"})
+    assert cell2["succeeded"] is False and cell2["error"] == "boom2"

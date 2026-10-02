@@ -102,6 +102,12 @@ def main() -> None:
         "--upload-id", type=str, default="",
         help="仅处理该上传的记录（演练/定向修复时避免触碰无关存量）")
     args = ap.parse_args()
+    # Codex#6：非法 UUID 先行受控报错，不开 DB 会话不抛裸 ValueError
+    if args.upload_id:
+        try:
+            uuid.UUID(args.upload_id)
+        except ValueError:
+            ap.error(f"--upload-id 不是合法 UUID：{args.upload_id!r}")
 
     db = SessionLocal()
     plan: list[dict] = []

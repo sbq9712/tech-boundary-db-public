@@ -973,6 +973,27 @@ def _matrix_cell() -> dict:
             "duration_ms": 0, "error": None}
 
 
+def _merge_route_info(cell: dict, info: dict) -> None:
+    """Codex#3：把一次子查询的路线执行记录并入矩阵单元（终态语义）。
+
+    - candidates/duration_ms 跨子查询累加（可审计总量）；
+    - succeeded 采用「子查询间不回退」：任一子查询成功即终态 True
+      （后续失败不抹掉成功证据），全部失败才是 False；
+    - error 只在从未成功时保留；成功即清除（瞬时失败耗时已入
+      duration_ms，失败→恢复可从耗时异常增长侧面观察）。
+    """
+    cell["executed"] = bool(info.get("executed")) or cell["executed"]
+    cell["candidates"] += int(info.get("raw_candidates") or 0)
+    cell["duration_ms"] += int(info.get("duration_ms") or 0)
+    if info.get("error"):
+        cell["error"] = str(info["error"])
+        if cell["succeeded"] is not True:
+            cell["succeeded"] = False
+    elif info.get("executed"):
+        cell["succeeded"] = True
+        cell["error"] = None
+
+
 async def orchestrated_search(query: str, exclude_ids: list | None = None,
                               final_top_k: int = FINAL_TOP_K,
                               sources: tuple | None = None) -> tuple:
@@ -1033,15 +1054,7 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
                 results, _rel, h_routes = await _hybrid_routes(sub, sources=sc_sources)
                 m = matrix[sc]
                 for route_name in ("vector", "keyword"):
-                    info = h_routes.get(route_name) or {}
-                    m[route_name]["executed"] = bool(info.get("executed"))
-                    m[route_name]["candidates"] += int(info.get("raw_candidates") or 0)
-                    m[route_name]["duration_ms"] += int(info.get("duration_ms") or 0)
-                    if info.get("error"):
-                        m[route_name]["error"] = str(info["error"])
-                        m[route_name]["succeeded"] = False
-                    elif info.get("executed"):
-                        m[route_name]["succeeded"] = True
+                    _merge_route_info(m[route_name], h_routes.get(route_name) or {})
                 if results:
                     per_scope_rounds.setdefault(sc, []).extend(_hydrate_texts(results))
         rounds = [rs for rs in per_scope_rounds.values() if rs]

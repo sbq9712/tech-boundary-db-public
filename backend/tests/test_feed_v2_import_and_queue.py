@@ -1459,3 +1459,52 @@ def test_long_body_accepted_and_truncated():
     _validate_record_shapes([dict(base, b="x" * 91_771)])    # 真实包最大值
     with pytest.raises(GitHubPackageError):
         _validate_record_shapes([dict(base, b="x" * 200_001)])
+
+
+def test_delete_masks_legacy_and_namespaced_keys_for_industry(monkeypatch, tmp_path):
+    """Codex#2：行业/ATSC 删除必须同时墓碑两代身份键。
+
+    命名空间化（3.2）前的存量 chunk/墓碑用旧 breadth 公式 [t,d,u]；
+    只按新键发 record-mutate 旧 chunk 不会被屏蔽（僵尸双版本）。
+    """
+    monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
+    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "")
+    db = SessionLocal()
+    try:
+        from app.models.breadth_manual_record import BreadthManualRecord
+        up = _mk_upload(db, checksum=hashlib.sha256(b"legacy-ind").hexdigest())
+        rec = BreadthManualRecord(
+            upload_id=up.id, user_id="feedv2-test", title="行业旧记录",
+            document_date="2026-01-01",
+            url="https://ind/1", body="x", intelligence_type="news",
+            origin_section="industry", content_hash="h" * 64)
+        db.add(rec)
+        db.commit()
+        rec_id = rec.id
+
+        bq.enqueue_record_delete(db, rec_id, up.id, row=rec)
+        db.delete(rec)
+        db.commit()
+
+        seen: list[str] = []
+        monkeypatch.setattr(bq, "_post_record_mutate_delete",
+                            lambda ksha: seen.append(ksha))
+        monkeypatch.setattr(bq, "_index_delete",
+                            lambda doc_id: None) if hasattr(bq, "_index_delete") else None
+        monkeypatch.setattr(bq, "_post_index_delete", lambda doc_id: None)
+        assert bq.process_batch(db) == 1
+
+        expected_new = bq.canonical_record_key_sha(
+            "行业旧记录", "2026-01-01", "https://ind/1", origin_section="industry")
+        expected_legacy = bq.canonical_record_key_sha(
+            "行业旧记录", "2026-01-01", "https://ind/1")
+        assert expected_new in seen, "命名空间键必须墓碑"
+        assert expected_legacy in seen, "旧 breadth 公式键必须一并墓碑（存量 chunk）"
+        assert set(seen) == {expected_new, expected_legacy}, seen
+
+        status = db.execute(text(
+            "SELECT status FROM breadth_index_tasks WHERE target_key=:k"
+        ), {"k": str(rec_id)}).one()[0]
+        assert status == "done"
+    finally:
+        db.close()

@@ -243,3 +243,30 @@ test('GitHub 分支接线：轮询在提前 return 之前调用（源码结构�
     'GitHub 分支必须在 return 前调用 scheduleLibPolling');
   assert.ok(region.includes('data-lib-idx-detail'), 'GitHub 行应提供索引详情入口');
 });
+
+test('libRestoreIdxDetails：快照迭代——中间条目缺失不跳过后续条目（Codex#5）', async () => {
+  const payload = { states: { vector: { state: 'complete' } }, index: {}, ingestion_mode: 'row_records', searchable: true };
+  const dom = makeDetailDom();
+  const { env } = makeEnv({ files: [], detailPayload: payload });
+  env.document.getElementById = (id) => (id === 'rows' ? dom.tb : null);
+  const mod = loadModule(env);
+  // 三个上传都展开
+  await mod.libToggleIndexDetail('file-a', dom.btn);
+  await mod.libToggleIndexDetail('file-b', dom.btn);
+  await mod.libToggleIndexDetail('file-c', dom.btn);
+  assert.equal(dom.made.rows.length, 3);
+  assert.equal(mod.libIdxDetailOpen.size, 3);
+  // 模拟轮询重渲染：清空 tbody；b 不再渲染（如翻页），a/c 仍在
+  dom.made.rows.length = 0;
+  // stub 的按钮按 data-lib-idx-detail 匹配任意 id——把 b 从匹配中排除：
+  const origQs = dom.tb.querySelector;
+  dom.tb.querySelector = (sel) => {
+    if (/data-lib-idx-detail="file-b"/.test(sel)) return null;
+    return origQs.call(dom.tb, sel);
+  };
+  mod.libRestoreIdxDetails(dom.tb);
+  await new Promise((r) => setTimeout(r, 0));
+  dom.tb.querySelector = origQs;
+  assert.equal(dom.made.rows.length, 2, 'a 与 c 都必须恢复（迭代不因 b 缺席跳过 c）');
+  assert.equal(mod.libIdxDetailOpen.size, 2, 'b 从展开集合清出');
+});

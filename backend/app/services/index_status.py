@@ -305,9 +305,13 @@ def upload_index_status(db: Session, record: UploadedFile) -> dict:
                 # 图谱（1.1）：增量图谱由存活 chunk 实时推导——chunk 在即
                 # 「参与图谱构建」；无可抽取实体（entity_count=0）≠构建失败。
                 graph_ok = len(found)
-                graph_state = _route_state(executed=True, ok_count=graph_ok,
-                                           total=total_docs,
-                                           error="documents_missing" if missing else None)
+                # Codex#4：不把内部哨兵串 documents_missing 直接当用户面
+                # reason——转为可读文案（缺哪些文档由 documents_missing 计数
+                # 单独暴露，见 result["index"]）。
+                graph_state = _route_state(
+                    executed=True, ok_count=graph_ok, total=total_docs,
+                    error=(f"有 {len(missing)} 篇文档未见于增量索引"
+                           if missing else None))
                 if not missing and graph_ok == total_docs and all(
                         int(d.get("entity_count") or 0) == 0 for d in found.values()):
                     graph_state["note"] = "无可抽取实体（不构成构建失败）"

@@ -75,6 +75,13 @@ def enqueue_record_delete(db: Session, record_id: uuid.UUID | str,
             origin_section=_rec_origin_section(row))
     if ksha:
         payload["record_key_sha"] = str(ksha)
+    # Codex#2：行业/ATSC 的旧公式键一并持久化——任务异步执行时行已删，
+    # 无法再回读 origin_section 补算；不存的话存量 chunk（旧键）漏屏蔽。
+    if row is not None:
+        legacy = canonical_record_key_sha(
+            row.title, row.document_date or "", row.url or "")
+        if legacy != ksha:
+            payload["record_key_sha_legacy"] = legacy
     _enqueue(db, op="delete", target_key=str(record_id), payload=payload,
              upload_id=upload_id)
 
@@ -129,6 +136,25 @@ def canonical_record_key_sha(
         str(title or ""), str(document_date or ""), str(url or "")]
     return _hashlib.sha256(_json.dumps(
         parts, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _mask_key_shas_for(rec: BreadthManualRecord,
+                       origin_section: str) -> list[str]:
+    """Codex#2（历史身份迁移缺口）：屏蔽键必须覆盖新旧两代公式。
+
+    命名空间化（3.2）之前入索引的行业/ATSC chunk/tombstone 用的是旧
+    breadth 公式 [t,d,u]；只按新命名空间键发 record-mutate 的话，旧
+    chunk 不会被遮蔽（僵尸双版本）也不被墓碑屏蔽。删除/更新一律同时
+    屏蔽两代键（幂等，多余键无害——不存在即空操作）。
+    """
+    title = rec.title if rec is not None else ""
+    date = (rec.document_date or "") if rec is not None else ""
+    url = (rec.url or "") if rec is not None else ""
+    keys = [canonical_record_key_sha(title, date, url,
+                                     origin_section=origin_section)]
+    if origin_section in ("industry", "atsc"):
+        keys.append(canonical_record_key_sha(title, date, url))
+    return keys
 
 
 def _rec_content_sha(rec: BreadthManualRecord) -> str:
@@ -305,15 +331,19 @@ def _execute(db: Session, task: IndexTask) -> None:
             rec = db.get(BreadthManualRecord, _as_uuid(document_id))
         except Exception:  # noqa: BLE001 — UUID 解析失败按无记录处理
             rec = None
-        ksha = None
+        mask_keys: list[str] = []
         if rec is not None:
-            ksha = canonical_record_key_sha(
-                rec.title, rec.document_date or "", rec.url or "",
-                origin_section=_rec_origin_section(rec))
-        elif task.payload and task.payload.get("record_key_sha"):
-            ksha = str(task.payload["record_key_sha"])
-        if ksha:
-            _post_record_mutate_delete(ksha)  # 一.4：同身份基础旧版本一并屏蔽
+            mask_keys = _mask_key_shas_for(rec, _rec_origin_section(rec))
+        elif task.payload:
+            # 行已删：payload 持久化的两代键（Codex#2）驱动墓碑
+            mask_keys = [str(task.payload[k]) for k in
+                         ("record_key_sha", "record_key_sha_legacy")
+                         if task.payload.get(k)]
+        if mask_keys:
+            # 一.4：同身份基础旧版本一并屏蔽；Codex#2：行业/ATSC 连旧
+            # breadth 公式键一起屏蔽（命名空间化前的存量 chunk/墓碑）。
+            for ksha in mask_keys:
+                _post_record_mutate_delete(ksha)
         else:
             # 二：行与 payload 都拿不到统一身份 = 无法证明基础索引旧版本
             # 已被屏蔽。增量文档虽删，烘焙基础 B 仍可能继续可召回——
