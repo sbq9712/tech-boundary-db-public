@@ -2399,11 +2399,12 @@ function openUploadModal(section,sub){
     <div class="lib-upload-head"><h2>上传资料</h2><button class="lib-upload-close" id="upCloseBtn" type="button" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="lib-upload-body">
       <div class="lib-upload-drop" id="upDrop"><input id="upInput" type="file" multiple hidden><div class="lib-upload-hint">拖曳文件至此处，或 <button class="lib-upload-pick" id="upPick" type="button">点击选择文件</button></div><div class="lib-upload-types">支持当前 Docling 文档格式（含扫描件、图片与演示文稿），后台完成解析与索引</div></div>
-      <div class="lib-upload-tablewrap" id="upTableWrap" hidden><table class="lib-upload-table"><thead><tr><th>文件</th><th>资料标题</th><th>资料日期</th><th>行业图景节点</th><th>备注</th><th></th></tr></thead><tbody id="upList"></tbody></table></div>
+      <div class="lib-upload-tablewrap" id="upTableWrap" hidden><table class="lib-upload-table"><thead><tr><th>文件</th><th>资料标题</th><th>资料日期</th><th>行业图景节点</th><th>备注</th><th>同步广度</th><th></th></tr></thead><tbody id="upList"></tbody></table></div>
       <div id="upSyncBreadthWrap" style="display:none;margin-top:10px;font-size:13px;color:var(--text-secondary,#475467);">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
           <input type="checkbox" id="upSyncBreadth">
-          同步上传到广度情报（资料保留在当前栏目，同时在广度追踪显示并可被问答检索）
+          全部同步到广度情报（批量开关：勾选/取消 = 上表所有文件的逐文件开关；
+          资料保留在当前栏目，同时在广度追踪显示并可被问答检索）
         </label>
       </div>
       <div id="upRowMapWrap" hidden style="margin-top:10px;"></div>
@@ -2414,6 +2415,11 @@ function openUploadModal(section,sub){
   document.body.appendChild(overlay);
   const syncWrap=document.getElementById("upSyncBreadthWrap");
   if(syncWrap)syncWrap.style.display=(upSection==="industry"||upSection==="atsc")?"block":"none";
+  const syncBatch=document.getElementById("upSyncBreadth");
+  if(syncBatch)syncBatch.addEventListener("change",()=>{ /* T11：批量快捷开关作用于全部文件 */
+    upPending.forEach(f=>{f.upSyncBreadth=syncBatch.checked;});
+    upRenderList();
+  });
   const drop=document.getElementById("upDrop"),input=document.getElementById("upInput");
   apiFetch("/api/uploads/formats").then(r=>r&&r.ok?r.json():null).then(data=>{
     if(!data)return;
@@ -2639,6 +2645,10 @@ function upTaxonomyOptions(){
 function upRowStateMeta(f){
   return {cls:f.upState==="done"?" up-row-done":f.upState==="err"?" up-row-err":"",text:f.upState==="uploading"?"上传中…":(f.upMsg||"")};
 }
+/* T11（2026-10-02）：同步到广度逐文件化——列只在 industry/atsc 入口显示，
+   每文件独立复选框（默认否）；原整批复选框保留为批量快捷开关（作用于全部
+   文件，等价原行为）。提交时按文件决定是否携带 sync_upload_to_breadth。 */
+function upSyncColVisible(){return upSection==="industry"||upSection==="atsc";}
 function upRenderList(){
   const wrap=document.getElementById("upTableWrap"),list=document.getElementById("upList");
   if(!wrap||!list)return;
@@ -2661,6 +2671,7 @@ function upRenderList(){
       </div></td>
       <td><select class="lib-upload-input lib-up-cat" aria-label="行业图景节点">${upTaxonomy?upTaxonomyOptions():'<option value="">不指定，通过AI自动识别</option>'}</select></td>
       <td><input class="lib-upload-input lib-up-note" type="text" placeholder="选填" aria-label="备注" value="${escapeHtml(f.upNote||"")}"></td>
+      <td>${upSyncColVisible()?'<input type="checkbox" class="lib-up-sync" data-up-sync="${i}" aria-label="同步该文件到广度情报" '+(f.upSyncBreadth?'checked':'')+'>':'<span class="lib-up-sync-na">—</span>'}</td>
       <td class="lib-up-op">${upIsTableRowFile(f.name)?`<button class="lib-upload-rm" type="button" data-up-cfg="${i}" title="导入方式 / 工作表 / 列映射">${escapeHtml(upRowCfgLabel(f))}</button>`:""}<span class="lib-up-state">${escapeHtml(meta.text)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
     </tr>`;}).join("");
   /* 已选分类回显（value 不能直接内联在 select 上） */
@@ -2684,6 +2695,8 @@ function upBindRowInputs(){
       el.addEventListener("input",()=>{f[key]=trim?el.value.trim():el.value;});};
     bind(".lib-up-title","upTitle",true);
     bind(".lib-up-note","upNote",true);
+    const sync=tr.querySelector(".lib-up-sync"); /* T11：逐文件同步广度开关 */
+    if(sync)sync.addEventListener("change",()=>{f.upSyncBreadth=sync.checked;});
     bindUpDateSegments(tr,f);
     const cat=tr.querySelector(".lib-up-cat");
     if(cat)cat.addEventListener("change",()=>{f.upCat=cat.value;});
@@ -2728,8 +2741,8 @@ async function upSubmit(){
   submit.disabled=true;cancel.disabled=true;
   upShowResult("正在上传…","");
   let ok=0,fail=0;
-  const syncBreadthEl=document.getElementById("upSyncBreadth");
-  const syncBreadth=!!(syncBreadthEl&&syncBreadthEl.checked);
+  /* T11：批量复选框已变为 UI 快捷开关（不直接作为提交数据源）；
+     每个文件各自按 f.upSyncBreadth 携带开关，与后端逐请求语义一致。 */
   for(const f of targets){
     const fd=new FormData();
     /* 表格逐行模式（.xlsx/.csv，四.1 可选）：每行一个情报；首次添加该文件时
@@ -2745,8 +2758,9 @@ async function upSubmit(){
       if(f.upNote)fd.append("note",f.upNote);
       if(upSection)fd.append("primary_section",upSection);
       if(upSection==="breadth"&&upSub)fd.append("breadth_source",upSub);
-      /* 三.1：行业/ATSC 逐行分支此前漏传同步开关——勾选后行记录须同时进主导航广度 */
-      if(syncBreadth&&(upSection==="industry"||upSection==="atsc"))fd.append("sync_upload_to_breadth","true");
+      /* 三.1：行业/ATSC 逐行分支此前漏传同步开关——勾选后行记录须同时进主导航广度
+         （T11：按文件开关，逐行文件同样以文件为单位决定） */
+      if(f.upSyncBreadth&&(upSection==="industry"||upSection==="atsc"))fd.append("sync_upload_to_breadth","true");
       /* 不提交文件级日期：行日期缺失时行内为空，不静默替代（四.2/三.3） */
       f.upState="uploading";f.upMsg="";
       upRenderList();
@@ -2766,7 +2780,7 @@ async function upSubmit(){
     /* 分区归属：由当前入口决定，持久化到后端 */
     if(upSection)fd.append("primary_section",upSection);
     if(upSection==="breadth"&&upSub)fd.append("breadth_source",upSub);
-    if(syncBreadth&&(upSection==="industry"||upSection==="atsc"))fd.append("sync_upload_to_breadth","true");
+    if(f.upSyncBreadth&&(upSection==="industry"||upSection==="atsc"))fd.append("sync_upload_to_breadth","true");
     const docDate=upNormalizeDate(f.upDate);
     if(docDate)fd.append("document_date",docDate);
     f.upState="uploading";f.upMsg="";

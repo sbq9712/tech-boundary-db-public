@@ -59,3 +59,26 @@ def test_row_mode_ui_disables_file_level_date_and_exposes_two_modes():
     assert "整个文件一个情报" in PORTAL
     assert "逐行模式：日期取自每行的日期列，无需文件级日期" in PORTAL
     assert "fieldset ${rowLocked?'disabled'" in PORTAL
+
+
+@pytest.mark.skipif(PORTAL is None,
+                    reason="app.js 不在 api 镜像内（前端契约需检出环境）")
+def test_t11_per_file_sync_breadth_column():
+    """T11（2026-10-02）：同步到广度逐文件化契约。
+
+    - 上传表有「同步广度」列，逐文件复选框（lib-up-sync）默认否；
+    - 整批复选框（upSyncBreadth）只作为批量快捷开关（勾/取消作用于全部文件），
+      不再直接作为提交数据源；
+    - 两处提交点（逐行分支 / 通用文件分支）均按 f.upSyncBreadth 携带
+      sync_upload_to_breadth，与后端逐请求语义一致。
+    """
+    assert "<th>同步广度</th>" in PORTAL
+    assert 'class="lib-up-sync"' in PORTAL
+    assert "f.upSyncBreadth" in PORTAL
+    # 批量开关 = UI 快捷方式，写回所有文件后重渲染
+    assert "upPending.forEach(f=>{f.upSyncBreadth=syncBatch.checked;})" in PORTAL
+    # 提交按文件（两处），不再读整批复选框
+    assert PORTAL.count(
+        'if(f.upSyncBreadth&&(upSection==="industry"||upSection==="atsc"))'
+        'fd.append("sync_upload_to_breadth","true")') == 2
+    assert 'const syncBreadth=!!(syncBreadthEl&&syncBreadthEl.checked);' not in PORTAL
