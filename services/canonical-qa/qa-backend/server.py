@@ -719,11 +719,26 @@ def _hydrate_texts(results: list) -> list:
     for r in results:
         meta = r.get("meta") or {}
         if meta.get("kind") == "upload":
+            # 上传 chunk 的 meta 在 upsert 时统一写入记录形字段
+            # （t/d/c/as/b/tg，incremental_index.upsert）——手动上传与
+            # feed 导入/管线同步的记录型 chunk 都靠这一组字段补文本。
+            # 旧实现只读 filename/title/chunk_text（新 meta 形状里不存在
+            # chunk_text/text，记录型 chunk 也没有 filename/title），
+            # 导致 feed 导入的增量记录 hydrate 成空标题/空正文——
+            # rerank 词覆盖恒为 0、分数只剩 prior×0.6，永远沉底，
+            # QA 永远召不回增量导入的新记录（T12 演练实测发现）。
+            _tags = meta.get("tg", [])
+            if isinstance(_tags, str):
+                _tags = [_tags]
             text = {
-                "title": str(meta.get("filename") or meta.get("title") or ""),
-                "category": str(meta.get("category") or "上传资料"),
-                "date": str(meta.get("date") or ""),
-                "body_snippet": str(meta.get("chunk_text") or meta.get("text") or "")[:600],
+                "title": str(meta.get("filename") or meta.get("title")
+                             or meta.get("t") or ""),
+                "category": str(meta.get("category") or meta.get("c") or "") or "上传资料",
+                "date": str(meta.get("date") or meta.get("d") or ""),
+                "body_snippet": str(
+                    meta.get("chunk_text") or meta.get("text")
+                    or (str(meta.get("as", "") or "") + str(meta.get("b", "") or "")
+                        + " ".join(map(str, _tags))))[:600],
             }
         else:
             idx = meta.get("idx", -1)
