@@ -65,7 +65,7 @@ X-TechDB-Index-Token: <TECHDB_QA_INDEX_TOKEN>
 
 ### 1. 构建向量索引
 ```bash
-cd /home/rhett/tech-db-fresh
+cd ~/tech-boundary-db/services/canonical-qa
 .venv/bin/python qa-backend/vector_index.py
 ```
 预计耗时: 6-8 小时 (40K 记录, CPU)
@@ -73,7 +73,7 @@ cd /home/rhett/tech-db-fresh
 
 ### 2. 启动服务器
 ```bash
-cd /home/rhett/tech-db-fresh
+cd ~/tech-boundary-db/services/canonical-qa
 .venv/bin/python qa-backend/server.py
 ```
 服务器运行在 http://localhost:8765
@@ -81,7 +81,7 @@ cd /home/rhett/tech-db-fresh
 ### 3. 访问前端
 前端文件在项目根目录,通过 HTTP 服务器访问:
 ```bash
-cd /home/rhett/tech-db-fresh
+cd ~/tech-boundary-db/services/canonical-qa
 python3 -m http.server 8097
 ```
 然后打开 http://localhost:8097, 点击"数据库问答"标签

@@ -13,7 +13,7 @@
 
 ## 当前状态（2026-09-22）
 
-- **广度追踪数据源已切换至 tech-db**（[sbq9712/tech-db](https://github.com/sbq9712/tech-db)）：125 叶子领域分类法全量重分类基线（33 shards、65,605 条，`data_version c3a54b75d9d3`，基线 commit `c00d7b9`）。运行时数据经 hydration 脚本钉扎该基线；后续由 tech-db 侧 4h 自动管线发布、本仓库接管脚本同步（`scripts/auto_update_takeover.sh` + systemd user timer）。
+- **广度追踪数据源由本仓库自持**（2026-10 起 tech-db 已退役）：上游数据经 [sbq9712/tech-boundary-data-feed](https://github.com/sbq9712/tech-boundary-data-feed) 每日发布包交付，走「资料库 → 广度追踪 → GitHub 广度情报」导入（离线环境日常更新流程见 [服务器迁移说明.md](./服务器迁移说明.md)）；本仓库自有管线（`pipeline/` + `scripts/run_breadth_pipeline.sh` + systemd user timer `breadth-pipeline.timer`）负责分类/评分与发布。tech-db 退役流程与核对清单见 [docs/tech-db-retirement.md](./docs/tech-db-retirement.md)。
 - **门户/资料库/深度调研 UI 完成 2026-09 改版**：侧边栏点击式收起/展开、历史对话折叠、上传弹窗表格化（逐文件元数据）、行业图景树样式修复。契约测试见 `backend/tests/test_portal_ui_contract.py`。
 
 ## 快速开始（开发者）

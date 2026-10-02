@@ -48,7 +48,9 @@ services:
       # 知识图谱（门户星空）：独立管线每次发布后重建，只读挂载即时生效
       - ./services/canonical-qa/graph-live/graph-export.json:/app/data/lightrag/graph-export.json:ro
     ports:
-      - "${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8765}:8765"
+      # T1（2026-10-02）：宿主默认 8765 与退役中的旧 tech-db 栈撞车——默认改 8767
+      # （容器内仍 8765；.env 可用 TECHDB_QA_PORT 覆盖）
+      - "${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8767}:8765"
     healthcheck:
       # T3/G1（2026-10-02）：增断言 incremental_index_ready——增量索引文件
       # 存在但损坏（已清空重建、召回静默丢失）时容器必须显示 unhealthy。
