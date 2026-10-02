@@ -98,6 +98,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--backup", type=str, default="")
+    ap.add_argument(
+        "--upload-id", type=str, default="",
+        help="仅处理该上传的记录（演练/定向修复时避免触碰无关存量）")
     args = ap.parse_args()
 
     db = SessionLocal()
@@ -108,11 +111,13 @@ def main() -> None:
         # NOT NULL（默认 'news'），存量问题既可能是非法值，也可能是被
         # 默认值顶替的错误标型（文件里是「文献」但库里是 news）。
         # 统一口径：回读原文件重算，与库值不同即列入修复计划。
-        rows = db.scalars(
-            select(BreadthManualRecord).where(
-                BreadthManualRecord.source_ref.isnot(None),
-            )
-        ).all()
+        stmt = select(BreadthManualRecord).where(
+            BreadthManualRecord.source_ref.isnot(None),
+        )
+        if args.upload_id:
+            stmt = stmt.where(
+                BreadthManualRecord.upload_id == uuid.UUID(args.upload_id))
+        rows = db.scalars(stmt).all()
         candidates = [
             r for r in rows
             if isinstance(r.source_ref, dict) and r.source_ref.get("sheet")
