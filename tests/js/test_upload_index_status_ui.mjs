@@ -69,7 +69,7 @@ check('已入索引显示计数与回放标记', r.statusSub === '任务 2/2 · 
 check('GitHub 分支读取 index_detail', /const idx=f\.index_detail\|\|\{\};/.test(src));
 check('重试条件含四个失败态', /\["index_failed","import_failed","legacy_unknown","index_queued"\]\.includes\(status\)/.test(src));
 check('GitHub 分支内绑定重试按钮（提前 return 前）', /增量包";\s*\n\s*\/\* 任务一 1\.3：GitHub 分支提前 return，重试按钮需在此绑定 \*\/\s*\n\s*tb\.querySelectorAll\("button\[data-retry-index\]"\)/.test(src) || /GitHub 分支提前 return[\s\S]{0,120}querySelectorAll\("button\[data-retry-index\]"\)/.test(src));
-check('轮询条件含 index_queued/index_processing', /\["index_queued","index_processing"\]\.includes\(f\.ingestion_status\)/.test(src));
+check('轮询条件含 index_queued/index_processing/import_processing', /\["index_queued","index_processing","import_processing"\]\.includes\(f\.ingestion_status\)/.test(src));
 check('GitHub 行渲染状态子行', /\$\{statusSub\}\$\{canRetryIdx\?`<div class="cat-actions"><button class="secondary-btn" data-retry-index="/.test(src));
 
 if (failures) { console.error(`\n${failures} 个断言失败`); process.exit(1); }

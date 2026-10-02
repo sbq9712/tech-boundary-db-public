@@ -525,3 +525,134 @@ def test_upload_index_status_partial_docs_not_searchable(db, monkeypatch):
     result = upload_index_status(db, upload)
     assert result["searchable"] is False
     assert result["status"] == "legacy_unknown"
+
+
+# ── 任务一 1.3（2026-10-03）：摄取模式按真实链路特征判定 ─────────────────
+
+
+def test_doc_with_sync_projection_takes_document_chain(db, monkeypatch):
+    """复现审查缺陷：行业/ATSC 文档勾选「同步到广度」→ sync_breadth_manual_record
+    落一条展示投影记录（live_records>0）。历史判定 `is_github or live_records>0`
+    把它误入行记录链，文件级索引（document_id=上传 id）永不被核对。"""
+    from app.services import index_status
+
+    upload = _mk_upload(db, section="industry", source=None, status="ready")
+    upload.sync_breadth = True
+    db.add(BreadthManualRecord(
+        upload_id=upload.id, user_id="status-test", title="投影", body="b",
+        category="c", origin_section="industry", in_breadth_nav=True))
+    db.commit()
+    # 文档链核对：canonical 必须收到【上传 id】，且三路状态来自文件级 chunk
+    seen: list[str] = []
+
+    def _fake(ids):
+        seen.extend(ids)
+        return {ids[0]: {"chunks": 7, "vector_ok": True, "bm25_ok": True,
+                         "entity_count": 2, "primary_section": "industry",
+                         "content_shas": [upload.checksum_sha256]}}
+    monkeypatch.setattr(index_status, "canonical_document_status", _fake)
+    result = upload_index_status(db, upload)
+    assert result["ingestion_mode"] == "document", "同步投影不得改变文档链判定"
+    assert seen == [str(upload.id)]
+    assert result["states"]["vector"]["state"] == "complete"
+    assert result["states"]["keyword"]["state"] == "complete"
+    assert result["states"]["graph"]["state"] == "complete"
+    assert result["states"]["breadth_visible"]["state"] == "complete"
+    assert result["searchable"] is True
+
+
+def test_doc_with_sync_projection_detects_missing_index(db, monkeypatch):
+    """同一场景的另一半：文件级索引缺失必须被看见（历史实现下 documents_
+    found=0 被误归因，或根本没核对）。"""
+    from app.services import index_status
+
+    upload = _mk_upload(db, section="atsc", source=None, status="ready")
+    upload.sync_breadth = True
+    db.add(BreadthManualRecord(
+        upload_id=upload.id, user_id="status-test", title="投影2", body="b",
+        category="c", origin_section="atsc", in_breadth_nav=True))
+    db.commit()
+    monkeypatch.setattr(index_status, "canonical_document_status", lambda ids: {})
+    result = upload_index_status(db, upload)
+    assert result["ingestion_mode"] == "document"
+    assert result["searchable"] is False
+    assert result["status"] == "legacy_unknown"
+    assert result["states"]["vector"]["state"] == "not_started"
+
+
+def test_row_chain_with_tasks_verifies_record_docs(db, monkeypatch):
+    """逐行表格链（会话无、队列有任务）：按行记录 id 核对（对照场景）。"""
+    from app.services import index_status
+
+    upload = _mk_upload(db, section="industry", source=None, status="queued")
+    _mk_task(db, upload, "done")
+    rec = BreadthManualRecord(
+        upload_id=upload.id, user_id="status-test", title="行记录", body="b",
+        category="c", origin_section="industry", content_hash="sha-abc",
+        in_breadth_nav=False)
+    db.add(rec)
+    db.commit()
+    seen: list[str] = []
+
+    def _fake(ids):
+        seen.extend(ids)
+        return {str(rec.id): {"chunks": 2, "vector_ok": True, "bm25_ok": True,
+                              "entity_count": 0, "primary_section": "industry",
+                              "content_shas": ["sha-abc"]}}
+    monkeypatch.setattr(index_status, "canonical_document_status", _fake)
+    result = upload_index_status(db, upload)
+    assert result["ingestion_mode"] == "row_records"
+    assert seen == [str(rec.id)]
+    assert result["searchable"] is True
+    # 图谱：chunk 在 → 参与（complete）；entity_count=0 不构成失败
+    assert result["states"]["graph"]["state"] == "complete"
+    assert "无可抽取实体" in (result["states"]["graph"].get("note") or "")
+    assert result["states"]["breadth_visible"]["state"] == "not_started"
+
+
+def test_row_chain_content_hash_mismatch_degrades(db, monkeypatch):
+    """1.1 内容指纹：UPDATE 后索引仍是旧世代（content_hash 不在索引
+    content_shas）→ 不算可检索，状态降级 legacy_unknown。"""
+    from app.services import index_status
+
+    upload = _mk_upload(db, section="breadth", source="other", status="queued")
+    _mk_task(db, upload, "done")
+    rec = BreadthManualRecord(
+        upload_id=upload.id, user_id="status-test", title="指纹", body="新正文",
+        category="c", origin_section="breadth", content_hash="sha-new",
+        in_breadth_nav=True)
+    db.add(rec)
+    db.commit()
+    monkeypatch.setattr(
+        index_status, "canonical_document_status",
+        lambda ids: {str(rec.id): {"chunks": 3, "vector_ok": True, "bm25_ok": True,
+                                   "entity_count": 1, "primary_section": "breadth",
+                                   "content_shas": ["sha-old"]}})
+    result = upload_index_status(db, upload)
+    assert result["searchable"] is False
+    assert result["status"] == "legacy_unknown"
+    assert result["index"]["content_hash_missing"] == [str(rec.id)]
+
+
+def test_states_single_route_failure_not_masked(db, monkeypatch):
+    """1.1：单路失败不掩盖其他路——vector 不健康时 keyword/graph 各自成态。"""
+    from app.services import index_status
+
+    upload = _mk_upload(db, section="breadth", source="other", status="queued")
+    _mk_task(db, upload, "done")
+    rec1 = BreadthManualRecord(
+        upload_id=upload.id, user_id="status-test", title="a", body="b",
+        category="c", origin_section="breadth", content_hash="sha-1",
+        in_breadth_nav=True)
+    db.add(rec1)
+    db.commit()
+    monkeypatch.setattr(
+        index_status, "canonical_document_status",
+        lambda ids: {str(rec1.id): {"chunks": 2, "vector_ok": False, "bm25_ok": True,
+                                    "entity_count": 1, "primary_section": "breadth",
+                                    "content_shas": ["sha-1"]}})
+    result = upload_index_status(db, upload)
+    assert result["states"]["vector"]["state"] == "failed"
+    assert result["states"]["keyword"]["state"] == "complete"
+    assert result["states"]["graph"]["state"] == "complete"
+    assert result["searchable"] is False

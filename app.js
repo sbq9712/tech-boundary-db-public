@@ -1988,7 +1988,7 @@ function libraryView(){
       </div>
     </div></section>`;
   }
-  /* GitHub增量包页：列头固定为 资料/状态/上传者/上传时间/原文件；无人工等级控件；
+  /* GitHub增量包页：列头固定为 资料/状态/上传者/上传时间/原文件/索引；无人工等级控件；
      导入协议已接入（feed-pkg/v1）：上传 daily/YYYY-MM-DD.zip 按 t|d|u 去重导入 */
   if(section==="breadth"&&sub==="github"){
     return `<section class="flat-content library">${navBtn}
@@ -1997,7 +1997,7 @@ function libraryView(){
         <span class="lib-github-pending-badge active">已接入</span>
         <span>增量包导入协议 feed-pkg/v1 已接入：上传 daily/YYYY-MM-DD.zip，系统按 t|d|u 去重导入，撞库与包内重复自动跳过并逐项计数。</span>
       </div>
-      <div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>状态</th><th>上传者</th><th>上传时间</th><th>原文件</th></tr></thead><tbody id="rows"></tbody></table></div>
+      <div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>状态</th><th>上传者</th><th>上传时间</th><th>原文件</th><th>索引</th></tr></thead><tbody id="rows"></tbody></table></div>
       <div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无增量包</div><div class="lib-empty-hint">点击「上传增量包」导入 tech-boundary-data-feed 的每日 zip，导入结果会展示在这里</div></div>
       <div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div>
     </section>`;
@@ -2050,6 +2050,87 @@ async function initLibrary(){
     const link=document.getElementById("uploadLink");if(libCanManage&&link){link.style.display="";link.onclick=()=>{if(isGithub)openGithubImportModal();else openUploadModal(section,sub);};}}}catch(e){}
   try{const r=await apiFetch("/api/uploads/taxonomy");if(r&&r.ok){const data=await r.json();upTaxonomy=data.categories||[];const select=document.getElementById("categoryFilter");if(select){const treePaths=data.all_paths||(data.categories||[]).filter(c=>c.includes("/"));select.innerHTML='<option value="">全部节点</option>'+treePaths.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")+'<option value="不相关">不相关</option><option value="未分类">未分类</option>';}}}catch(e){}
   loadLibrary();
+}
+function scheduleLibPolling(files){
+  /* 任务一 1.2：统一的资料库轮询——排队/处理中（分类/索引）继续刷新；
+     全部到达终态即停（离开页面由 stopLibPolling 终止）。 */
+  if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}
+  if(!Array.isArray(files)||!files.length)return;
+  const active=files.some(f=>["pending","processing"].includes(f.classification_status)
+    ||["pending","processing","queued"].includes(f.embedding_status)
+    ||["index_queued","index_processing","import_processing"].includes(f.ingestion_status));
+  if(active&&document.getElementById("rows"))libRefreshTimer=setTimeout(loadLibrary,3000);
+}
+function stopLibPolling(){
+  if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}
+}
+const LIB_ROUTE_STATE_LABELS={complete:"完成",partial:"部分",failed:"失败",not_started:"未开始",queued:"排队中",processing:"构建中",unknown:"未知"};
+const libIdxDetailOpen=new Set();
+function libIdxDetailRowHtml(detail,colspan){
+  /* 任务一 1.2：详情行内容（canonical 权威四态 + 缺失文档/指纹错位/失败原因）。 */
+  if(!detail){
+    return `<td colspan="${colspan}"><div class="status-sub">索引详情暂不可用（服务不可达），请稍后重试。</div></td>`;
+  }
+  const st=detail.states||{};
+  const cell=(k,name)=>{
+    const s=st[k]||{};
+    const state=s.state||"unknown";
+    const note=s.note?`（${escapeHtml(s.note)}）`:"";
+    const reason=s.reason?`<div class="status-sub">${escapeHtml(s.reason)}</div>`:"";
+    return `<div><strong>${name}</strong>：<span class="status ${escapeHtml(state)}">${escapeHtml(LIB_ROUTE_STATE_LABELS[state]||state)}</span>${note}${reason}</div>`;
+  };
+  const idx=detail.index||{};
+  const extra=[];
+  if(idx.documents_checked!=null)extra.push(`文档 ${idx.documents_found||0}/${idx.documents_checked}`);
+  if(idx.chunks!=null)extra.push(`分块 ${idx.chunks}`);
+  if(idx.entity_count!=null)extra.push(`实体 ${idx.entity_count}`);
+  if(idx.documents_missing)extra.push(`缺失 ${idx.documents_missing}`);
+  if(idx.content_hash_missing&&idx.content_hash_missing.length)extra.push(`指纹错位 ${idx.content_hash_missing.length}`);
+  if(idx.unattributed)extra.push(`未归属 ${idx.unattributed}`);
+  if(idx.error)extra.push(`canonical 不可达`);
+  return `<td colspan="${colspan}"><div class="status-sub" style="display:flex;flex-direction:column;gap:2px">
+    ${cell("breadth_visible","广度可见")}${cell("vector","向量索引")}${cell("keyword","关键词索引")}${cell("graph","知识图谱")}
+    <div>${extra.length?escapeHtml(extra.join(" · ")):"—"}</div>
+    <div class="status-sub">模式 ${escapeHtml(detail.ingestion_mode||"-")} · searchable=${detail.searchable==null?"unknown（服务不可达）":(detail.searchable?"是":"否")}</div>
+  </div></td>`;
+}
+async function libOpenIdxDetail(fileId,btn){
+  /* 展开实现：请求后重新解析锚点行——轮询重渲染会替换 tbody，
+     await 前捕获的 tr 可能已脱链（脱链插入 = 行不可见）。 */
+  btn.disabled=true;btn.textContent="加载中…";
+  let detail=null;
+  try{
+    const r=await apiFetch(`/api/uploads/${encodeURIComponent(fileId)}/index-status`);
+    if(r&&r.ok)detail=await r.json();
+  }catch(e){detail=null;}
+  const tb=document.getElementById("rows");
+  const anchorBtn=tb?tb.querySelector(`button[data-lib-idx-detail="${CSS.escape(fileId)}"]`):null;
+  const tr=anchorBtn?anchorBtn.closest("tr"):null;
+  const targetBtn=anchorBtn||btn;
+  targetBtn.disabled=false;targetBtn.textContent="索引详情";
+  if(!tb||!tr){libIdxDetailOpen.delete(fileId);return;} /* 列表已翻页/离开，放弃本次展开 */
+  tb.querySelectorAll(`tr[data-idx-detail-for="${CSS.escape(fileId)}"]`).forEach(r=>r.remove());
+  const row=document.createElement("tr");
+  row.dataset.idxDetailFor=fileId;
+  row.innerHTML=libIdxDetailRowHtml(detail,Math.max(1,tr.children.length||6));
+  tr.after(row);
+}
+async function libToggleIndexDetail(fileId,btn){
+  /* 任务一 1.2：展开/收起单个上传的索引详情行；重试后可再点开核对最终结果。 */
+  const tb=document.getElementById("rows");if(!tb||!fileId)return;
+  const existing=tb.querySelector(`tr[data-idx-detail-for="${CSS.escape(fileId)}"]`);
+  if(existing){existing.remove();libIdxDetailOpen.delete(fileId);btn.textContent="索引详情";return;}
+  libIdxDetailOpen.add(fileId);
+  await libOpenIdxDetail(fileId,btn);
+}
+function libRestoreIdxDetails(tb){
+  /* 轮询重渲染后恢复展开中的详情行（顺带刷新四态，构建进度可见）。 */
+  if(!tb)return;
+  libIdxDetailOpen.forEach(id=>{
+    const b=tb.querySelector(`button[data-lib-idx-detail="${CSS.escape(id)}"]`);
+    if(b)libOpenIdxDetail(id,b);
+    else libIdxDetailOpen.delete(id); /* 翻页后行不存在则清出 */
+  });
 }
 async function loadLibrary(){
   if(libRefreshTimer){clearTimeout(libRefreshTimer);libRefreshTimer=null;}
@@ -2106,11 +2187,19 @@ async function loadLibrary(){
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
       <td>${escapeHtml(f.original_filename)}</td>
+      <td><button class="secondary-btn" data-lib-idx-detail="${escapeHtml(f.id)}">索引详情</button></td>
     </tr>`;}).join("");
     const countInfo=document.getElementById("countInfo");
     if(countInfo)countInfo.textContent="共 "+libTotal+" 个增量包";
     /* 任务一 1.3：GitHub 分支提前 return，重试按钮需在此绑定 */
     tb.querySelectorAll("button[data-retry-index]").forEach(b=>b.onclick=()=>libRetry(b.dataset.retryIndex,"embedding/retry",b));
+    /* 任务一 1.2：索引详情展开（四态契约：广度可见/向量/关键词/图谱）——
+       懒加载详情端点（列表聚合不含 canonical 逐文档核对，避免 N+1） */
+    tb.querySelectorAll("button[data-lib-idx-detail]").forEach(b=>b.onclick=()=>libToggleIndexDetail(b.dataset.libIdxDetail,b));
+    libRestoreIdxDetails(tb);
+    /* 任务一 1.2（修复）：GitHub 页排队/构建中自动轮询——历史缺陷：本分支
+       提前 return，轮询定时器永不建立（index_queued → scheduled_polls=0） */
+    scheduleLibPolling(data.files);
     return;
   }
   tb.innerHTML=data.files.map(f=>{
@@ -2156,7 +2245,8 @@ async function loadLibrary(){
   tb.querySelectorAll("button[data-lib-delete]").forEach(b=>b.onclick=()=>libDelete(b.dataset.libDelete,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-classify]").forEach(b=>b.onclick=()=>libClassify(b.dataset.libClassify,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-asset]").forEach(b=>b.onclick=()=>{const [id,asset]=b.dataset.libAsset.split("|");libAsset(id,asset,b.dataset.libName,b);});
-  if(data.files.some(f=>["pending","processing"].includes(f.classification_status)||["pending","processing"].includes(f.embedding_status)||["index_queued","index_processing"].includes(f.ingestion_status)))libRefreshTimer=setTimeout(loadLibrary,3000);
+  libRestoreIdxDetails(tb);
+  scheduleLibPolling(data.files);
 }
 function libAsset(id,asset,name,button){
   if(button)button.disabled=true;
