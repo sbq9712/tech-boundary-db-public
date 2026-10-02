@@ -72,19 +72,24 @@ cd ~/tech-boundary-db/services/canonical-qa
 增量保存: 每 50 批 (6400 条) 自动保存一次
 
 ### 2. 启动服务器
+
+标准部署走 docker compose（容器内 8765，默认映射宿主 127.0.0.1:8767）：
+```bash
+cd ~/tech-boundary-db
+docker compose up -d canonical-qa   # 镜像 techdb-canonical-qa:<TAG>，TAG 见 .env
+curl -s http://127.0.0.1:8767/api/health
+```
+
+裸机调试（仅排查用，需要本地 venv 与依赖）：
 ```bash
 cd ~/tech-boundary-db/services/canonical-qa
-.venv/bin/python qa-backend/server.py
+.venv/bin/python qa-backend/server.py   # 监听 0.0.0.0:8765（容器内端口）
 ```
-服务器运行在 http://localhost:8765
 
 ### 3. 访问前端
-前端文件在项目根目录,通过 HTTP 服务器访问:
-```bash
-cd ~/tech-boundary-db/services/canonical-qa
-python3 -m http.server 8097
-```
-然后打开 http://localhost:8097, 点击"数据库问答"标签
+前端由门户 web 服务提供（docker compose 的 web，默认宿主 8080），
+广度问答在 http://127.0.0.1:8080/breadth/ 。`python3 -m http.server`
+仅作无 compose 环境的临时调试手段。
 
 ### 4. 自动化运维
 ```bash

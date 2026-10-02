@@ -45,7 +45,7 @@ RUN "QA 基础索引健康" curl -s http://127.0.0.1:8767/api/health
 echo "  预期：timer active；journal 无 failure（exit 3 部分成功为设计态）；health JSON total_records 与发布视图一致、incremental_index_ready=true"
 
 SAY "2/4 停用旧链（顺序：先隧道/服务，后确认 404）"
-RUN "停用全部旧单元" systemctl --user disable --now techdb-tunnel techdb-server techdb-data-sync.timer techdb-pipeline.timer techdb-graph.timer techdb-vector.timer
+RUN "停用全部旧单元" systemctl --user disable --now techdb-tunnel techdb-server techdb-data-sync.timer techdb-pipeline.timer techdb-graph.timer techdb-vector.timer techdb-auto-update.service techdb-auto-update.timer
 echo "  预期输出：Removed \"/home/rhett/.config/systemd/user/...\" ×N；然后旧站隧道断开"
 RUN "确认旧站 404" curl -sI https://sbq9712.github.io/tech-db/
 echo "  预期首行：HTTP/2 404（Pages 需在 GitHub 网页手动关闭——CLI 关不了，这是已知边界）"

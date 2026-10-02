@@ -6,9 +6,12 @@
 > [sbq9712/tech-db](https://github.com/sbq9712/tech-db)（本机 `~/tech-db` 与
 > `~/tech-db-fresh` 两份检出 + systemd user 单元）进入退役流程。
 >
-> **本仓库不执行任何退役动作**：本文档与 `scripts/techdb_retire.sh` 只提供
-> 核对清单与命令演练（dry-run）。真正的 disable/删除由维护者按清单手工执行
-> （`~/tech-db-fresh` 与其 systemd 单元明确不在本仓库脚本的操作范围内）。
+> **本仓库不自动执行任何退役动作**：本文档与 `scripts/techdb_retire.sh`
+> 默认只提供核对清单与命令演练（无参 / `--dry-run` 仅 echo 不执行）。
+> 脚本另提供 `--execute` 通道（须同时设 `TECHDB_RETIRE_CONFIRM=I-AM-SURE`
+> 环境变量），供维护者按清单代跑 `systemctl disable --now`——它仍绝不
+> 删除任何文件/仓库，且 `~/tech-db-fresh` 与其 systemd 单元明确不在
+> 操作范围内（用户要求保留）。
 
 ## 1. 删库前必须确认（全部满足才继续）
 
@@ -28,7 +31,9 @@ systemctl --user disable --now techdb-tunnel \
   techdb-data-sync.timer \
   techdb-pipeline.timer \
   techdb-graph.timer \
-  techdb-vector.timer
+  techdb-vector.timer \
+  techdb-auto-update.service \
+  techdb-auto-update.timer
 # ② 确认旧站已 404（Pages 需在 GitHub 网页上手动关闭，无法 CLI）
 curl -sI https://sbq9712.github.io/tech-db/ | head -1   # 预期 404
 # ③ 观察一个新链完整周期后再删除本机目录与远端仓库
