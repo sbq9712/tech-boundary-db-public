@@ -191,3 +191,44 @@ def test_repair_identity_drift_goes_pending(db, tmp_path, monkeypatch):
     assert "可修复：2" in r.stdout
     assert "待人工（不猜测）：1" in r.stdout
     assert "行身份不一致" in r.stdout
+
+
+def test_repair_fixes_mislabel_defaulted_news(db, tmp_path, monkeypatch):
+    """Codex P1-7：被默认值顶替的错标（文件=文献、库=news）必须可修。
+
+    旧执行逻辑用「库值 in VALID_TYPES」判幂等会把合法但错误的 news 跳过——
+    dry-run 说可修、执行却 0 条。新逻辑以「回读文件重算值 ≠ 库值」为准，
+    条件 UPDATE 匹配规划期 old_type，并发改动自动跳过。
+    """
+    db2 = db
+    upload, recs = _import_and_corrupt(
+        db2, tmp_path, monkeypatch, corrupt_values=("news", "news", "news"))
+    # 3 行库值全 news；文件里只有第 2 行是「文献」→ 1 条错标应修成 literature
+    r = _run_script("--dry-run")
+    assert r.returncode == 0
+    assert "可修复：1" in r.stdout
+    assert "-> literature" in r.stdout
+
+    backup = tmp_path / "bk2.json"
+    r = _run_script("--backup", str(backup))
+    assert r.returncode == 0
+    assert "修复完成：1" in r.stdout
+    payload = json.loads(backup.read_text(encoding="utf-8"))
+    assert payload["executed"] == 1
+    assert payload["entries"][0].get("actual_old_type") == "news"
+    db2.expire_all()
+    recs = sorted(
+        db2.scalars(
+            __import__("sqlalchemy").select(BreadthManualRecord).where(
+                BreadthManualRecord.upload_id == upload.id)
+        ).all(),
+        key=lambda r: r.title,
+    )
+    types = {r.title: r.intelligence_type for r in recs}
+    assert types["钙钛矿叠层效率"] == "news"      # 文件=新闻，保持
+    assert types["固态电池界面"] == "literature"  # 文件=文献，被修复
+    assert types["电解质进展"] == "news"
+
+    # 再跑一次：全部一致 → 幂等 no-op
+    r = _run_script("--dry-run")
+    assert "可修复：0" in r.stdout

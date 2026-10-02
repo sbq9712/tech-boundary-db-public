@@ -159,13 +159,18 @@ UNATTRIBUTED_SCOPE = "unattributed"
 
 
 def parse_sources(raw: str | None) -> tuple | None:
-    """/api/search?sources= 解析：逗号分隔白名单子集；空/非法值 → None=默认全源。"""
+    """/api/search?sources= 解析：逗号分隔白名单子集；空/非法值 → None=默认全源。
+
+    Codex P2-2：显式白名单补 unattributed（诊断口径——只看回填前无归属
+    存量；与 _scope_allowed 的 (UNATTRIBUTED_SCOPE,) 分支对齐）。
+    """
     if not raw:
         return None
     wanted = tuple(x.strip().lower() for x in raw.split(",") if x.strip())
     if not wanted:
         return None
-    valid = tuple(x for x in wanted if x in VALID_SOURCES)
+    allowed = VALID_SOURCES + (UNATTRIBUTED_SCOPE,)
+    valid = tuple(x for x in wanted if x in allowed)
     if not valid:
         return None
     return valid
@@ -891,7 +896,11 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
         scopes = VALID_SOURCES + (UNATTRIBUTED_SCOPE,)
         trace["sources"] = list(VALID_SOURCES)
     else:
-        scopes = tuple(x for x in sources if x in VALID_SOURCES) or VALID_SOURCES
+        # Codex P2-2（运行时半边）：显式 sources 含 unattributed 时不能被
+        # VALID_SOURCES 过滤吞掉再回退全源——「unattributed-only」会被静默
+        # 放大成三源全开。保留白名单内的全部显式值。
+        scopes = tuple(x for x in sources
+                       if x in VALID_SOURCES + (UNATTRIBUTED_SCOPE,))
         trace["sources"] = list(scopes)
     matrix: dict = {sc: {"vector": {"executed": False, "candidates": 0, "duration_ms": 0},
                          "keyword": {"executed": False, "candidates": 0, "duration_ms": 0},
@@ -963,13 +972,24 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
                     trace.setdefault("graph_expansion", []).extend(paths[:4])
                 seen_ids = {_pl_result_key(r) for r in (
                     [r for rs in rounds for r in rs] + graph_extra)}
+                # Codex P2-3：novelty 身份集持久化到图谱补充阶段——
+                # 历史已引用（document_id/record_id/url 命中）的记录不因
+                # 图谱扩展路径重入证据窗。
+                _novelty_ids = {str(e) for e in (exclude_ids or []) if str(e).strip()}
+
+                def _novelty_hit(r: dict) -> bool:
+                    meta = r.get("meta") or {}
+                    rid = str(meta.get("document_id") or meta.get("record_id") or "")
+                    return (rid and rid in _novelty_ids) or (
+                        str(r.get("url") or "") in _novelty_ids)
+
                 from retrieval_pipeline import extract_query_terms as _eqt
                 gate_terms = set(_eqt(base)) | {e["label"] for e in entities}
                 sc_extra = 0
                 for lab in neighbor_labels[:6]:
                     label_hit = lab in base or any(t in lab for t in gate_terms)
                     for r in _hydrate_texts(_bm25_by_label(lab, sources=sc_sources)):
-                        if _pl_result_key(r) in seen_ids:
+                        if _pl_result_key(r) in seen_ids or _novelty_hit(r):
                             continue
                         # 增量/基础已在 bm25 候选获取阶段按源过滤（含未归属池）
                         text = str(r.get("title", "")) + str(r.get("body_snippet", ""))
@@ -1028,7 +1048,9 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
         trace["degrade_reason"] = f"{exc.__class__.__name__}"
         trace["source_route_matrix"] = matrix
         try:
-            results, _rel = await hybrid_search(base)
+            # Codex P1-1：降级不降范围——显式 sources 必须传给基线检索，
+            # 否则行业/ATSC 范围查询在编排异常时会退化为全源结果。
+            results, _rel = await hybrid_search(base, sources=sources)
             results = _hydrate_texts(results)
             evidence = _pl_grade(results, base)
             return results, evidence, trace
@@ -1402,6 +1424,9 @@ async def index_metadata_patch(
         raise HTTPException(status_code=503, detail="index unavailable") from exc
     if patched:
         mark_fragment_dirty()  # 归属影响图谱 scope 视图（2.4）
+        # Codex P1-5：scoped 缓存签名只含图谱内容，不含 chunk_metadata 归属——
+        # 仅改 scope 元数据的 patch 不会改变签名，必须显式失效各 scope 视图。
+        _SCOPED_FRAGMENT_CACHE.update({"sig": "", "scopes": {}})
     return {"status": "ok", "document_id": req.document_id, "patched_chunks": patched}
 
 
@@ -1461,10 +1486,14 @@ async def index_status(
         if wanted is not None and did not in wanted:
             continue
         entities = fragment_entities.get(did, set())
+        chunks = int(entry["chunks"])
+        # Codex P1-4：真实健康信号（对齐数组逐行校验），缺键回退旧语义（chunks>0）
+        vec_ok = entry.get("vector_rows_ok", chunks) == chunks
+        bm_ok = entry.get("bm25_rows_ok", chunks) == chunks
         out_docs[did] = {
-            "chunks": entry["chunks"],
-            "vector_ok": entry["chunks"] > 0,
-            "bm25_ok": entry["chunks"] > 0,
+            "chunks": chunks,
+            "vector_ok": vec_ok,
+            "bm25_ok": bm_ok,
             "entity_count": len(entities),
             "content_shas": entry["content_shas"],
             "record_key_shas": entry["record_key_shas"],

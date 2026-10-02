@@ -468,3 +468,60 @@ def test_list_docling_uploads_without_tasks_keep_legacy_chain(db):
     finally:
         from app.main import app
         app.dependency_overrides.clear()
+
+
+def test_upload_index_status_partial_docs_not_searchable(db, monkeypatch):
+    """Codex P1-3：存活记录部分在索引（写入中/丢写）→ searchable=False。
+
+    「有一条可检索」≠「整包可检索」：documents_missing 明细暴露缺口，
+    队列 done 但有缺口 → legacy_unknown（重试=幂等重放恢复）。
+    """
+    from app.services import index_status
+
+    upload = _mk_upload(db)  # breadth/github
+    _mk_task(db, upload, "done")
+    rec_a = BreadthManualRecord(upload_id=upload.id, user_id="status-test",
+                                title="a", body="b", category="c",
+                                origin_section="breadth")
+    rec_b = BreadthManualRecord(upload_id=upload.id, user_id="status-test",
+                                title="b", body="b", category="c",
+                                origin_section="breadth")
+    db.add_all([rec_a, rec_b])
+    db.commit()
+
+    monkeypatch.setattr(
+        index_status, "canonical_document_status",
+        lambda ids: {str(rec_a.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True,
+                                     "primary_section": "breadth"}},
+    )
+    result = upload_index_status(db, upload)
+    assert result["index"]["documents_missing"] == 1
+    assert str(rec_b.id) in result["index"]["missing_document_ids"]
+    assert result["searchable"] is False
+    assert result["status"] == "legacy_unknown"
+
+    # 全部落齐且健康 → searchable（旧行为不受影响）
+    monkeypatch.setattr(
+        index_status, "canonical_document_status",
+        lambda ids: {
+            str(rec_a.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True,
+                            "primary_section": "breadth"},
+            str(rec_b.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True,
+                            "primary_section": "breadth"},
+        },
+    )
+    result = upload_index_status(db, upload)
+    assert result["searchable"] is True
+    assert result["status"] == "indexed"
+
+    # 全在册但向量/BM25 不健康（结构损坏）→ 不误报可检索
+    monkeypatch.setattr(
+        index_status, "canonical_document_status",
+        lambda ids: {
+            str(rec_a.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True},
+            str(rec_b.id): {"chunks": 1, "vector_ok": False, "bm25_ok": True},
+        },
+    )
+    result = upload_index_status(db, upload)
+    assert result["searchable"] is False
+    assert result["status"] == "legacy_unknown"

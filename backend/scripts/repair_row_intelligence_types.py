@@ -198,26 +198,84 @@ def main() -> None:
         }
         Path(args.backup).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"备份写入 {args.backup}")
+        print(f"备份写入 {args.backup}（计划值；执行后以实际覆盖值回写）")
 
-    # 幂等执行：UPDATE + 重入队
+    # Codex P1-7：执行阶段逐条独立小事务——
+    #   1) 回读原文件复核身份与类型（规划与执行之间数据可能漂移）；
+    #   2) 条件 UPDATE 匹配规划期 old_type（并发改动 → rowcount=0 跳过）；
+    #   3) 备份在覆盖前回写实际库值（actual_old_type）；
+    #   4) UPDATE + 重入队同一事务提交，中途异常不留半完成状态。
+    from sqlalchemy import update as _sa_update
+
+    from app.services.breadth_index_queue import enqueue_record_upserts
+
     db = SessionLocal()
     fixed = 0
+    skipped: list[tuple[str, str]] = []
+    upload_cache2: dict[uuid.UUID, Path | None] = {}
     try:
-        from app.services.breadth_index_queue import enqueue_record_upserts
-
         for e in plan:
-            rec = db.get(BreadthManualRecord, uuid.UUID(e["record_id"]))
-            if rec is None or (rec.intelligence_type or "") in VALID_TYPES:
-                continue  # 已被并发修复——幂等跳过
-            rec.intelligence_type = e["new_type"]
-            db.commit()
-            enqueue_record_upserts(db, [rec])
-            fixed += 1
-        db.commit()
+            rid = uuid.UUID(e["record_id"])
+            rec = db.get(BreadthManualRecord, rid)
+            if rec is None:
+                skipped.append((e["record_id"], "记录已删除"))
+                continue
+            # 1) 执行期复核：原文件可读 + 身份一致 + 类型映射结果一致
+            upath = upload_cache2.get(rec.upload_id)
+            if upath is None and rec.upload_id not in upload_cache2:
+                up = db.get(UploadedFile, rec.upload_id) if rec.upload_id else None
+                from app.services.upload_ingestion import safe_upload_path
+                p = safe_upload_path(up.stored_filename) if up and up.stored_filename else None
+                upath = p if (p and p.exists()) else None
+                upload_cache2[rec.upload_id] = upath
+            row_ok = False
+            if upath:
+                for sheet_name, headers, row_map in _iter_sheet_rows(upath):
+                    if sheet_name != e.get("sheet"):
+                        continue
+                    row = row_map.get(int(e["row"] or 0))
+                    if row is not None and _row_identity_matches(row, headers, rec):
+                        new_type, _raw = _resolve_type(headers, row)
+                        row_ok = new_type == e["new_type"]
+                    break
+            if not row_ok:
+                skipped.append((e["record_id"], "执行期复核不一致（文件/身份/类型漂移）"))
+                db.rollback()
+                continue
+            actual_old = rec.intelligence_type
+            # 2) 条件 UPDATE：只有库值仍等于规划期 old_type 才覆盖
+            res = db.execute(
+                _sa_update(BreadthManualRecord)
+                .where(BreadthManualRecord.id == rid,
+                       BreadthManualRecord.intelligence_type == e["old_type"])
+                .values(intelligence_type=e["new_type"]))
+            if res.rowcount != 1:
+                db.rollback()
+                skipped.append((e["record_id"], f"并发改动（现值 {actual_old!r}），跳过"))
+                continue
+            e["actual_old_type"] = actual_old  # 3) 覆盖前实际值
+            try:
+                db.commit()
+                enqueue_record_upserts(db, [rec])
+                fixed += 1
+            except Exception as exc:  # noqa: BLE001 —— 单条失败不拖垮整批
+                db.rollback()
+                skipped.append((e["record_id"], f"入队失败：{exc}"))
+                continue
     finally:
         db.close()
-    print(f"修复完成：{fixed} 条已 UPDATE 并重入队（其余见 pending 清单）")
+
+    if args.backup:
+        Path(args.backup).write_text(json.dumps({
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "executed": fixed,
+            "entries": plan,
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"备份回写 {args.backup}（含 actual_old_type 实际覆盖值）")
+
+    print(f"修复完成：{fixed} 条已 UPDATE 并重入队")
+    for rid, why in skipped:
+        print(f"  [skip] {rid[:8]} {why}")
 
 
 if __name__ == "__main__":

@@ -61,7 +61,10 @@ def test_parse_sources_valid_subset_normalized():
     assert parse_sources(" Breadth , ATSC ") == ("breadth", "atsc")
     assert parse_sources("breadth,breadth,industry") == ("breadth", "breadth", "industry")
     # 未归属是可显式选择的诊断值，但不是默认三源之一
-    assert parse_sources("unattributed") is None
+    # Codex P2-2：诊断口径对齐——unattributed 可显式选择（只看回填前无归属存量）
+    assert parse_sources("unattributed") == ("unattributed",)
+    assert parse_sources("breadth,unattributed") == ("breadth", "unattributed")
+    assert parse_sources("unattributed,新闻") == ("unattributed",)
 
 
 # ── _meta_scope ──

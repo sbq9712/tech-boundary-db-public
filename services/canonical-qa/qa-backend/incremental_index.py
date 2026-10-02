@@ -428,10 +428,22 @@ class IncrementalIndex:
         返回 {document_id: {chunks, content_shas, record_key_shas,
         primary_section, source, checksum_sha256}}——chunks>0 即该文档在
         增量索引中实际可检索（向量/BM25 由同一写入路径保证）。
+
+        Codex P1-4：真实健康检查——chunks 只证明元数据在册；
+        vector_rows_ok/bm25_rows_ok 逐 chunk 校验对齐数组中该行
+        （embeddings 非零向量 / corpus_tokens 非空词袋），索引结构
+        损坏（数组错位/缺行/BM25 未建）时不再误报健康。
         """
         out: dict[str, dict[str, Any]] = {}
         with self._state_lock:
-            for meta in self.meta:
+            aligned = (
+                len(self.embeddings) == len(self.meta)
+                and len(self.corpus_tokens) == len(self.meta)
+                and self.embeddings.ndim == 2
+            )
+            bm25_alive = self.bm25 is not None or not any(
+                tokens for tokens in self.corpus_tokens)
+            for pos, meta in enumerate(self.meta):
                 did = str(meta.get("document_id") or "")
                 if not did:
                     continue
@@ -443,8 +455,14 @@ class IncrementalIndex:
                     "primary_section": None,
                     "source": None,
                     "checksum_sha256": None,
+                    "vector_rows_ok": 0,
+                    "bm25_rows_ok": 0,
                 })
                 entry["chunks"] += 1
+                if aligned and bool(self.embeddings[pos].any()):
+                    entry["vector_rows_ok"] += 1
+                if aligned and bm25_alive and bool(self.corpus_tokens[pos]):
+                    entry["bm25_rows_ok"] += 1
                 csha = str(md.get("content_sha") or "")
                 if csha:
                     entry["content_shas"].add(csha)

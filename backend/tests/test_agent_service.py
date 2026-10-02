@@ -295,3 +295,32 @@ def test_ensure_source_header_only_annotates_given_citations():
     assert "ATSC" not in fixed.split("\n")[0]
     both = _ensure_source_header("正文 [1][2]。", [ind, atsc])
     assert both.startswith("数据来源：行业情报、ATSC 标准文档")
+
+
+def test_retrieval_summary_counts_sections_and_inheritance():
+    """Codex P0-1 回归：summary 主路径不先赋值后构造（UnboundLocalError）。"""
+    ind = _upload_citation(id=1, section="industry")
+    inherited = _upload_citation(id=9, section="breadth", document_id="doc-prior",
+                                 chunk_id="c9", title="历史证据", url="https://example.com/prior")
+    prior = [inherited]
+    s = agent_service._retrieval_summary(
+        [ind, inherited], [ind], prior,
+        [{"role": "user", "content": "上一问"}], 4, "改写后的检索词",
+        ["rec-9"], {"evidence": {"status": "sufficient"}, "retrieval_trace": {"k": 1}},
+    )
+    assert s["citation_sections"] == {"industry": 1, "breadth": 1}
+    assert s["knowledge_base"] == 2
+    assert s["inherited_citations"] == 1
+    assert s["novelty_excluded"] == 1
+    assert s["evidence"] == {"status": "sufficient"}
+    # 无历史/无证据负载：兼容为空，不抛错
+    s2 = agent_service._retrieval_summary([], [], [], [], 0, "q", [], {})
+    assert s2["citation_sections"] == {}
+    assert s2["evidence"] == {} and s2["retrieval_trace"] == {}
+
+
+def test_sop_header_uses_only_actually_used_citations_at_callsite():
+    """Codex P2-1：主流程不再用 final_citations 兜底补「数据来源」。"""
+    src = inspect.getsource(agent_service.stream_agent_response)
+    assert "_header_citations = _used_citations(full_response, citations)\n" in src
+    assert "or final_citations" not in src.split("_header_citations")[1].split("\n")[0]

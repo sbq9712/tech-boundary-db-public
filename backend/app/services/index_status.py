@@ -230,9 +230,12 @@ def upload_index_status(db: Session, record: UploadedFile) -> dict:
             else:
                 found = {did: d for did, d in docs.items()
                          if int(d.get("chunks") or 0) > 0}
+                missing = [did for did in record_ids if did not in found]
                 result["index"] = {
                     "documents_checked": len(record_ids),
                     "documents_found": len(found),
+                    "documents_missing": len(missing),
+                    "missing_document_ids": missing[:10],
                     "chunks": sum(int(d.get("chunks") or 0) for d in found.values()),
                     "vector_ok": sum(1 for d in found.values() if d.get("vector_ok")),
                     "bm25_ok": sum(1 for d in found.values() if d.get("bm25_ok")),
@@ -240,11 +243,19 @@ def upload_index_status(db: Session, record: UploadedFile) -> dict:
                         1 for d in found.values() if not d.get("primary_section")
                     ),
                 }
-                result["searchable"] = bool(found) and all(
-                    d.get("vector_ok") and d.get("bm25_ok") for d in found.values()
+                # Codex P1-3：部分缺失不算可检索——全部存活记录都在索引且
+                # 逐文档 vector/bm25 健康才算 searchable（索引仍在写入时
+                # 显示 index_processing，由 status 表达，不用 searchable 谎报）。
+                result["searchable"] = (
+                    bool(found)
+                    and not missing
+                    and all(d.get("vector_ok") and d.get("bm25_ok")
+                            for d in found.values())
                 )
-                if status == "indexed" and not found:
-                    # 队列说 done 但索引无内容（重放丢失/手动清理）——如实降级
+                if status == "indexed" and (not found or missing
+                                            or not result["searchable"]):
+                    # 队列说 done 但索引有缺口（部分/全部丢失、向量或 BM25
+                    # 不健康）——如实降级 legacy_unknown，重试=幂等重放恢复
                     result["status"] = "legacy_unknown"
         else:
             # 名下无存活记录：无可核对对象——不是错误，如实 0 文档不可检索

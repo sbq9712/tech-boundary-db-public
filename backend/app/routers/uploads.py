@@ -783,8 +783,18 @@ def retry_upload_embedding(
                 record.document_date = payload["package_date"]
                 record.note = note_for_counts(payload)
             except GitHubPackageError as exc:
+                # 包不合规：导入器已回滚自身写入，这里兜底清理会话状态后 400
                 db.rollback()
                 raise HTTPException(400, f"增量包不合规：{exc}") from exc
+            except ValueError as exc:
+                # 存储路径越界/内容结构异常：会话可能带部分已提交状态
+                db.rollback()
+                raise HTTPException(409, f"增量包存储或内容异常：{exc}") from exc
+            except Exception as exc:  # noqa: BLE001 —— Codex P1-6：IO/解析等意外
+                db.rollback()
+                logger.error("retry reimport failed for %s", record.id, exc_info=True)
+                raise HTTPException(
+                    503, "重新导入暂不可用（存储/解析异常），请稍后重试") from exc
             # 注意：不 refresh——上面 title/document_date/note 尚未落库，
             # refresh 会丢弃未 flush 的赋值
             new_rows = db.scalars(

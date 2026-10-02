@@ -282,6 +282,45 @@ def _citation_primary_section(item: dict) -> str:
     return "unattributed" if item.get("document_id") else "breadth"
 
 
+def _retrieval_summary(
+    citations: list[dict],
+    current_citations: list[dict],
+    prior_citations: list[dict],
+    history: list[dict],
+    history_chars: int,
+    retrieval_query: str,
+    exclude_ids: list[str],
+    raw_payload: dict,
+) -> dict:
+    """单轮检索摘要（Codex P0-1 重构：纯函数化，主路径可单测）。
+
+    任务二 2.1/2.3：citation_sections 为检索面的来源构成（验收/追溯用；
+    引用级字段在每条 citation.primary_section）——必须在 summary 字面量内
+    一次构造完成，不再先赋值后构造（历史缺陷：检索成功主路径 UnboundLocalError）。
+    """
+    sec_counts: dict[str, int] = {}
+    for c in citations:
+        sec_counts[_citation_primary_section(c)] = sec_counts.get(_citation_primary_section(c), 0) + 1
+    previous_keys = {_citation_key(item) for item in prior_citations}
+    inherited_count = sum(1 for item in citations if _citation_key(item) in previous_keys)
+    # 检索编排层的证据评估与追溯（旧版服务无此两键 → 兼容为空）
+    evidence = raw_payload.get("evidence") if isinstance(raw_payload.get("evidence"), dict) else {}
+    retrieval_trace = raw_payload.get("retrieval_trace") if isinstance(raw_payload.get("retrieval_trace"), dict) else {}
+    return {
+        "knowledge_base": len(citations),
+        "current_retrieval": len(current_citations),
+        "inherited_citations": inherited_count,
+        "history_messages": len(history),
+        "history_chars": history_chars,
+        "retrieval_query": retrieval_query,
+        "novelty_excluded": len(exclude_ids),
+        "citation_sections": sec_counts,
+        "evidence": evidence,
+        "retrieval_trace": retrieval_trace,
+        "provider": "sbq9712/tech-db canonical hybrid retrieval",
+    }
+
+
 def _ensure_source_header(answer: str, citations: list[dict]) -> str:
     """SOP 兜底：答案缺「数据来源：」行时按实际引用来源确定性补齐。
 
@@ -699,29 +738,10 @@ async def stream_agent_response(
 
     prior_citations = _latest_history_citations(history) if retrieval_query != effective_query else []
     citations = _merge_citations(current_citations, prior_citations)
-    # 任务二 2.1/2.3：检索面的来源构成（验收/追溯用；引用级字段在每条 citation.primary_section）
-    _sec_counts: dict[str, int] = {}
-    for _c in citations:
-        _sec_counts[_citation_primary_section(_c)] = _sec_counts.get(_citation_primary_section(_c), 0) + 1
-    summary["citation_sections"] = _sec_counts
-
-    previous_keys = {_citation_key(item) for item in prior_citations}
-    inherited_count = sum(1 for item in citations if _citation_key(item) in previous_keys)
-    # 检索编排层的证据评估与追溯（旧版服务无此两键 → 兼容为空）
-    evidence = raw_payload.get("evidence") if isinstance(raw_payload.get("evidence"), dict) else {}
-    retrieval_trace = raw_payload.get("retrieval_trace") if isinstance(raw_payload.get("retrieval_trace"), dict) else {}
-    summary = {
-        "knowledge_base": len(citations),
-        "current_retrieval": len(current_citations),
-        "inherited_citations": inherited_count,
-        "history_messages": len(history),
-        "history_chars": history_chars,
-        "retrieval_query": retrieval_query,
-        "novelty_excluded": len(exclude_ids),
-        "evidence": evidence,
-        "retrieval_trace": retrieval_trace,
-        "provider": "sbq9712/tech-db canonical hybrid retrieval",
-    }
+    summary = _retrieval_summary(
+        citations, current_citations, prior_citations,
+        history, history_chars, retrieval_query, exclude_ids, raw_payload,
+    )
     evidence_status = str(evidence.get("status") or "unknown")
     if not citations:
         answer = "抱歉，数据库中没有足够的情报来回答这个问题。请尝试用更具体的关键词或换个角度提问。"
@@ -988,7 +1008,9 @@ async def stream_agent_response(
     # 放在核验链之后：核验指标只评估模型正文；补齐行是确定性元信息，
     # 不参与 claim/grounding。模型按 SOP 自写时不干预。
     _pre_header = full_response
-    _header_citations = _used_citations(full_response, citations) or final_citations
+    # Codex P2-1：SOP「数据来源」只用真实引用——答案没有数字引用时不补头，
+    # 不拿候选证据冒充被引用来源（final_citations 兜底仅用于展示列表）。
+    _header_citations = _used_citations(full_response, citations)
     full_response = _ensure_source_header(full_response, _header_citations)
     summary["sop_source_header_added"] = full_response != _pre_header
     if full_response != _pre_header:
