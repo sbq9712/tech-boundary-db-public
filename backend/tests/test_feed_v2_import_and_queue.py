@@ -1348,17 +1348,21 @@ def test_scalar_int_cp_tolerated_in_record_shapes():
     生产源头 pipeline/scripts/clustering.py 写 cp=0（簇根）/1（子）——聚类父
     标志本就是标量。_validate_record_shapes 须与该形态兼容（折叠入库），
     否则每日增量包全量被拒、离线更新链路断裂。回归锚点：
-    - 标量 int cp（0/1/聚类号）→ 通过；
+    - 标量 int cp（0/1）→ 通过；
     - bool cp 仍拒绝（bool 是 int 子类，必须显式排除）；
     - dict/超长列表等坏形态仍拒绝。
     """
     from app.services.github_import import _validate_record_shapes, GitHubPackageError
 
     base = {"id": "r1", "t": "标题", "d": "2026-10-02", "u": "https://q/1"}
-    # 标量 int cp：三种真实取值
-    for cp_val in (0, 1, 42):
+    # 标量 int cp：仅 0/1 是合法生产取值（clustering.py:580 只产 0/1；
+    # validate_data_contract：每簇恰一个 cp=0、其余 cp=1——布尔语义）
+    for cp_val in (0, 1):
         rec = dict(base, cp=cp_val)
         _validate_record_shapes([rec])  # 不抛即通过
+    # 非 0/1 标量：语义非法，必须拒绝
+    with pytest.raises(GitHubPackageError):
+        _validate_record_shapes([dict(base, cp=42)])
     # bool 必须拒绝
     with pytest.raises(GitHubPackageError):
         _validate_record_shapes([dict(base, cp=True)])
@@ -1369,6 +1373,76 @@ def test_scalar_int_cp_tolerated_in_record_shapes():
         _validate_record_shapes([dict(base, cp={"bad": 1})])
     with pytest.raises(GitHubPackageError):
         _validate_record_shapes([dict(base, cp=[i for i in range(100)])])
+
+
+def test_long_body_hash_and_replay_contract(tmp_path, monkeypatch):
+    """b 截断与 content_hash 契约固化（codex 审查 2026-10-02 要求）。
+
+    契约：content_hash 恒为「包内原始记录（截断前）」的哈希；入库正文
+    按 _BODY_CAP=20k 截断。由此：
+    - 历史包（b 20k–200k，生成器未截断）与重建包（生成端已截断）对同
+      一记录算出不同 hash：重建包以 UPDATE 推进（v 递增），绝不判
+      「同版本不同内容」协议冲突；
+    - 同包重放（同 checksum）→ replayed 幂等；同 v 同内容重投
+      （不同 checksum）→ skipped_unchanged 幂等。
+    """
+    import json as _json
+    from app.services.github_import import _v2_content_hash
+
+    monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
+    raw_body = "z" * 27_024                       # 真实 09-30 包实测长度
+    r1 = _norm({"t": "长正文契约", "d": "2026-10-01", "u": "https://v2/long",
+                "b": raw_body, "c": "科技", "sc": 7.0})
+    key = "长正文契约|2026-10-01|https://v2/long"
+    changes1 = [{"op": "ADD", "id": r1["id"], "key": key, "v": 1}]
+
+    db = SessionLocal()
+    try:
+        upload = _mk_upload(db, checksum=hashlib.sha256(b"zip-long-a").hexdigest())
+        payload = _import(db, upload, _tmp_zip(tmp_path, _build_v2([r1], changes1)))
+        assert payload["imported"] == 1 and payload["failed"] == 0, payload
+
+        row = db.execute(text(
+            "SELECT body, record_json, content_hash, source_version"
+            " FROM breadth_manual_records WHERE stable_id=:s"),
+            {"s": r1["id"]}).mappings().one()
+        # ① 检索正文列 = 截断后的 b（_BODY_CAP=20k）；record_json 保留包内
+        # 原始记录（包往返不丢字段，故其 b 为截断前 27,024）；
+        # ② content_hash 恒为「包内原始记录（截断前）」的哈希
+        assert row["body"] == raw_body[:20_000]
+        assert len(row["body"]) == 20_000
+        assert row["record_json"]["b"] == raw_body
+        assert row["content_hash"] == _v2_content_hash(r1)
+        assert row["source_version"] == 1
+
+        # ③ 同包重放（同 checksum，新上传行）→ replayed 幂等，不产生行变化
+        upload_r = _mk_upload(db, checksum=hashlib.sha256(b"zip-long-a").hexdigest())
+        payload_r = _import(db, upload_r, _tmp_zip(tmp_path, _build_v2([r1], changes1)))
+        assert payload_r["replayed"] is True
+        assert payload_r["imported"] == 1  # 回放计数，非新增
+
+        # ④ 重建包（生成端 20k 截断后重新发布，v=2）→ UPDATE 而非冲突
+        r2 = dict(r1)
+        r2["b"] = raw_body[:20_000]
+        changes2 = [{"op": "UPDATE", "id": r1["id"], "key": key, "v": 2}]
+        upload2 = _mk_upload(db, checksum=hashlib.sha256(b"zip-long-b").hexdigest())
+        payload2 = _import(db, upload2, _tmp_zip(tmp_path, _build_v2([r2], changes2, date="2026-10-02")))
+        assert payload2["details"]["updated"] == 1, payload2["details"]
+        assert payload2["details"]["conflicts"] == 0
+        row2 = db.execute(text(
+            "SELECT content_hash, source_version FROM breadth_manual_records WHERE stable_id=:s"
+        ), {"s": r1["id"]}).mappings().one()
+        assert row2["source_version"] == 2
+        assert row2["content_hash"] == _v2_content_hash(r2)
+
+        # ⑤ 同 v 同内容重投（不同 checksum）→ skipped_unchanged 幂等
+        changes3 = [{"op": "UPDATE", "id": r1["id"], "key": key, "v": 2}]
+        upload3 = _mk_upload(db, checksum=hashlib.sha256(b"zip-long-c").hexdigest())
+        payload3 = _import(db, upload3, _tmp_zip(tmp_path, _build_v2([r2], changes3, date="2026-10-03")))
+        assert payload3["details"]["skipped_unchanged"] == 1
+        assert payload3["details"]["conflicts"] == 0
+    finally:
+        db.close()
 
 
 def test_long_body_accepted_and_truncated():

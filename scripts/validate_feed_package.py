@@ -70,7 +70,8 @@ def _shape_errors(rec: dict) -> list[str]:
             # cp 实际生产形态是标量 int：clustering.py 写 0（簇根）/1（子）
             # 聚类父标志——2026-10-01/02 的真实发布包即此形态（T12 演练发现）。
             # 与导入端 github_import._validate_record_shapes 同规则容忍。
-            if field == "cp" and isinstance(v, int) and not isinstance(v, bool):
+            if field == "cp" and isinstance(v, int) and not isinstance(v, bool) \
+                    and v in (0, 1):
                 continue
             errs.append(f"{field} 必须为列表（实际 {type(v).__name__}）")
             continue

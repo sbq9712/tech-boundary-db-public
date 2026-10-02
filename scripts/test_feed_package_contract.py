@@ -386,20 +386,29 @@ class ScalarCpToleranceTest(unittest.TestCase):
     """T12 演练发现（2026-10-02）：真实发布包 cp 为标量 int（聚类父标志）。
 
     生产源头 pipeline/scripts/clustering.py 写 cp=0（簇根）/1（子）；
-    validator 与导入端同规则容忍标量 int cp（bool 排除），列表形态照旧。
+    validator 与导入端同规则容忍标量 int cp（仅 0/1，bool 排除），列表形态照旧。
     """
 
     def test_scalar_int_cp_passes(self):
         import tempfile
         from pathlib import Path
         import validate_feed_package as validator
-        for cp_val in (0, 1, 42):
+        for cp_val in (0, 1):
             rec = _rec(1, cp=cp_val)
             with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as f:
                 f.write(_build_v2_zip([rec]))
                 path = f.name
             rep = validator.validate(Path(path))
             self.assertEqual(rep.errors, [], f"cp={cp_val} 应容忍：{rep.errors}")
+        # 非 0/1 标量：布尔语义 flag，非法值拒绝
+        import tempfile
+        from pathlib import Path
+        import validate_feed_package as validator
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as f:
+            f.write(_build_v2_zip([_rec(1, cp=42)]))
+            path = f.name
+        rep = validator.validate(Path(path))
+        self.assertTrue(rep.errors, "cp=42 应拒绝：布尔语义只允许 0/1")
 
     def test_bool_cp_still_rejected(self):
         import tempfile

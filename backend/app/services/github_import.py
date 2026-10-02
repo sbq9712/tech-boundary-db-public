@@ -387,8 +387,11 @@ def _validate_record_shapes(records: list) -> None:
                     continue
                 # cp 实际生产形态是标量 int：clustering.py 写 0（簇根）/1（子）
                 # 聚类父标志——2026-10-01/02 的真实发布包即此形态（T12 演练
-                # 发现）。按字段语义容忍，入库折叠为 [cp]，record_json 保留原值。
-                if field == "cp" and isinstance(v, int) and not isinstance(v, bool):
+                # 发现）。字段语义是布尔 flag（validate_data_contract：每簇
+                # 恰一个 cp=0，其余 cp=1），故标量只收窄容忍 {0,1}，其余
+                # 整数视为非法形态拒绝。入库折叠为 [cp]，record_json 保留原值。
+                if field == "cp" and isinstance(v, int) and not isinstance(v, bool) \
+                        and v in (0, 1):
                     continue
                 raise GitHubPackageError(
                     f"records.json 第 {i} 项 {field} 必须为 ≤{max_len} 元数组")
