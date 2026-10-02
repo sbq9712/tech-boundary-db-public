@@ -330,15 +330,66 @@ def run_engine(rows: list[dict], workdir: str, use_llm: bool = False,
     return {"result": result, "llm": llm_info}
 
 
+def _atomic_write_0600(path: str, content: str) -> None:
+    """同目录临时文件 + os.replace 原子落盘，权限 0600（防读侧半文件/权限漂移）。"""
+    d, base = os.path.split(path)
+    fd, tmp = tempfile.mkstemp(prefix=base + ".", dir=d)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _merge_env_content(existing: str, extra: str) -> str:
+    """按键合并两个 .env 文本：existing 的值优先，extra 只补缺失键（含注释行保留）。"""
+    have = set()
+    lines = [ln.rstrip("\n") for ln in existing.splitlines()]
+    for ln in lines:
+        s = ln.strip()
+        if s and not s.startswith("#") and "=" in s:
+            have.add(s.split("=", 1)[0].strip())
+    out = list(lines)
+    for ln in extra.splitlines():
+        s = ln.strip()
+        if s and not s.startswith("#") and "=" in s:
+            k = s.split("=", 1)[0].strip()
+            if k not in have:
+                have.add(k)
+                out.append(s)
+    return "\n".join(out) + ("\n" if out else "")
+
+
 def _ensure_llm_env_file() -> str | None:
     """把 LLM 复核层配置写成引擎可发现的 .env（run_llm_semantic_triage.load_env 只认文件）。
 
-    load_env 从引擎 pipeline/ 模块目录向上找 4 层 .env —— 写在 triage_engine/ 包根即可命中。
-    凭证只从既有配置文件/环境读取，文件权限 0600，且已加入 .gitignore（绝不入库）。
+    G10（2026-10-02）：写入位置从 vendored 引擎目录（triage_engine/.env）改为
+    仓库级 pipeline/.env —— load_env 自引擎模块目录向上找 4 层，第 3 层即
+    pipeline/（先于仓库根 .env 命中，避免混入无关变量）；vendored 目录恢复
+    零写入。若检测到旧版写入的 triage_engine/.env 则一次性迁移（键合并、
+    新文件优先）后删除旧文件。
+    凭证只从既有配置文件/环境读取，原子写 0600，且已被全局 .gitignore 覆盖
+    （`.env` 规则匹配任意层级，绝不入库）。
     返回引擎子进程可继承的环境 dict（env 中也带一份，便于未来引擎支持 os.environ）。
     """
-    env_path = os.path.join(ENGINE_DIR, ".env")
+    env_path = os.path.join(REPO, ".env")          # REPO = pipeline/（本文件所在目录）
+    legacy_path = os.path.join(ENGINE_DIR, ".env") # 旧版写入位置（vendored，待迁移）
     env = dict(os.environ)
+    if os.path.isfile(legacy_path) and os.path.getsize(legacy_path) > 0:
+        legacy = open(legacy_path, encoding="utf-8").read()
+        if os.path.isfile(env_path) and os.path.getsize(env_path) > 0:
+            merged = _merge_env_content(
+                open(env_path, encoding="utf-8").read(), legacy)
+            _atomic_write_0600(env_path, merged)
+        else:
+            _atomic_write_0600(env_path, legacy)
+        os.unlink(legacy_path)  # vendored 目录恢复零写入
     if not (os.path.isfile(env_path) and os.path.getsize(env_path) > 0):
         key = env.get("LLM_API_KEY", "")
         if not key:
@@ -354,9 +405,7 @@ def _ensure_llm_env_file() -> str | None:
                    f"LLM_API_KEY={key}\n"
                    f"LLM_MODEL={env.get('LLM_MODEL', 'glm-5.2')}\n"
                    f"LLM_TIMEOUT_SECONDS={env.get('LLM_TIMEOUT_SECONDS', '120')}\n")
-        fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(content)
+        _atomic_write_0600(env_path, content)
     env.setdefault("LLM_BASE_URL", "https://api.z.ai/api/anthropic")
     env.setdefault("LLM_MODEL", "glm-5.2")
     return env

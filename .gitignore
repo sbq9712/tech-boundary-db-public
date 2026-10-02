@@ -107,7 +107,8 @@ pipeline/runtime/
 # QA 图谱服务稳定路径（管线运行时截断写，不入 Git）
 services/canonical-qa/graph-live/*
 !services/canonical-qa/graph-live/.gitkeep
-pipeline/triage_engine/.env
+# pipeline/.env 由 engine_triage 写入（G10 后不再写 vendored 目录）；
+# 任意层级 .env 已被顶部全局规则覆盖，此处无需精确规则。
 pipeline/.engine_retriage_checkpoint.json
 pipeline/.engine_triage_work/
 pipeline/.engine_retriage_checkpoint.lock

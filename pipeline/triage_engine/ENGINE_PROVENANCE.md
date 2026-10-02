@@ -6,6 +6,9 @@
 - 引入日期：2026-09-28
 - 引入位置：tech-boundary-db/pipeline/triage_engine/
 - 适配层：pipeline/engine_triage.py（唯一允许与引擎对接的模块）
+- LLM 复核层 .env 只写仓库级 pipeline/.env（G10，2026-10-02 起）；
+  本 vendored 目录零写入——旧版曾写在 triage_engine/.env，已由适配层
+  一次性迁移（键合并后删除），引擎目录保持与上游解包一致。
 - 集成方只做：行记录构造（lite 记录 → 引擎行 schema）、子进程调用、
   结果字段映射（引擎域→主库 125 叶、展示链→tg 标签、S8 档位→aip 精选）。
   引擎本体的规则/评分/展示链代码零改动。

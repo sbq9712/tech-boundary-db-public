@@ -225,3 +225,92 @@ def test_t02_range_score_midpoint(dom_map, whitelist):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+# ── G10（2026-10-02）：LLM .env 写入位置/合并/原子性 ────────────────────────
+class TestLlmEnvFileLocation:
+    """_ensure_llm_env_file 必须只写 pipeline/.env，vendored 引擎目录零写入。"""
+
+    def _fresh(self, tmp_path, monkeypatch, *, legacy="", existing="",
+               env_key="k-test-0000"):
+        # 把模块里的路径常量指到临时目录，避免碰真实 pipeline/
+        repo = tmp_path / "pipeline"; repo.mkdir()
+        engine = repo / "triage_engine"; engine.mkdir()
+        if legacy:
+            (engine / ".env").write_text(legacy, encoding="utf-8")
+        if existing:
+            (repo / ".env").write_text(existing, encoding="utf-8")
+        monkeypatch.setattr(et, "REPO", str(repo))
+        monkeypatch.setattr(et, "ENGINE_DIR", str(engine))
+        monkeypatch.setenv("LLM_API_KEY", env_key)
+        return repo, engine
+
+    def test_writes_repo_env_not_vendored(self, tmp_path, monkeypatch):
+        repo, engine = self._fresh(tmp_path, monkeypatch)
+        et._ensure_llm_env_file()
+        assert (repo / ".env").is_file()
+        assert not (engine / ".env").exists()      # vendored 零写入
+        assert not list(engine.iterdir()) or all(
+            p.name != ".env" for p in engine.iterdir())
+
+    def test_file_mode_0600(self, tmp_path, monkeypatch):
+        repo, _ = self._fresh(tmp_path, monkeypatch)
+        et._ensure_llm_env_file()
+        mode = (repo / ".env").stat().st_mode & 0o777
+        assert mode == 0o600
+
+    def test_legacy_migrated_and_deleted(self, tmp_path, monkeypatch):
+        legacy = ("LLM_BASE_URL=https://legacy.example/api\n"
+                  "LLM_API_KEY=legacy-key\n"
+                  "LLM_MODEL=glm-4\n")
+        repo, engine = self._fresh(tmp_path, monkeypatch, legacy=legacy)
+        et._ensure_llm_env_file()
+        assert not (engine / ".env").exists()      # 旧文件删除
+        content = (repo / ".env").read_text(encoding="utf-8")
+        assert "legacy-key" in content              # 迁移不丢凭证
+
+    def test_existing_repo_env_wins_on_conflict(self, tmp_path, monkeypatch):
+        legacy = "LLM_MODEL=glm-4\nLLM_TIMEOUT_SECONDS=60\n"
+        existing = "LLM_MODEL=glm-5.2\n"
+        repo, engine = self._fresh(tmp_path, monkeypatch,
+                                   legacy=legacy, existing=existing)
+        et._ensure_llm_env_file()
+        content = (repo / ".env").read_text(encoding="utf-8")
+        assert "LLM_MODEL=glm-5.2" in content       # 新位置既有值优先
+        assert "LLM_TIMEOUT_SECONDS=60" in content  # 旧文件缺失键补入
+        assert "glm-4" not in content
+
+    def test_existing_repo_env_untouched_when_no_legacy(
+            self, tmp_path, monkeypatch):
+        existing = "LLM_MODEL=custom-op-managed\n"
+        repo, _ = self._fresh(tmp_path, monkeypatch, existing=existing)
+        et._ensure_llm_env_file()
+        assert (repo / ".env").read_text(encoding="utf-8") == existing
+
+    def test_no_key_writes_nothing(self, tmp_path, monkeypatch):
+        repo = tmp_path / "pipeline"; repo.mkdir()
+        engine = repo / "triage_engine"; engine.mkdir()
+        monkeypatch.setattr(et, "REPO", str(repo))
+        monkeypatch.setattr(et, "ENGINE_DIR", str(engine))
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.setattr(et.os.path, "expanduser",
+                            lambda p: str(tmp_path))  # proxy env 不可达
+        env = et._ensure_llm_env_file()
+        assert not (repo / ".env").exists()
+        assert "LLM_API_KEY" not in env
+
+    def test_engine_load_env_discovers_repo_env(self, tmp_path, monkeypatch):
+        """端到端：engine 模块 load_env 向上查找能命中 pipeline/.env。"""
+        repo, _ = self._fresh(tmp_path, monkeypatch)
+        et._ensure_llm_env_file()
+        sys.path.insert(0, os.path.join(PIPELINE, "triage_engine"))
+        try:
+            import pipeline.run_llm_semantic_triage as rlst  # noqa: E402
+            saved = rlst.HERE
+            rlst.HERE = str(repo / "triage_engine" / "pipeline")
+            os.makedirs(rlst.HERE, exist_ok=True)
+            loaded = rlst.load_env()
+            assert loaded.get("LLM_API_KEY") == "k-test-0000"
+            rlst.HERE = saved
+        finally:
+            sys.path.remove(os.path.join(PIPELINE, "triage_engine"))

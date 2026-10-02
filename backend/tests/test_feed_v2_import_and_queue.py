@@ -28,10 +28,21 @@ from app.services import github_import as gi
 
 import sys as _sys
 from pathlib import Path as _Path
-_VALIDATOR_DIR = str(_Path(__file__).resolve().parents[2] / "scripts")
-if _VALIDATOR_DIR not in _sys.path:
+import pytest as _pytest
+
+# G13（2026-10-02）：parents[2] 在容器内（/app/tests）解析为 /，scripts/ 不在
+# 镜像里，直接 import 会让整个文件 pytest 收集失败。改为沿各级父目录回退
+# 查找含 validate_feed_package.py 的 scripts/；仍找不到（容器内按设计不跑
+# feed 校验）则模块级 skip，保证容器内 pytest 收集零错误。
+_VALIDATOR_DIR = None
+for _p in _Path(__file__).resolve().parents:
+    _cand = _p / "scripts"
+    if (_cand / "validate_feed_package.py").is_file():
+        _VALIDATOR_DIR = str(_cand)
+        break
+if _VALIDATOR_DIR and _VALIDATOR_DIR not in _sys.path:
     _sys.path.insert(0, _VALIDATOR_DIR)
-import validate_feed_package as validator  # noqa: E402
+validator = _pytest.importorskip("validate_feed_package")  # noqa: E402
 from app.services.github_import import (
     GitHubPackageError,
     _read_package,
