@@ -60,6 +60,8 @@ LOCK_PATH = SYNC_DIR / "sync.lock"
 BATCH_RECORDS = 1000         # 单次 upsert 的记录数：实测 ~1.9s/条（500 字符嵌入）≈ 32 分钟/批 < 40 分钟超时
 MAX_CHUNK_CHARS = 500        # 单 chunk 正文截断（摘要在前；实测 CPU 嵌入 8192 token 不可行）
 UPSERT_TIMEOUT = 2400  # 单批嵌入+BM25 重建预算（40 分钟）
+DEAD_LETTER_PATH = SYNC_DIR / "dead_letter.json"  # G9 安全网：确认反复失败的键（审计 + 停止重试）
+DEAD_LETTER_MAX_ATTEMPTS = 6  # 超过即转 dead-letter（4h 一轮 ≈ 1 天），exit 恢复 0
 
 
 def stable_record_id(rec: dict) -> str:
@@ -97,6 +99,26 @@ def load_state() -> dict:
     if STATE_PATH.exists():
         return json.loads(STATE_PATH.read_text("utf-8"))
     return {}
+
+
+def load_dead_letter() -> dict:
+    """G9 安全网：确认反复失败键的审计档案 {key: {op, attempts, first_seen,
+    last_seen, reason, winner_digest}}。dead-letter 键不再重试（管线 exit 恢复
+    0），但【不推进基线】——不把未确认的同步谎报为已完成；键的 winner
+    digest 变化（源有新内容 = 新希望）或 --rearm-dead-letter 时自动恢复。"""
+    if DEAD_LETTER_PATH.exists():
+        try:
+            return json.loads(DEAD_LETTER_PATH.read_text("utf-8"))
+        except (ValueError, OSError):
+            return {}
+    return {}
+
+
+def write_dead_letter(entries: dict) -> None:
+    DEAD_LETTER_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = DEAD_LETTER_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(entries, ensure_ascii=False, indent=1), "utf-8")
+    os.replace(tmp, DEAD_LETTER_PATH)
 
 
 def _write_state_atomic(state: dict) -> None:
@@ -266,6 +288,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="管线 → canonical-qa 索引同步")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--qa-url", default=os.getenv("TECHDB_QA_SYNC_URL", "http://127.0.0.1:8767"))
+    parser.add_argument("--rearm-dead-letter", action="store_true",
+                        help="清空 dead_letter.json 并恢复全部键的重试（人工排障后使用）")
     parser.add_argument("--reset-baseline", action="store_true",
                         help="以当前管线 lite 重置基线（不推送）")
     args = parser.parse_args(argv)
@@ -309,15 +333,24 @@ def main(argv: list[str] | None = None) -> int:
     # 索引，且基线声明与索引实际内容脱节）──
     fresh: dict[str, dict] = {}
     changed: dict[str, dict] = {}
+    # G9 修复（2026-10-02）：发布视图存在同 (t,d,u) 重复行时，旧实现的
+    # fresh/changed 取「首个差异行」而 kh_to_rec/基线取「最后一条」——
+    # keep_content_sha 与批次上送版本指纹指向不同行，确认永远失败，键
+    # 永久滞留 pending_record_ops（实测卡死 8c218bc2…，每轮 exit 3）。
+    # 收敛：先按合并顺序（分片文件名排序、行序）做「规范化 winner」去重
+    # （同键取最后一条），fresh/changed/keep/mutate/基线全部从同一 winner
+    # map 派生，任何一侧都不可能再指向不同行。
+    winner: dict[str, dict] = {}
     for rec in records:
-        kh = key_digest(record_key(rec))
+        winner[key_digest(record_key(rec))] = rec  # 同键后者覆盖 = 规范化 winner
+    for kh, rec in winner.items():
         rd = record_digest(rec)
         prev = baseline.get(kh)
         if prev is None:
             fresh[kh] = rec
         elif prev != rd:
             changed[kh] = rec
-    published_keys = {key_digest(record_key(r)) for r in records}
+    published_keys = set(winner)
     deleted_keys = [kh for kh in baseline if kh not in published_keys]
     if not args.reset_baseline:
         log(f"差异：新增 {len(fresh)} / 内容更新 {len(changed)} / 删除 {len(deleted_keys)}")
@@ -333,8 +366,13 @@ def main(argv: list[str] | None = None) -> int:
         log(f"基线已重置：{STATE_PATH}")
         return 0
     if not fresh and not changed and not deleted_keys:
-        log("发布视图与基线一致 —— 无需变更（只读退出，不落 state）")
-        return 0
+        # G9：仍有遗留 pending ops 时不能只读退出——须走下方合并/清理路径
+        # （stale 清理或幂等重试），否则 pending 永久滞留 state。
+        if not (state.get("pending_record_ops") or state.get("in_flight")) \
+                and not load_dead_letter():
+            log("发布视图与基线一致 —— 无需变更（只读退出，不落 state）")
+            return 0
+        log("发布视图与基线一致，但存在遗留 pending/dead-letter——继续收敛")
 
     # ── dry-run：严格只读（2026-09-30 修复：旧实现 no-new 分支在本检查
     # 之前就写 state，--dry-run 会推进基线）──
@@ -373,15 +411,50 @@ def main(argv: list[str] | None = None) -> int:
     pending_ops = state_partial.get("pending_record_ops") or {}
     record_ops: dict[str, dict] = {}
     kh_to_rec = {key_digest(record_key(r)): r for r in records}
+    # G9 安全网：dead-letter 键不再重试——除非 winner digest 变化（源有新内容）
+    # 或本轮 --rearm-dead-letter。dead-letter 不推进基线（不谎报已同步）。
+    dead_letter = load_dead_letter()
+    dl_touched = bool(dead_letter)
+    if args.rearm_dead_letter and dead_letter:
+        log(f"dead-letter 人工重置：恢复 {len(dead_letter)} 个键的重试")
+        dead_letter = {}
+        dl_touched = True
+    for kh, entry in list(dead_letter.items()):
+        cur = kh_to_rec.get(kh)
+        cur_digest = record_digest(cur) if cur is not None else None
+        if entry.get("op") == "delete" and cur is None:
+            continue  # 删除键仍不存在：保持 dead-letter（删除语义无 digest 可比）
+        if cur_digest and cur_digest != entry.get("winner_digest"):
+            del dead_letter[kh]  # 源内容已变化：自动恢复重试
+            dl_touched = True
+            log(f"dead-letter 键 {kh[:12]}… 内容已变化，恢复重试")
+    # dead-letter 键从「本轮变更集」一并排除：changed 路径不得绕过停试语义
+    # （基线未推进的 dead-letter 键每轮都会出现在 changed——不排除等于重试）。
+    changed = {kh: rec for kh, rec in changed.items() if kh not in dead_letter}
+    pending_ops = {kh: op for kh, op in pending_ops.items() if kh not in dead_letter}
+    if dl_touched and dead_letter:
+        log(f"[INFO] {len(dead_letter)} 个键处于 dead-letter（详见 {DEAD_LETTER_PATH}），"
+            f"本轮不重试；修复源数据/服务端后 --rearm-dead-letter 可恢复")
     for kh in changed:
         record_ops[kh] = {"op": "update",
                           "keep_content_sha": record_digest(kh_to_rec[kh])}
     for kh in deleted_keys:
         record_ops[kh] = {"op": "delete"}
-    for kh, op in pending_ops.items():
+    stale_pending = []
+    for kh, op in list(pending_ops.items()):
         if kh in kh_to_rec:
+            if record_digest(kh_to_rec[kh]) == baseline.get(kh):
+                # G9 收尾：遗留 pending update 的 winner 已与基线一致——该 op
+                # 无新内容可送（多半是重复行缺陷时期的产物），清空不再重试，
+                # 让键随基线声明一起收敛，避免永久 pending/exit 3。
+                stale_pending.append(kh)
+                del pending_ops[kh]
+                continue
             op = {"op": "update", "keep_content_sha": record_digest(kh_to_rec[kh])}
         record_ops.setdefault(kh, op)
+    if stale_pending:
+        log(f"清理 {len(stale_pending)} 个遗留 pending op（winner 已与基线一致，"
+            f"无新内容可送）：{[k[:12] + '…' for k in stale_pending[:5]]}")
     mutate_receipts: dict[str, dict] = {}   # kh → 服务端终态回执
     record_ops_ok = True
     if record_ops:
@@ -478,9 +551,13 @@ def main(argv: list[str] | None = None) -> int:
     #   delete：mutate 回执 tombstoned（墓碑已全链路屏蔽）；
     #   update：mutate 回执 landed（surviving_new_chunks>0）或本/前轮批次
     #           回执确认同内容指纹已在索引；
-    #   其余键回填操作前 digest 留在 pending_record_ops，下轮幂等重试。
+    #   其余键回填操作前 digest 留在 pending_record_ops，下轮幂等重试；
+    #   G9 安全网：连续 DEAD_LETTER_MAX_ATTEMPTS 轮仍无法确认 → 转
+    #   dead_letter.json 停止重试（基线照旧不推进，绝不谎报已同步）。
     new_key_hashes = {key_digest(record_key(r)): record_digest(r) for r in records}
+    now_iso = datetime.now(timezone.utc).isoformat()
     deferred: dict[str, dict] = {}
+    dead_lettered_now: list[str] = []
     for kh, op in record_ops.items():
         receipt = mutate_receipts.get(kh) or {}
         fin = str(receipt.get("final_state") or "pending")
@@ -494,10 +571,40 @@ def main(argv: list[str] | None = None) -> int:
                 or (record_ops_ok
                     and confirmed_push.get(kh) == op.get("keep_content_sha")))
             if confirmed:
+                dead_letter.pop(kh, None)  # 曾 dead-letter 的键本轮已确认：清除
                 continue
-        deferred[kh] = {"op": op["op"]}
+        prev_attempts = int((pending_ops.get(kh) or {}).get("attempts") or 0)
+        attempts = prev_attempts + 1
+        winner_digest = (record_digest(kh_to_rec[kh])
+                         if kh in kh_to_rec else None)
+        if attempts > DEAD_LETTER_MAX_ATTEMPTS:
+            dead_letter[kh] = {
+                "op": op["op"],
+                "attempts": attempts,
+                "first_seen": (pending_ops.get(kh) or {}).get("first_seen")
+                              or now_iso,
+                "last_seen": now_iso,
+                "reason": (f"mutate final_state={fin}，批次回执未能确认同内容指纹"
+                           f"（keep={str(op.get('keep_content_sha'))[:16]}…）"),
+                "winner_digest": winner_digest,
+            }
+            dead_lettered_now.append(kh)
+            if kh in baseline:
+                new_key_hashes[kh] = baseline[kh]
+            continue
+        deferred[kh] = {"op": op["op"], "attempts": attempts,
+                        "first_seen": (pending_ops.get(kh) or {}).get("first_seen")
+                                      or now_iso}
         if kh in baseline:
             new_key_hashes[kh] = baseline[kh]
+    # dead-letter 键本轮未重试（不在 record_ops）：基线同样不得推进——
+    # 这些键从未被服务端确认，推进基线等于谎报已同步。
+    for kh in dead_letter:
+        if kh not in record_ops:
+            if kh in baseline:
+                new_key_hashes[kh] = baseline[kh]
+            else:
+                new_key_hashes.pop(kh, None)
     final_state = {
         "data_version": data_version,
         "key_hashes": new_key_hashes,
@@ -509,6 +616,16 @@ def main(argv: list[str] | None = None) -> int:
     if deferred:
         final_state["pending_record_ops"] = deferred
     _write_state_atomic(final_state)
+    if dead_letter or dead_lettered_now:
+        write_dead_letter(dead_letter)  # 含本轮新增 + 历史未恢复项
+    if dead_letter or dead_lettered_now:
+        write_dead_letter(dead_letter)  # 含本轮新增 + 历史未恢复项
+    elif dl_touched and DEAD_LETTER_PATH.exists():
+        write_dead_letter({})  # 全部恢复/确认：清空档案，避免陈旧文件误导
+    for kh in dead_lettered_now:
+        log(f"[WARN] dead-letter：键 {kh[:12]}… 连续 {DEAD_LETTER_MAX_ATTEMPTS}+ 轮"
+            f"无法确认，停止重试（基线未推进，未谎报已同步）；"
+            f"详见 {DEAD_LETTER_PATH}；源数据修复或 --rearm-dead-letter 可恢复")
     if deferred:
         log(f"同步部分完成：ADD/UPDATE {synced} 条入索引；{len(deferred)} 条 "
             f"update/delete 待服务端确认后重试；状态已落盘 {STATE_PATH}")

@@ -49,3 +49,26 @@ t|d|u   →  (title, document_date, url)
 - 不回写、不重建既有知识库基线索引（65,605 条上游记录只读）。
 - 不在导入时改写任何已有记录的 `level`（人工等级仅由库内人工操作变更）。
 - 不为对齐增量包而修改广度总表分片结构（`breadth/data/processed/*`）。
+
+## 附：qa-index-sync 与管线退出码语义（2026-10-02 G9/T9）
+
+`pipeline/auto_pipeline.py`（systemd `breadth-pipeline.service`，4h 一轮）：
+
+| 退出码 | 含义 | systemd 显示 |
+|---|---|---|
+| 0 | 全部步骤成功 | Finished |
+| 3 | 部分成功（典型：QA 索引同步有 update/delete 待服务端确认、失败任务重试未收口；非致命，下一轮自动补推） | Finished（unit 已声明 `SuccessExitStatus=3`） |
+| 其他 | 真实失败（状态不 commit，下一轮自动重试） | Failed |
+
+`scripts/sync_qa_index.py` 的确认协议补充（G9 修复）：
+
+- 同 `(t,d,u)` 重复行按「发布视图规范化 winner」（分片文件名排序 + 行序，
+  同键取最后一条）收敛——fresh/changed/keep/mutate/基线全部使用同一 winner，
+  不再出现"changed 取首个差异行、基线取最后一条"的分裂（曾致 8c218bc2…
+  键永久 pending、管线每轮 exit 3）。
+- 遗留 pending op 若 winner 已与基线一致（无新内容可送）会被清理，不再重试。
+- 连续 `DEAD_LETTER_MAX_ATTEMPTS`（默认 6）轮无法确认的键转
+  `runtime/qa-index-sync/dead_letter.json`（记录 op/attempts/first_seen/
+  last_seen/reason/winner_digest）：停止重试（管线恢复 exit 0）但**基线不推进**
+  （绝不把未确认的同步谎报为已完成）；键内容变化自动恢复重试，或
+  `--rearm-dead-letter` 人工恢复。

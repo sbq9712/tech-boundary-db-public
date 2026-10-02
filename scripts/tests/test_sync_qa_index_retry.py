@@ -88,6 +88,7 @@ def env(tmp_path, monkeypatch):
     sq.SYNC_DIR = tmp_path
     sq.BASE_LITE = tmp_path / "base-lite.json"
     sq.LOCK_PATH = tmp_path / "sync.lock"
+    sq.DEAD_LETTER_PATH = tmp_path / "dead_letter.json"
     sq.BATCH_RECORDS = 1
     monkeypatch.setattr(sq, "load_published_records", lambda: (RECORDS_V1, "test"))
     monkeypatch.setattr(sq, "baseline_key_hashes", lambda: BASELINE)
@@ -209,3 +210,126 @@ def test_delete_retry_and_publish_view_change(env, monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ── G9 修复（2026-10-02）：同 (t,d,u) 重复行收敛 + dead-letter 安全网 ──────
+
+R_DUP_RICH = {"t": "重复记录", "d": "2026-05-13", "u": "http://doi/x",
+              "b": "short", "as": "ai 摘要", "kp": ["p1"], "sc": 5.1, "a": "s", "c": "cat"}
+R_DUP_LITE = {"t": "重复记录", "d": "2026-05-13", "u": "http://doi/x",
+              "b": "title\nlong body", "a": "s", "c": "cat"}
+# 生产实况：基线 = 贫瘠版 digest；富化版 ≠ 基线（changed 取首个差异行 →
+# keep 指向 LWW 贫瘠版 → 永不确认）。修复后 winner 统一 = 视图最后一条。
+BASELINE_DUP = {kh_of(R_DUP_LITE): sq.record_digest(R_DUP_LITE)}
+
+
+def test_duplicate_identity_converges(env, monkeypatch):
+    """G9 回归：同 (t,d,u) 两条（富化版≠基线在前、贫瘠版==基线在后）。
+    修复前：changed=富化版、keep=贫瘠版 digest → 永远 pending、exit 3。
+    修复后：winner=最后一条（贫瘠版）== 基线 → 无差异 → 不推送不延迟。"""
+    monkeypatch.setattr(sq, "baseline_key_hashes", lambda: BASELINE_DUP)
+    monkeypatch.setattr(sq, "load_published_records",
+                        lambda: ([R_DUP_RICH, R_DUP_LITE], "test"))
+    server = StubServer()
+    rc = run_sync(server)
+    assert rc == 0
+    assert server.upsert_calls == 0 and server.mutate_calls == 0
+    # winner（=贫瘠版）与基线一致 → 无差异只读退出：不落 state、无 pending
+    assert not sq.STATE_PATH.exists() or not json.loads(
+        sq.STATE_PATH.read_text("utf-8")).get("pending_record_ops")
+
+
+def test_dead_letter_escalation_and_no_baseline_lie(env, monkeypatch):
+    """mutate 持续 404（镜像未升级）→ attempts 累计 → 超 6 轮转 dead-letter：
+    停止重试（exit 0）但基线不推进（不谎报已同步）。"""
+    import urllib.error
+    monkeypatch.setattr(sq, "baseline_key_hashes", lambda: dict(BASELINE))
+    server = StubServer()
+
+    def _404(ops, url, token):
+        raise urllib.error.HTTPError("stub", 404, "endpoint missing", {}, None)
+
+    sq.post_record_ops = _404
+    sq.post_upsert = lambda payload, url, token: {
+        "status": "ready", "skipped_duplicate_chunks": 0}
+    # 1..MAX 轮：尝试累计、保持部分成功语义（exit 3）
+    for i in range(sq.DEAD_LETTER_MAX_ATTEMPTS):
+        assert sq.main(["--qa-url", "http://stub"]) == 3, f"第 {i+1} 轮应 exit 3"
+    state = json.loads(sq.STATE_PATH.read_text("utf-8"))
+    kh_a = kh_of(R_A1)
+    assert state["pending_record_ops"][kh_a]["attempts"] == \
+        sq.DEAD_LETTER_MAX_ATTEMPTS
+    # 超限那轮：转 dead-letter（醒目 WARN）并恢复 exit 0
+    assert sq.main(["--qa-url", "http://stub"]) == 0
+    dl = json.loads(sq.DEAD_LETTER_PATH.read_text("utf-8"))
+    assert kh_a in dl and dl[kh_a]["attempts"] == sq.DEAD_LETTER_MAX_ATTEMPTS + 1
+    assert dl[kh_a]["winner_digest"] == sq.record_digest(R_A1)
+    assert dl[kh_a]["first_seen"] and dl[kh_a]["last_seen"] and dl[kh_a]["reason"]
+    state2 = json.loads(sq.STATE_PATH.read_text("utf-8"))
+    # 基线未推进（仍是旧 digest）——不谎报已同步；pending 清空不再重试
+    assert state2["key_hashes"][kh_a] == BASELINE[kh_a]
+    assert not state2.get("pending_record_ops")
+    # 后续轮次：dead-letter 生效 → 幂等快速退出 exit 0
+    assert sq.main(["--qa-url", "http://stub"]) == 0
+
+
+def test_dead_letter_auto_rearm_on_content_change(env, monkeypatch):
+    """dead-letter 键的 winner digest 变化（源有新内容）→ 自动恢复重试。"""
+    import urllib.error
+    monkeypatch.setattr(sq, "baseline_key_hashes", lambda: dict(BASELINE))
+    server = StubServer()
+    fail = {"on": True}
+
+    def _maybe_404(ops, url, token):
+        if fail["on"]:
+            raise urllib.error.HTTPError("stub", 404, "endpoint missing", {}, None)
+        return server.mutate(ops)
+
+    sq.post_record_ops = _maybe_404
+    sq.post_upsert = lambda payload, url, token: server.upsert(payload)
+    # 累计到超限转 dead-letter（超限轮 exit 0）
+    for _ in range(sq.DEAD_LETTER_MAX_ATTEMPTS + 1):
+        sq.main(["--qa-url", "http://stub"])
+    assert kh_of(R_A1) in json.loads(sq.DEAD_LETTER_PATH.read_text("utf-8"))
+    assert sq.main(["--qa-url", "http://stub"]) == 0  # dead-letter 幂等退出
+    # 恢复正常服务端，但源内容不变 → 仍 dead-letter（digest 相同不自动恢复）
+    fail["on"] = False
+    assert sq.main(["--qa-url", "http://stub"]) == 0
+    assert kh_of(R_A1) in json.loads(sq.DEAD_LETTER_PATH.read_text("utf-8"))
+    # 源内容变化（新版本 v2）→ 自动恢复重试并完成同步
+    R_A2 = dict(R_A1, b="NEWER A content v2")
+    monkeypatch.setattr(sq, "load_published_records", lambda: ([R_A2, R_B1], "test"))
+    rc = sq.main(["--qa-url", "http://stub"])
+    assert rc == 0
+    dl = json.loads(sq.DEAD_LETTER_PATH.read_text("utf-8"))
+    assert kh_of(R_A1) not in dl, "digest 变化应自动恢复重试并完成"
+    state = json.loads(sq.STATE_PATH.read_text("utf-8"))
+    assert state["key_hashes"][kh_of(R_A1)] == sq.record_digest(R_A2)
+
+
+def test_stale_pending_cleared_when_winner_matches_baseline(env, monkeypatch):
+    """G9 收尾：遗留 pending update 的 winner==基线（重复行缺陷产物）→
+    清空该 op（无 mutate/无批次/exit 0），不再永久 pending。"""
+    # 基线 = R_A0；发布视图 winner = R_A0（与基线一致）但 state 里残留
+    # 旧缺陷时期的 pending update（生产实况：8c218bc2… 卡死键）
+    monkeypatch.setattr(sq, "baseline_key_hashes", lambda: dict(BASELINE))
+    monkeypatch.setattr(sq, "load_published_records",
+                        lambda: ([R_A0, R_B1], "test"))
+    sq.STATE_PATH.write_text(json.dumps({
+        "data_version": "stale-old-version",
+        "key_hashes": dict(BASELINE),
+        "pending_record_ops": {kh_of(R_A0): {"op": "update"}},
+    }), "utf-8")
+    server = StubServer()
+    captured_ops = []
+    orig_mutate = server.mutate
+    def _capture(ops):
+        captured_ops.extend(k for k, _ in ops)
+        return orig_mutate(ops)
+    sq.post_record_ops = lambda ops, url, token: _capture(ops)
+    sq.post_upsert = lambda payload, url, token: server.upsert(payload)
+    rc = sq.main(["--qa-url", "http://stub"])
+    assert rc == 0
+    assert kh_of(R_A0) not in captured_ops, "遗留 pending 键不应再被 mutate"
+    state = json.loads(sq.STATE_PATH.read_text("utf-8"))
+    assert kh_of(R_A0) not in (state.get("pending_record_ops") or {})
