@@ -463,7 +463,12 @@ async function loadConversationMessages(sessionId){
   activeSessionId=sessionId;
   activeSessionMessages=(data.messages||[]).map(message=>({
     role:message.role,text:message.content,
-    extra:{citations:message.citations||[],panel_recommendations:message.panel_recommendations||{},retrieval_summary:message.retrieval_summary||{}},
+    extra:{citations:message.citations||[],panel_recommendations:message.panel_recommendations||{},retrieval_summary:message.retrieval_summary||{},
+      // T5：核验链结论持久化在 retrieval_summary（answer_status/claim_check/safety_hits），提升到 extra 供统一渲染
+      answer_status:(message.retrieval_summary&&message.retrieval_summary.answer_status)||null,
+      knowledge_boundary:(message.retrieval_summary&&message.retrieval_summary.claim_check&&message.retrieval_summary.claim_check.boundary_message)||null,
+      claim_check:(message.retrieval_summary&&message.retrieval_summary.claim_check)||null,
+      safety_hits:(message.retrieval_summary&&message.retrieval_summary.safety_hits)||[]},
   }));
   renderSidebarConversations();
   refreshConversationSurface();
@@ -1339,7 +1344,40 @@ function updatePanels(extra){assistantPanels=(extra&&extra.panel_recommendations
 function renderInlineResources(extra){
   const citations=(extra&&Array.isArray(extra.citations))?extra.citations:[];
   const stats=(extra&&extra.retrieval_summary)||{};
-  return citations.length?renderCitations(citations,stats):'';
+  const verification=renderVerificationSummary(extra);
+  const citesBlock=citations.length?renderCitations(citations,stats):'';
+  return verification+citesBlock;
+}
+
+// T5（2026-10-02）答案侧核验摘要（四态徽标 + 主张计数 + 库内边界条 + 安全提示）。
+// 字段缺失（旧后端/更早历史）时整块不渲染——优雅降级，不占位不报错。
+const VERIF_STATUS_CONFIG={
+  SUPPORTED:{icon:'✅',label:'证据充分支持',color:'#16a34a',bg:'rgba(22,163,74,0.08)'},
+  PARTIALLY_SUPPORTED:{icon:'⚠️',label:'部分支持',color:'#d97706',bg:'rgba(217,119,6,0.08)'},
+  UNSUPPORTED:{icon:'❌',label:'证据不支持',color:'#dc2626',bg:'rgba(220,38,38,0.08)'},
+  UNVERIFIED:{icon:'🔍',label:'未能验证',color:'#6b7280',bg:'rgba(107,114,128,0.08)'}
+};
+function renderVerificationSummary(extra){
+  if(!extra)return '';
+  const summary=(extra.retrieval_summary)||{};
+  const claimCheck=(extra.claim_check&&typeof extra.claim_check==='object'&&extra.claim_check)||summary.claim_check||null;
+  const status=String(extra.answer_status||summary.answer_status||(claimCheck&&claimCheck.answer_status)||'').toUpperCase();
+  if(!status||!VERIF_STATUS_CONFIG[status])return '';
+  const cfg=VERIF_STATUS_CONFIG[status];
+  const total=Number((claimCheck&&claimCheck.claims_total!=null?claimCheck.claims_total:summary.answer_chain&&summary.answer_chain.claims_total)||0);
+  const supported=Number((claimCheck&&claimCheck.claims_supported!=null?claimCheck.claims_supported:null)||0);
+  const unsupported=Array.isArray(claimCheck&&claimCheck.unsupported_major_claims)?claimCheck.unsupported_major_claims.length:0;
+  let counts='';
+  if(total>0){
+    counts=`<span class="qa-verif-counts">主张 ${total} 条 · 已支持 ${supported}${unsupported?` · 关键未支持 ${unsupported}`:''}</span>`;
+  }
+  const boundary=String(extra.knowledge_boundary||(claimCheck&&claimCheck.boundary_message)||'');
+  const boundaryBlock=boundary?`<div class="qa-verif-boundary">${escapeHtml(boundary)}</div>`:'';
+  const hits=Array.isArray(extra.safety_hits)?extra.safety_hits:(Array.isArray(summary.safety_hits)?summary.safety_hits:[]);
+  const safetyBlock=hits.length?`<div class="qa-verif-safety">🛡 安全提示：命中 ${hits.length} 处${hits[0]&&hits[0].type?`（如 ${escapeHtml(String(hits[0].type))}）`:''}</div>`:'';
+  return `<div class="qa-verif-badge" style="border-color:${cfg.color};background:${cfg.bg}">
+    <span class="qa-verif-status" style="color:${cfg.color}">${cfg.icon} ${cfg.label}</span>${counts}${safetyBlock}${boundaryBlock}
+  </div>`;
 }
 function refreshConversationSurface(){
   const answer=document.getElementById('answer');
@@ -1511,7 +1549,9 @@ async function submitQuery(options={}){
             requestState.sessionId=data.session_id||requestState.sessionId;
             if(requestState.sessionId)conversationCache.set(requestState.sessionId,requestState.messages);
             if(requestConversationIsVisible(requestState))activeSessionId=requestState.sessionId;
-            assistantMsg.extra={citations:data.citations||[],retrieval_summary:stats,panel_recommendations:{},truncated:Boolean(data.truncated),finish_reason:data.finish_reason||null,fallback_used:Boolean(data.fallback_used)};
+            // T5（2026-10-02）：答案侧核验结论随 done 保留（此前被丢弃，前端无从展示）
+            assistantMsg.extra={citations:data.citations||[],retrieval_summary:stats,panel_recommendations:{},truncated:Boolean(data.truncated),finish_reason:data.finish_reason||null,fallback_used:Boolean(data.fallback_used),
+              answer_status:data.answer_status||null,knowledge_boundary:data.knowledge_boundary||null,claim_check:(data.claim_check&&typeof data.claim_check==='object')?data.claim_check:null,safety_hits:Array.isArray(data.safety_hits)?data.safety_hits:[]};
             streamCompleted=true;
             refreshRequestConversationSurface(requestState);
 

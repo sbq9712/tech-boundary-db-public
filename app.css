@@ -3107,3 +3107,9 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 @keyframes modelSpin{to{transform:rotate(360deg)}}
 /* GitHub增量包：协议已接入徽标（feed-pkg/v1） */
 .lib-github-pending-badge.active{background:#e8f7ef;color:#087443;border-color:#a9dfbf}
+/* T5（2026-10-02）：答案侧核验摘要徽标（四态 + 主张计数 + 库内边界 + 安全提示） */
+.qa-verif-badge{display:flex;flex-direction:column;gap:4px;margin-top:12px;padding:8px 12px;border:1px solid var(--border-subtle);border-radius:10px}
+.qa-verif-status{font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.qa-verif-counts{color:var(--text-secondary);font-size:12px}
+.qa-verif-boundary{color:var(--text-secondary);font-size:12px;line-height:1.5;padding:6px 8px;background:var(--bg-subtle,#f6f8fa);border-radius:8px}
+.qa-verif-safety{color:#b45309;font-size:12px}
