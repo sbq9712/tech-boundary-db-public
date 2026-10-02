@@ -79,10 +79,21 @@ _BASE_KEY_SHA: list = []            # 基础索引 meta 位置 → record_key_sh
 _SUPERSADED_BASE: set = set()       # 被更新版本遮蔽的基础索引位置
 
 
-def _record_key_sha_of(t: str, d: str, u: str) -> str:
+def _record_key_sha_of(t: str, d: str, u: str, origin: str = "breadth") -> str:
+    """统一记录身份（三.2 来源命名空间）。
+
+    - origin="breadth"（缺省）：sha256(json([t,d,u]))——与历史公式逐字节
+      一致，基础索引/存量墓碑/遮蔽高水位不做迁移继续有效；
+    - industry/atsc：sha256(json([origin, t, d, u]))——独立数据源身份
+      命名空间，跨源同 title+date+url 不再互相遮蔽/误删。
+    与 backend breadth_index_queue.canonical_record_key_sha 同源同值。
+    """
     import hashlib as _hl
-    return _hl.sha256(json.dumps([str(t or ""), str(d or ""), str(u or "")],
-                                 ensure_ascii=False).encode("utf-8")).hexdigest()
+    scope = (origin or "").strip().lower()
+    parts = ([scope] if scope in ("industry", "atsc") else []) + [
+        str(t or ""), str(d or ""), str(u or "")]
+    return _hl.sha256(json.dumps(parts, ensure_ascii=False)
+                      .encode("utf-8")).hexdigest()
 
 
 def _base_key_shas() -> list:

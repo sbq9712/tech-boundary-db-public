@@ -17,7 +17,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 logger = logging.getLogger(__name__)
 
@@ -443,7 +443,13 @@ def import_rows(
     # 自动释放。GitHub feed 通道有自己的 stable_id 仲裁，不经此锁。 ──
     db.execute(text("SELECT pg_advisory_xact_lock(hashtext('row-import'))"))
 
-    # ── 库内既有记录身份索引（stable_id 优先；旧行无 stable_id 按同公式现算） ──
+    # ── 库内既有记录身份索引（stable_id 优先；旧行无 stable_id 按同公式现算）。
+    #    三.2（2026-10-03）来源命名空间：身份匹配只在【同 origin】记录范围内
+    #    进行——行业/ATSC/广度是独立数据源，同名同日期空 URL 的跨源行不得
+    #    互相覆盖（历史缺陷：industry 记录的 body 被 atsc 表格静默改写、
+    #    来源字段自相矛盾、且不新建独立 ATSC 记录）。旧数据 origin_section
+    #    为 NULL 时按 breadth 语义兼容（与 _rec_origin_section 读取侧一致）。 ──
+    _import_origin = origin_section if origin_section in ("breadth", "industry", "atsc") else "breadth"
     existing_rows = db.execute(
         select(
             BreadthManualRecord.id,
@@ -451,6 +457,8 @@ def import_rows(
             BreadthManualRecord.title,
             BreadthManualRecord.document_date,
             BreadthManualRecord.url,
+        ).where(
+            func.coalesce(BreadthManualRecord.origin_section, "breadth") == _import_origin
         )
     ).all()
     identity_to_id: dict[str, object] = {}
@@ -504,6 +512,10 @@ def import_rows(
                         # 旧行身份回填：收敛到显式 stable_id（不动其余字段）
                         if not existing_rec.stable_id:
                             existing_rec.stable_id = identity
+                        # 三.2：同源重导只改变「同步到广度」投影开关时，
+                        # 投影如实跟随本次导入（幂等：重导相同开关无 churn；
+                        # 纯展示位，不触发索引重入队）。
+                        existing_rec.in_breadth_nav = in_breadth_nav
                         continue
                     if existing_rec.feed_key_digest:
                         # Codex P1：feed 通道管理的行（GitHub 增量包 UPDATE/
@@ -511,12 +523,20 @@ def import_rows(
                         # 如实计数，导入方可核对后再经包通道修正。
                         skipped_upstream += 1
                         continue
-                    # 同身份新内容/类型修正：UPDATE 原记录（保留原属主
-                    # upload_id 与生命周期），计数 updated 并重入队索引。
+                    # 同身份新内容/类型修正：UPDATE 原记录，计数 updated 并
+                    # 重入队索引。三.2：来源字段一致性——source_ref/source_name/
+                    # upload_id/user_id/属主栏目一并随本次修订文件对齐，
+                    # 不留「body 是新文件、属主还是旧文件」的矛盾来源
+                    # （同源内修订，origin 不变；GitHub feed 行已在上面
+                    # skipped_upstream 保护，不会被表格导入改写）。
                     for key in _SEMANTIC_KEYS + ("content_hash",):
                         setattr(existing_rec, key, fields[key])
                     existing_rec.source_version = (existing_rec.source_version or 1) + 1
                     existing_rec.source_ref = fields["source_ref"]
+                    existing_rec.source_name = fields.get("source_name") or existing_rec.source_name
+                    existing_rec.upload_id = record.id
+                    existing_rec.user_id = record.submitted_by
+                    existing_rec.in_breadth_nav = in_breadth_nav
                     # 修正溯源（Codex P2）：记录最近一次表格修正的来处，
                     # 状态明细可解释「谁在哪个文件哪一行改了它」。
                     audit = dict(existing_rec.record_json or {})

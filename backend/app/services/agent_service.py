@@ -665,6 +665,71 @@ async def stream_agent_response(
     regenerate: bool = False,
     retry: bool = False,
 ) -> AsyncIterator[str]:
+    """门户问答主路径入口（任务二 2.1）。
+
+    防御性外壳：实现体任何未捕获异常（历史缺陷：检索成功后 summary
+    提取阶段的 NameError）都会 ①把 run 落库定为 failed（绝不永久停留
+    running）②向客户端下发与落库一致的 error 事件，而不是让生成器在
+    中途抛出、前端只看到流中断（network error）。
+    """
+    run_ref: dict = {}
+    try:
+        async for event in _stream_agent_response_impl(
+            query, session_id, db, run_ref,
+            selected_model=selected_model, current_user=current_user,
+            regenerate=regenerate, retry=retry,
+        ):
+            yield event
+    except asyncio.CancelledError:
+        # 客户端断开/任务取消：与实现体内部取消同语义地收尾后继续传播
+        _emergency_finish_run(db, run_ref, "cancelled", error="client_cancelled")
+        raise
+    except Exception as exc:
+        logger.exception(
+            "stream_agent_response unexpected failure: %s", exc.__class__.__name__)
+        _emergency_finish_run(db, run_ref, "failed", error=exc.__class__.__name__)
+        yield _sse("error", {
+            "code": "internal_error",
+            "error": "回答生成出现内部错误，已记录。请稍后重试。",
+            "retryable": True,
+        })
+
+
+def _emergency_finish_run(db: Session, run_ref: dict, status: str, *, error: str | None) -> None:
+    """兜底收尾：实现体异常时确保 run 状态与事件一致（任务二 2.1）。
+
+    先 rollback 丢弃半途事务（未提交的 assistant 草稿不应滞留会话），
+    再把仍处于 running 的 run 定案。收尾自身失败只记录，不再抛出——
+    不能因清理失败掩盖原始异常。
+    """
+    run_id = run_ref.get("run_id")
+    try:
+        db.rollback()
+        if run_id is not None:
+            run = db.get(ConversationAgentRun, run_id)
+            if run is not None and run.status == "running":
+                run.status = status
+                run.error = error
+                run.completed_at = datetime.now(timezone.utc)
+                db.commit()
+    except Exception:
+        logger.warning("emergency finish run failed", exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
+async def _stream_agent_response_impl(
+    query: str,
+    session_id: str | None,
+    db: Session,
+    run_ref: dict,
+    selected_model: str | None = None,
+    current_user: str | None = None,
+    regenerate: bool = False,
+    retry: bool = False,
+) -> AsyncIterator[str]:
     if not session_id or not current_user:
         yield _sse("error", {"code": "conversation_required", "error": "会话上下文缺失。"})
         return
@@ -709,6 +774,7 @@ async def stream_agent_response(
         status="running",
         query=effective_query,
     )
+    run_ref["run_id"] = run.id
     db.add(run)
     if not regenerate and not retry:
         db.add(
@@ -742,7 +808,15 @@ async def stream_agent_response(
         citations, current_citations, prior_citations,
         history, history_chars, retrieval_query, exclude_ids, raw_payload,
     )
-    evidence_status = str(evidence.get("status") or "unknown")
+    # 任务二 2.1（回归修复）：证据状态从统一摘要契约读取（summary.evidence
+    # 由 _retrieval_summary 从真实检索 payload 提取）；此处不再引用已移入
+    # _retrieval_summary 内部作用域的局部变量 evidence（该引用曾使主路径在
+    # 检索成功后立即 NameError，答案永不进入生成阶段）。缺失/畸形字段按
+    # unknown 处理，不伪造 sufficient。
+    _evidence = summary.get("evidence")
+    evidence_status = str(
+        (_evidence.get("status") if isinstance(_evidence, dict) else None) or "unknown"
+    )
     if not citations:
         answer = "抱歉，数据库中没有足够的情报来回答这个问题。请尝试用更具体的关键词或换个角度提问。"
         assistant = ConversationMessage(

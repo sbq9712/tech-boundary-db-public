@@ -135,7 +135,7 @@ def test_search_canonical_drops_low_relevance_and_backward_compatible(monkeypatc
 
 # ── 流式链路：novelty exclusion 进入检索 + 核验字段进入 done ─────────────
 def test_stream_source_uses_exclusion_and_answer_checks():
-    source = __import__("inspect").getsource(agent_service.stream_agent_response)
+    source = __import__("inspect").getsource(agent_service._stream_agent_response_impl)
     assert "search_canonical_raw" in source
     assert "_history_exclude_ids" in source
     assert "answer_status" in source

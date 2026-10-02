@@ -555,14 +555,19 @@ def _acquire_feed_apply_lock(db: Session) -> None:
 def _load_feed_rows(db: Session) -> tuple[dict[str, BreadthManualRecord], dict[str, BreadthManualRecord], set[uuid.UUID]]:
     """既有行索引：feed_key_digest → row；回退（无 digest 的历史行，重建键）→ row。
 
-    回退索引包含全部行（含人工/其他来源）：UPDATE/DELETE 先按键定位，
+    回退索引包含广度命名空间内的人工/其他来源行：UPDATE/DELETE 先按键定位，
     再由 _feed_owned 判定归属——人工记录被显式保护计数（skipped_protected），
     而不是表现为"键不存在"（deleted_missing）。
+    三.2（2026-10-03）：行业/ATSC 是独立数据源，不参与 GitHub feed 身份
+    仲裁——同名同日期空 URL 的行业/ATSC 行不再让 feed ADD 误判"已存在"。
+    旧数据 origin_section 为 NULL 按 breadth 兼容（与读取侧一致）。
     """
     by_digest: dict[str, BreadthManualRecord] = {}
     fallback: dict[str, BreadthManualRecord] = {}
     github_ids = _github_upload_ids(db)
-    rows_q = select(BreadthManualRecord)
+    from sqlalchemy import func as _sa_func
+    rows_q = select(BreadthManualRecord).where(
+        _sa_func.coalesce(BreadthManualRecord.origin_section, "breadth") == "breadth")
     if db.bind is not None and db.bind.dialect.name == "postgresql":
         rows_q = rows_q.with_for_update()  # 二.1：版本判定窗口行锁
     for row in db.scalars(rows_q).all():

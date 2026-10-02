@@ -12,7 +12,7 @@ import io
 import uuid
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.db.session import SessionLocal
 from app.models.uploaded_file import UploadedFile
@@ -108,12 +108,13 @@ BASE_MAPPING = {"title": "标题", "date": "日期", "url": "链接", TYPE_SLOT:
 
 
 def _import(db, data, filename, mapping, require_type=True, section="breadth", source="other",
-            in_breadth_nav=True):
+            in_breadth_nav=True, origin_section=None):
     upload = _mk_upload(db, filename=filename, section=section, source=source)
     sheets = parse_table(data, filename)
     stats = import_rows(
         db, upload, sheets, mapping, fallback_date=None, category_fallback=None,
-        in_breadth_nav=in_breadth_nav, require_type=require_type)
+        in_breadth_nav=in_breadth_nav, require_type=require_type,
+        origin_section=origin_section or section)
     db.commit()
     return upload, stats
 
@@ -320,7 +321,9 @@ def test_type_only_correction_not_swallowed(db):
     assert len(rows) == 1
     assert rows[0].intelligence_type == "literature"
     assert rows[0].source_version == 2
-    assert str(rows[0].upload_id) == str(upload1.id)  # 属主不转移
+    # 三.2：属主随最新修订文件转移（upload_id 与 source_ref/source_name
+    # 同一文件，不留「正文是新文件、属主是旧文件」的矛盾来源）。
+    assert str(rows[0].upload_id) == str(upload2.id)  # 属主=最新修订文件
 
 
 def test_type_correction_requeues_index(db):
@@ -424,3 +427,137 @@ def test_duplicate_type_header_rejected(db):
     with pytest.raises(TableParseError) as ei:
         _import(db, data, "dupcol.csv", BASE_MAPPING)
     assert "重复" in str(ei.value)
+
+
+# ── 三.2（2026-10-03）：跨数据源身份边界 ─────────────────────────────────
+
+
+def test_cross_source_same_identity_not_overwritten(db):
+    """复现审查缺陷：industry 记录 + atsc 同名同日期空 URL 行 → 必须新建
+    独立 ATSC 记录，不得改写 industry 记录（历史行为 imported=0/updated=1、
+    body 换成 ATSC 内容、来源字段自相矛盾）。"""
+    from app.models.breadth_manual_record import BreadthManualRecord
+
+    data1 = _csv_bytes("标题,日期,链接,正文\n跨源同名情报,2026-09-01,,行业原始正文\n")
+    m1 = dict(BASE_MAPPING); m1["body"] = "正文"; m1.pop("type")
+    ind_upload, stats1 = _import(db, data1, "行业表.csv", m1, require_type=False,
+                                 section="industry", source=None)
+    assert stats1["imported"] == 1
+
+    data2 = _csv_bytes("标题,日期,链接,正文\n跨源同名情报,2026-09-01,,ATSC内部正文\n")
+    atsc_upload, stats2 = _import(db, data2, "atsc.csv", m1, require_type=False,
+                                  section="atsc", source=None)
+    # 跨源不覆盖：新建独立记录，而不是 updated=1
+    assert stats2["imported"] == 1, f"跨源同名行必须新建独立记录：{stats2}"
+    assert stats2["updated"] == 0
+
+    recs = db.scalars(select(BreadthManualRecord).where(
+        BreadthManualRecord.title == "跨源同名情报")
+        .order_by(BreadthManualRecord.origin_section)).all()
+    assert [r.origin_section for r in recs] == ["atsc", "industry"]
+    ind = [r for r in recs if r.origin_section == "industry"][0]
+    ats = [r for r in recs if r.origin_section == "atsc"][0]
+    # industry 记录原样保留：正文/属主/来源一致
+    assert ind.body == "行业原始正文"
+    assert ind.upload_id == ind_upload.id
+    assert (ind.source_ref or {}).get("file") == "行业表.csv"
+    # ATSC 记录来源字段自洽
+    assert ats.body == "ATSC内部正文"
+    assert ats.upload_id == atsc_upload.id
+    assert (ats.source_ref or {}).get("file") == "atsc.csv"
+    # 独立删除不级联：删行业记录不影响 ATSC 记录
+    db.delete(ind)
+    db.commit()
+    assert db.get(BreadthManualRecord, ats.id) is not None
+
+
+def test_same_source_revision_updates_and_keeps_consistency(db):
+    """同源重导（修订）：UPDATE 原记录，source_ref/source_name/upload_id
+    与修订文件一致，不留矛盾来源。"""
+    from app.models.breadth_manual_record import BreadthManualRecord
+
+    m1 = dict(BASE_MAPPING); m1["body"] = "正文"; m1.pop("type")
+    _u1, _s1 = _import(db, _csv_bytes("标题,日期,链接,正文\n修订情报,2026-09-01,,v1正文\n"),
+                       "atsc_v1.csv", m1, require_type=False, section="atsc", source=None)
+    assert _s1["imported"] == 1
+    u2, stats = _import(db, _csv_bytes("标题,日期,链接,正文\n修订情报,2026-09-01,,v2正文\n"),
+                        "atsc_v2.csv", m1, require_type=False, section="atsc", source=None)
+    assert stats["imported"] == 0
+    assert stats["updated"] == 1
+
+    recs = db.scalars(select(BreadthManualRecord).where(
+        BreadthManualRecord.title == "修订情报")).all()
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.body == "v2正文"
+    assert r.origin_section == "atsc"
+    assert r.upload_id == u2.id
+    assert (r.source_ref or {}).get("file") == "atsc_v2.csv"
+
+    # 同源同内容重导：幂等（duplicate），不产生第二条
+    u3 = _mk_upload(db, filename="atsc_v3.csv", section="atsc", source=None)
+    _, stats3 = _import(db, _csv_bytes("标题,日期,链接,正文\n修订情报,2026-09-01,,v2正文\n"),
+                        "atsc_v3.csv", m1, require_type=False, section="atsc", source=None)
+    assert stats3["imported"] == 0 and stats3["updated"] == 0
+    assert stats3["skipped_duplicate"] == 1
+    assert db.scalars(select(BreadthManualRecord).where(
+        BreadthManualRecord.title == "修订情报")).all().__len__() == 1
+
+
+def test_sync_projection_flag_follows_reimport(db):
+    """三.2：同源重导只改变「同步到广度」开关 → 投影如实跟随（幂等）。"""
+    from app.models.breadth_manual_record import BreadthManualRecord
+
+    m1 = dict(BASE_MAPPING); m1["body"] = "正文"; m1.pop("type")
+    _import(db, _csv_bytes("标题,日期,链接,正文\n投影情报,2026-09-01,,正文\n"),
+            "ind_sync1.csv", m1, require_type=False, section="industry",
+            source=None, in_breadth_nav=False)
+    r = db.scalars(select(BreadthManualRecord).where(
+        BreadthManualRecord.title == "投影情报")).all()[0]
+    assert r.origin_section == "industry" and r.in_breadth_nav is False
+
+    _import(db, _csv_bytes("标题,日期,链接,正文\n投影情报,2026-09-01,,正文\n"),
+            "ind_sync2.csv", m1, require_type=False, section="industry",
+            source=None, in_breadth_nav=True)
+    db.refresh(r)
+    assert r.in_breadth_nav is True, "重导勾选同步到广度后投影应生效"
+
+
+def test_canonical_key_origin_namespace_backcompat():
+    """三.2：canonical 身份键来源命名空间——breadth 与历史公式逐字节一致
+    （存量墓碑/遮蔽/基础索引对齐不迁移继续有效），industry/atsc 独立。"""
+    import hashlib
+    import json as _json
+    from app.services.breadth_index_queue import canonical_record_key_sha
+
+    legacy = hashlib.sha256(_json.dumps(
+        ["标题", "2026-09-01", ""], ensure_ascii=False).encode("utf-8")).hexdigest()
+
+    assert canonical_record_key_sha("标题", "2026-09-01", "") == legacy
+    assert canonical_record_key_sha("标题", "2026-09-01", "", origin_section="breadth") == legacy
+    ind = canonical_record_key_sha("标题", "2026-09-01", "", origin_section="industry")
+    ats = canonical_record_key_sha("标题", "2026-09-01", "", origin_section="atsc")
+    assert ind != legacy and ats != legacy and ind != ats
+
+
+def test_delete_enqueue_uses_origin_namespaced_key(db):
+    """三.2：删除入队的 record_key_sha 带来源命名空间——行业记录的墓碑
+    不会误屏蔽同身份的广度/基础索引记录。"""
+    from app.models.breadth_manual_record import BreadthManualRecord
+    from app.models.index_task import IndexTask
+    from app.services.breadth_index_queue import (
+        canonical_record_key_sha, enqueue_record_delete)
+
+    u = _mk_upload(db, filename="del_ind.csv", section="industry", source=None)
+    r = BreadthManualRecord(
+        upload_id=u.id, user_id="type-test", title="删除命名空间", body="正文",
+        document_date="2026-09-01", origin_section="industry", source_version=1)
+    db.add(r)
+    db.commit()
+    enqueue_record_delete(db, r.id, u.id, row=r)
+    db.commit()
+    task = db.scalars(select(IndexTask).where(IndexTask.target_key == str(r.id))).all()[0]
+    expect = canonical_record_key_sha(
+        "删除命名空间", "2026-09-01", "", origin_section="industry")
+    assert task.payload["record_key_sha"] == expect
+    assert expect != canonical_record_key_sha("删除命名空间", "2026-09-01", "")

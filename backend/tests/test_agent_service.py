@@ -182,7 +182,7 @@ def test_retrieval_service_requires_verified_index_mapping(monkeypatch):
 
 
 def test_stream_path_does_not_use_legacy_portal_sources():
-    source = inspect.getsource(agent_service.stream_agent_response)
+    source = inspect.getsource(agent_service._stream_agent_response_impl)
     assert "search_canonical" in source
     assert "_search_knowledge_base" not in source
     assert "_search_sources" not in source
@@ -321,6 +321,6 @@ def test_retrieval_summary_counts_sections_and_inheritance():
 
 def test_sop_header_uses_only_actually_used_citations_at_callsite():
     """Codex P2-1：主流程不再用 final_citations 兜底补「数据来源」。"""
-    src = inspect.getsource(agent_service.stream_agent_response)
+    src = inspect.getsource(agent_service._stream_agent_response_impl)
     assert "_header_citations = _used_citations(full_response, citations)\n" in src
     assert "or final_citations" not in src.split("_header_citations")[1].split("\n")[0]

@@ -71,7 +71,8 @@ def enqueue_record_delete(db: Session, record_id: uuid.UUID | str,
     ksha = record_key_sha
     if ksha is None and row is not None:
         ksha = canonical_record_key_sha(
-            row.title, row.document_date or "", row.url or "")
+            row.title, row.document_date or "", row.url or "",
+            origin_section=_rec_origin_section(row))
     if ksha:
         payload["record_key_sha"] = str(ksha)
     _enqueue(db, op="delete", target_key=str(record_id), payload=payload,
@@ -104,16 +105,30 @@ def _enqueue(db: Session, *, op: str, target_key: str, payload: dict, upload_id)
         existing.attempts = 0  # 显式重新入队视为人工/新数据触发，重置计数
 
 
-def canonical_record_key_sha(title: str, document_date: str, url: str) -> str:
-    """一.3 统一身份：与 canonical-qa server._record_key_sha_of /
-    sync_qa_index.key_digest 同源同值——sha256(json([t,d,u]))。导入链的
-    增量 chunk 与基础索引记录以同一身份对齐（跨路径去重/替换遮蔽/删除
-    墓碑都按它生效），不再只靠数据库 UUID。"""
+def canonical_record_key_sha(
+    title: str, document_date: str, url: str, origin_section: str = "breadth",
+) -> str:
+    """一.3 统一身份 + 三.2（2026-10-03）来源命名空间：
+
+    - breadth（含 GitHub feed 与基础索引全量）：sha256(json([t,d,u]))，
+      与历史公式【逐字节一致】——存量墓碑/遮蔽/替换高水位与基础索引
+      （sync_qa_index.key_digest）继续有效，不做迁移。
+    - industry/atsc：sha256(json([origin, t, d, u]))——独立数据源的身份
+      命名空间。历史缺陷：跨源同 title+date+url（空 URL 常见）会在
+      DB 与索引两侧互相覆盖/遮蔽/误删（一路墓碑屏蔽另一路全部 chunk）。
+      命名空间后，行业/ATSC 记录互不碰撞，也不与广度身份对齐（它们
+      本就不该跨源去重）。
+
+    与 canonical-qa server._record_key_sha_of 同源同值（origin 参数语义
+    一致；缺省 breadth 即历史公式，兼容所有旧调用）。
+    """
     import hashlib as _hashlib
     import json as _json
+    origin = (origin_section or "").strip().lower()
+    parts = ([origin] if origin in ("industry", "atsc") else []) + [
+        str(title or ""), str(document_date or ""), str(url or "")]
     return _hashlib.sha256(_json.dumps(
-        [str(title or ""), str(document_date or ""), str(url or "")],
-        ensure_ascii=False).encode("utf-8")).hexdigest()
+        parts, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def _rec_content_sha(rec: BreadthManualRecord) -> str:
@@ -180,7 +195,8 @@ def _upsert_payload(rec: BreadthManualRecord, rev: int = 0) -> dict:
                         # 服务端据此做同身份去重、基础旧版本替换遮蔽、
                         # 迟到旧版本拒绝（source_rev 严格递减拒收）
                         "record_key_sha": canonical_record_key_sha(
-                            rec.title, rec.document_date or "", rec.url or ""),
+                            rec.title, rec.document_date or "", rec.url or "",
+                            origin_section=origin_section),
                         "content_sha": _rec_content_sha(rec),
                         "source_rev": int(rev),
                     },
@@ -292,7 +308,8 @@ def _execute(db: Session, task: IndexTask) -> None:
         ksha = None
         if rec is not None:
             ksha = canonical_record_key_sha(
-                rec.title, rec.document_date or "", rec.url or "")
+                rec.title, rec.document_date or "", rec.url or "",
+                origin_section=_rec_origin_section(rec))
         elif task.payload and task.payload.get("record_key_sha"):
             ksha = str(task.payload["record_key_sha"])
         if ksha:

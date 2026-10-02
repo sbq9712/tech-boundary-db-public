@@ -107,3 +107,48 @@ def test_scope_allowed_unattributed_only_when_explicit():
 
 
 VALID_SOURCES = NS["VALID_SOURCES"]
+
+
+# ── 三.2：统一身份键来源命名空间（跨源同名同日期空 URL 互不覆盖） ────────
+
+
+def _load_record_key_fn():
+    import hashlib
+    import json as _json
+    src = SERVER_SRC.read_text(encoding="utf-8")
+    m = re.search(r"^def _record_key_sha_of\(.*?(?=^\ndef |^async def |^class )",
+                  src, re.S | re.M)
+    assert m, "server.py 缺少 _record_key_sha_of，请同步更新测试截取"
+    ns: dict = {"json": _json}
+    exec(m.group(0), ns)
+    return ns["_record_key_sha_of"]
+
+
+def test_record_key_breadth_is_byte_identical_to_legacy_formula():
+    """breadth（缺省）与历史公式 sha256(json([t,d,u])) 逐字节一致——
+    存量墓碑/遮蔽/基础索引对齐不做迁移继续有效。"""
+    import hashlib
+    import json as _json
+    fn = _load_record_key_fn()
+    legacy = hashlib.sha256(_json.dumps(
+        ["标题", "2026-09-01", ""], ensure_ascii=False).encode("utf-8")).hexdigest()
+    assert fn("标题", "2026-09-01", "") == legacy
+    assert fn("标题", "2026-09-01", "", origin="breadth") == legacy
+    assert fn("标题", "2026-09-01", "", origin=None) == legacy
+
+
+def test_record_key_industry_atsc_namespaced_and_distinct():
+    """industry/atsc 键带来源命名空间且互不相同——跨源同身份不再共享
+    墓碑/遮蔽/版本高水位（历史缺陷：一路删除屏蔽另一路全部 chunk）。"""
+    fn = _load_record_key_fn()
+    legacy = fn("标题", "2026-09-01", "")
+    ind = fn("标题", "2026-09-01", "", origin="industry")
+    ats = fn("标题", "2026-09-01", "", origin="atsc")
+    assert ind != legacy and ats != legacy and ind != ats
+    # 与 backend canonical_record_key_sha 同源同值（跨服务契约）
+    import json as _json
+    import hashlib
+    expect_ind = hashlib.sha256(_json.dumps(
+        ["industry", "标题", "2026-09-01", ""],
+        ensure_ascii=False).encode("utf-8")).hexdigest()
+    assert ind == expect_ind
