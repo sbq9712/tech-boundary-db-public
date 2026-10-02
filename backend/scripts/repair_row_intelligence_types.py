@@ -37,6 +37,7 @@ from app.models.uploaded_file import UploadedFile  # noqa: E402
 from app.services.table_rows import (  # noqa: E402
     TYPE_COLUMN_EXACT,
     TYPE_VALUES,
+    compute_content_hash_v2,
     parse_table,
     strip_type_ws,
 )
@@ -243,12 +244,22 @@ def main() -> None:
                 db.rollback()
                 continue
             actual_old = rec.intelligence_type
+            # 3.3：content_hash 必须与类型同拍更新——v2 指纹含 "i": 类型，
+            # 留旧值的话 canonical 侧 (record_key_sha, content_sha) 去重
+            # 会把重入队的 chunks 全部当「重复对」跳过，chunk_metadata 的
+            # intelligence_type 永远停留在旧类型（改库不达索引）。
+            new_hash = compute_content_hash_v2(
+                rec.title or "", rec.document_date or "", rec.url or "",
+                rec.body or "", rec.ai_summary or "", e["new_type"])
+            e["old_content_hash"] = rec.content_hash
+            e["new_content_hash"] = new_hash
             # 2) 条件 UPDATE：只有库值仍等于规划期 old_type 才覆盖
             res = db.execute(
                 _sa_update(BreadthManualRecord)
                 .where(BreadthManualRecord.id == rid,
                        BreadthManualRecord.intelligence_type == e["old_type"])
-                .values(intelligence_type=e["new_type"]))
+                .values(intelligence_type=e["new_type"],
+                        content_hash=new_hash))
             if res.rowcount != 1:
                 db.rollback()
                 skipped.append((e["record_id"], f"并发改动（现值 {actual_old!r}），跳过"))

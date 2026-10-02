@@ -187,6 +187,25 @@ def resolve_type_value(raw) -> str | None:
     return TYPE_VALUES.get(norm)
 
 
+def compute_content_hash_v2(
+    title: str, document_date: str, url: str,
+    body: str, summary: str, intelligence_type: str,
+) -> str:
+    """v2 内容指纹（导入链唯一实现，修复脚本复用同一实现保证一致）。
+
+    纳入 intelligence_type（任务三 3.3）：类型修正必须可识别为「内容变化」。
+    注意：入库时以「原始值」计算；记录列存 20000 截断值——超长文本时
+    从库列重算得到的哈希与入库哈希不同（只会触发多余重索引，绝不吞变化）。
+    """
+    return hashlib.sha256(
+        json.dumps(
+            {"t": title, "d": document_date, "u": url, "b": body, "s": summary,
+             "i": intelligence_type},
+            ensure_ascii=False, sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def _identity_key(title: str, date: str, url: str) -> str:
     """行记录统一身份：与 GitHub 增量包链路同源——sha256(json([t,d,u]))[:16]。
 
@@ -321,13 +340,8 @@ def row_to_record_fields(
 
     # content_hash 纳入类型（3.3）：类型修正必须可被识别为「内容变化」，
     # 不被「无变化」吞掉——身份去重由 _identity_key 承担，不会产生重复。
-    content_hash = hashlib.sha256(
-        json.dumps(
-            {"t": title, "d": date, "u": url, "b": body, "s": summary,
-             "i": intelligence_type},
-            ensure_ascii=False, sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
+    content_hash = compute_content_hash_v2(
+        title, date, url, body, summary, intelligence_type)
     return dict(
         upload_id=upload_id,
         user_id=user_id,

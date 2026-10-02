@@ -19,7 +19,7 @@ from app.db.session import SessionLocal
 from app.models.breadth_manual_record import BreadthManualRecord
 from app.models.index_task import IndexTask
 from app.models.uploaded_file import UploadedFile
-from app.services.table_rows import import_rows
+from app.services.table_rows import compute_content_hash_v2, import_rows
 
 CLEANUP: list[str] = []
 
@@ -232,3 +232,45 @@ def test_repair_fixes_mislabel_defaulted_news(db, tmp_path, monkeypatch):
     # 再跑一次：全部一致 → 幂等 no-op
     r = _run_script("--dry-run")
     assert "可修复：0" in r.stdout
+
+
+def test_repair_updates_content_hash_with_type(db, tmp_path, monkeypatch):
+    """任务三 3.3：类型修复必须同步重算 content_hash（v2 指纹含 "i": 类型）。
+
+    历史缺陷：只 UPDATE intelligence_type 不动 content_hash → 重入队后
+    canonical 侧 (record_key_sha, content_sha) 去重把新 chunks 当重复对
+    跳过，chunk_metadata.intelligence_type 停留旧值——改库不达索引。
+    存量污染形态：类型错标时哈希也是按错标算的（同拍污染）。
+    """
+    upload, recs = _import_and_corrupt(db, tmp_path, monkeypatch)
+    # 模拟同拍污染：类型被顶替为 news（文件第 2 行实为文献），哈希也按
+    # 错标 news 重算——修复回 literature 后哈希必须随之变化。
+    for rec in recs:
+        rec.intelligence_type = "news"
+        rec.content_hash = compute_content_hash_v2(
+            rec.title or "", rec.document_date or "", rec.url or "",
+            rec.body or "", rec.ai_summary or "", "news")
+    db.commit()
+    stale_hashes = {r.id: r.content_hash for r in recs}
+
+    backup = tmp_path / "bk3.json"
+    r = _run_script("--backup", str(backup))
+    assert r.returncode == 0, r.stderr
+    assert "修复完成：1" in r.stdout  # 仅「固态电池界面」错标需要修复
+
+    db.expire_all()
+    changed = 0
+    for rec in recs:
+        expected = compute_content_hash_v2(
+            rec.title or "", rec.document_date or "", rec.url or "",
+            rec.body or "", rec.ai_summary or "", rec.intelligence_type)
+        assert rec.content_hash == expected, (
+            f"{rec.title}: 修复后哈希必须与 v2 公式一致（含新类型）")
+        if rec.content_hash != stale_hashes[rec.id]:
+            changed += 1
+    assert changed == 1, "只有被修复的记录指纹变化（幂等记录不动）"
+
+    payload = json.loads(backup.read_text(encoding="utf-8"))
+    entry = next(e for e in payload["entries"] if e["executed"])
+    assert entry["old_content_hash"] != entry["new_content_hash"], (
+        "备份必须可审计指纹变化（canonical 去重对依据）")
