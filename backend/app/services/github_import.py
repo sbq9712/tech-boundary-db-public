@@ -382,6 +382,11 @@ def _validate_record_shapes(records: list) -> None:
                 # 记录行构造时非列表折叠为 []，record_json 保留原值）
                 if isinstance(v, str) and len(v) <= max_item:
                     continue
+                # cp 实际生产形态是标量 int：clustering.py 写 0（簇根）/1（子）
+                # 聚类父标志——2026-10-01/02 的真实发布包即此形态（T12 演练
+                # 发现）。按字段语义容忍，入库折叠为 [cp]，record_json 保留原值。
+                if field == "cp" and isinstance(v, int) and not isinstance(v, bool):
+                    continue
                 raise GitHubPackageError(
                     f"records.json 第 {i} 项 {field} 必须为 ≤{max_len} 元数组")
             if len(v) > max_len:

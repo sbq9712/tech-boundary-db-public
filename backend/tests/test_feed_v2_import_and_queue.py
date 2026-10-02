@@ -1340,3 +1340,32 @@ def test_v1_still_gap_days(tmp_path, monkeypatch):
         assert (s2["details"] or {}).get("gap_days") == 8
     finally:
         db.close()
+
+
+def test_scalar_int_cp_tolerated_in_record_shapes():
+    """T12 演练发现（2026-10-02）：真实发布包（2026-10-01/02）cp 为标量 int。
+
+    生产源头 pipeline/scripts/clustering.py 写 cp=0（簇根）/1（子）——聚类父
+    标志本就是标量。_validate_record_shapes 须与该形态兼容（折叠入库），
+    否则每日增量包全量被拒、离线更新链路断裂。回归锚点：
+    - 标量 int cp（0/1/聚类号）→ 通过；
+    - bool cp 仍拒绝（bool 是 int 子类，必须显式排除）；
+    - dict/超长列表等坏形态仍拒绝。
+    """
+    from app.services.github_import import _validate_record_shapes, GitHubPackageError
+
+    base = {"id": "r1", "t": "标题", "d": "2026-10-02", "u": "https://q/1"}
+    # 标量 int cp：三种真实取值
+    for cp_val in (0, 1, 42):
+        rec = dict(base, cp=cp_val)
+        _validate_record_shapes([rec])  # 不抛即通过
+    # bool 必须拒绝
+    with pytest.raises(GitHubPackageError):
+        _validate_record_shapes([dict(base, cp=True)])
+    # 列表形态（历史/规范）仍支持
+    _validate_record_shapes([dict(base, cp=[1, 2])])
+    # 坏形态仍拒绝
+    with pytest.raises(GitHubPackageError):
+        _validate_record_shapes([dict(base, cp={"bad": 1})])
+    with pytest.raises(GitHubPackageError):
+        _validate_record_shapes([dict(base, cp=[i for i in range(100)])])
