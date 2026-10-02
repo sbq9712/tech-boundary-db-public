@@ -10,6 +10,8 @@
 </head>
 <body>
   <div id="app" class="app-shell"></div>
+  <!-- T7/G11：共享 URL 消毒器，必须先于 app.js 加载（markdown/引用链接 scheme 白名单） -->
+  <script src="assets/lib/safe_url.js"></script>
   <script src="auth.js"></script>
   <script src="app.js?v=20260926-ui49"></script>
 </body>

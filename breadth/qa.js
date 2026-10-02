@@ -1079,6 +1079,11 @@ function escHtml(text) {
 // C0 控制字符，`java\tscript:` / `\0javascript:` 由此归一为 javascript: ——
 // 在原始字符串上做 scheme 匹配会被绕过（codex 复审 R2-1）。
 function _qaSafeUrl(url) {
+  // T7/G11（2026-10-02）：优先委托共享消毒器 assets/lib/safe_url.js
+  // （breadth/index.html 已先于本文件加载）；脚本缺失时回落下方本地实现。
+  if (window.TechDBSafeUrl && window.TechDBSafeUrl.safeUrl) {
+    return window.TechDBSafeUrl.safeUrl(url);
+  }
   const u = String(url || '')
     .replace(/[\x00-\x1F\x7F]/g, '')
     .trim();
@@ -1091,6 +1096,9 @@ function _qaSafeUrl(url) {
 // href 属性插值专用：scheme 白名单 + `"` 百分号编码 + HTML 转义。
 // 引用卡片等直接以原始数据（未经 renderMarkdown 预转义）进模板的位置统一走这里。
 function _qaSafeHref(url) {
+  if (window.TechDBSafeUrl && window.TechDBSafeUrl.safeHref) {
+    return window.TechDBSafeUrl.safeHref(url, escHtml);
+  }
   return escHtml(_qaSafeUrl(url).replace(/"/g, '%22'));
 }
 

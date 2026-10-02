@@ -67,6 +67,19 @@ function mdToHtml(md){
     return `<p class="md-p">${inlineMd(block)}</p>`;
   }).join('\n');
 }
+// T7/G11（2026-10-02）：链接 URL 统一走共享消毒器 assets/lib/safe_url.js
+// （index.html 已先于本文件加载）。防御性兜底：脚本缺失时按同规则本地判定，
+// 绝不放行 javascript:/data: 等危险 scheme。
+const techdbSafeUrl = (window.TechDBSafeUrl && window.TechDBSafeUrl.safeUrl) || ((u) => {
+  const s = String(u == null ? '' : u).replace(/[\x00-\x1F\x7F]/g, '').trim();
+  if (!s) return '';
+  return (/^(https?|mailto):/i.test(s) || !/^[a-z][a-z0-9+.-]*:/i.test(s)) ? s : '#';
+});
+const techdbSafeHref = (window.TechDBSafeUrl && window.TechDBSafeUrl.safeHref) || ((u) => {
+  return techdbSafeUrl(u).replace(/"/g, '%22')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+});
+
 function inlineMd(text){
   if(!text) return '';
   let t = text;
@@ -76,8 +89,10 @@ function inlineMd(text){
   t = t.replace(/\*(.+?)\*/g, '<em>$1</em>');
   // Inline code
   t = t.replace(/`([^`]+)`/g, '<code class="md-code">$1</code>');
-  // Links
-  t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // Links —— URL 过共享消毒器（scheme 白名单 + 控制字符剔除 + 引号编码），
+  // markdown 源自 LLM/情报正文，javascript:/data: 一律降级 '#'（T7/G11）
+  t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) =>
+    `<a href="${techdbSafeHref(url)}" target="_blank" rel="noopener">${label}</a>`);
   // Escape remaining < > that aren't part of tags we created
   // (Do this minimally to avoid breaking existing HTML)
   return t;
@@ -874,7 +889,7 @@ function renderHomeAlertPage(){
     const reasonId=`home-alert-reason-${start+index}`;
     const tagClass=HOME_ALERT_TAG_CLASS[tag]||'';
     const sev=String(item.alert_color||'').toLowerCase().replace(/[^a-z]/g,'')||'normal';
-    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${escapeHtml(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-text" id="${reasonId}"><span class="home-alert-reason-label">预警原因</span>：${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开全部</button></div></article>`;
+    return `<article class="home-alert-item sev-${sev}"><div class="home-alert-primary">${tag?`<span class="home-alert-tag ${tagClass}">${escapeHtml(tag)}</span>`:''}<span class="home-alert-domain">${escapeHtml(domain)}</span><time datetime="${escapeHtml(publishedTime)}">${escapeHtml(formatHomeDate(publishedTime,'—'))}</time></div><a class="home-alert-title" href="${techdbSafeHref(target)}" title="${escapeHtml(title)}">${escapeHtml(title)}</a><div class="home-alert-reason"><span class="home-alert-reason-text" id="${reasonId}"><span class="home-alert-reason-label">预警原因</span>：${escapeHtml(reasonText)}</span><button class="home-alert-reason-toggle" type="button" data-alert-reason-toggle aria-controls="${reasonId}" aria-expanded="false" hidden>展开全部</button></div></article>`;
   }).join('')}</div>`;
   requestAnimationFrame(()=>body.querySelectorAll('.home-alert-reason-text').forEach(reason=>{
     const toggle=reason.parentElement?.querySelector('[data-alert-reason-toggle]');
@@ -1628,13 +1643,14 @@ function renderMarkdown(text){
       .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
       .replace(/\*(.+?)\*/g,'<em>$1</em>')
       .replace(/`(.+?)`/g,'<code>$1</code>')
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g,(_,label,url)=>
+        `<a href="${techdbSafeHref(url)}" target="_blank" rel="noopener">${label}</a>`);
   }
 }
 
 function renderCitations(citations,stats){
   const count=Number(stats.knowledge_base||citations.length||0);
-  return `<div class="qa-citations-block"><div class="qa-citations-title"><strong>来源引用</strong><span>检索 ${count} 条索引记录</span></div>${citations.map((c,index)=>{const id=Number(c.id||index+1);const cm=c.chunk_metadata||{};const location=[cm.page_numbers?.length?`第 ${cm.page_numbers.join("、")} 页`:"",cm.section_title].filter(Boolean).join(" · ");const meta=[c.date,c.source,c.tag,location].filter(Boolean).map(item=>`<span>${escapeHtml(item)}</span>`).join('');const link=c.url?`<a class="qa-citation-link" href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">原文</a>`:'';return `<article class="qa-citation-item" data-citation-card="${id}"><div class="qa-citation-header"><span class="qa-citation-number">[${id}]</span><span class="qa-citation-title">${escapeHtml(c.title||'未命名情报')}</span></div><div class="qa-citation-meta">${meta}${link}</div>${c.body_snippet?`<p class="qa-citation-snippet">${escapeHtml(c.body_snippet)}</p>`:''}</article>`;}).join('')}</div>`;
+  return `<div class="qa-citations-block"><div class="qa-citations-title"><strong>来源引用</strong><span>检索 ${count} 条索引记录</span></div>${citations.map((c,index)=>{const id=Number(c.id||index+1);const cm=c.chunk_metadata||{};const location=[cm.page_numbers?.length?`第 ${cm.page_numbers.join("、")} 页`:"",cm.section_title].filter(Boolean).join(" · ");const meta=[c.date,c.source,c.tag,location].filter(Boolean).map(item=>`<span>${escapeHtml(item)}</span>`).join('');const link=c.url?`<a class="qa-citation-link" href="${techdbSafeHref(c.url)}" target="_blank" rel="noopener noreferrer">原文</a>`:'';return `<article class="qa-citation-item" data-citation-card="${id}"><div class="qa-citation-header"><span class="qa-citation-number">[${id}]</span><span class="qa-citation-title">${escapeHtml(c.title||'未命名情报')}</span></div><div class="qa-citation-meta">${meta}${link}</div>${c.body_snippet?`<p class="qa-citation-snippet">${escapeHtml(c.body_snippet)}</p>`:''}</article>`;}).join('')}</div>`;
 }
 function escapeHtml(s){return String(s).replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
 
@@ -1853,7 +1869,7 @@ async function showIntelDetail(id){
   ${d.confidence?`<span style="background:${d.confidence==='high'?'#dcfce7':d.confidence==='medium'?'#fef9c3':'#fee2e2'};border-radius:999px;padding:5px 10px;font-size:12px;color:#334155">可信度: ${escapeHtml(d.confidence)}</span>`:''}
   ${d.need_human_review?`<span style="background:#fef3c7;border:1px solid #fcd34d;border-radius:999px;padding:5px 10px;font-size:12px;color:#92400e">待人工审核</span>`:''}
 </div>
-${d.url?`<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;color:#0e7490;font-size:13px;margin-bottom:16px;text-decoration:none">🔗 ${escapeHtml(d.source_name||'查看原文')} ${d.publish_date?'· '+escapeHtml(d.publish_date):''}</a>`:''}
+${d.url?`<a href="${techdbSafeHref(d.url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;color:#0e7490;font-size:13px;margin-bottom:16px;text-decoration:none">🔗 ${escapeHtml(d.source_name||'查看原文')} ${d.publish_date?'· '+escapeHtml(d.publish_date):''}</a>`:''}
 ${(d.key_metric||d.value_raw)?`
 <div style="background:#f8fafc;border:1px solid #e5eaf2;border-radius:14px;padding:14px;margin-bottom:16px">
   <div style="font-size:12px;color:#667085;margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em">关键指标</div>
