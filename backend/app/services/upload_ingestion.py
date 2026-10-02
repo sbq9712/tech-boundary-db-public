@@ -547,6 +547,7 @@ def sync_breadth_manual_record(db: Session, record: UploadedFile, text: str | No
         existing.document_date = record.document_date
         if body:
             existing.body = body
+        existing.origin_section = existing.origin_section or record.primary_section
         return
     db.add(
         BreadthManualRecord(
@@ -560,6 +561,8 @@ def sync_breadth_manual_record(db: Session, record: UploadedFile, text: str | No
             intelligence_type="literature" if (record.mime_type or "").startswith("application/") else "news",
             source_name=record.original_filename,
             content_hash=record.checksum_sha256,
+            # 任务二 2.1：行业/ATSC 同步到广度只改展示入口，归属仍是原栏目
+            origin_section=record.primary_section,
         )
     )
     db.commit()
@@ -574,12 +577,27 @@ def request_incremental_index(record: UploadedFile, chunks: list[dict]) -> dict:
         raise RuntimeError("TECHDB_QA_SERVICE_URL 未配置，无法写入增量索引")
     timeout = float(os.getenv("TECHDB_QA_INDEX_TIMEOUT_SECONDS", "300"))
     token = os.getenv("TECHDB_QA_INDEX_TOKEN", "").strip()
+    # 任务二 2.1：Docling 上传链的 chunk metadata 注入原始栏目归属——
+    # 此前该链不传栏目，增量记录在检索/引用/图谱侧无法分域。只补 metadata
+    # 键，不动 chunk 正文/分块（chunks.jsonl 落盘内容不变）。
+    section = (getattr(record, "primary_section", None) or "breadth").strip().lower()
+    if section not in ("breadth", "industry", "atsc"):
+        section = "breadth"
+    section_source = {"breadth": "breadth-import", "industry": "industry-import",
+                      "atsc": "atsc-import"}[section]
+    for chunk in chunks:
+        meta = chunk.get("metadata")
+        if isinstance(meta, dict):
+            meta.setdefault("primary_section", section)
+            meta.setdefault("source", section_source)
     payload = {
         "document_id": str(record.id),
         "filename": record.original_filename,
         "title": record.title or record.original_filename,
         "primary_category": record.primary_category or "未分类",
         "secondary_categories": record.secondary_categories or [],
+        # v7（0023）契约：上传链负载不携带 source_type——归属走 chunk
+        # metadata.primary_section/source（上面的注入）。
         "checksum_sha256": record.checksum_sha256,
         "created_at": record.created_at.isoformat() if record.created_at else None,
         "chunks": chunks,

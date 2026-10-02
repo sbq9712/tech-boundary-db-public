@@ -408,6 +408,7 @@ def import_rows(
     category_fallback: str | None,
     in_breadth_nav: bool = True,
     require_type: bool = False,
+    origin_section: str = "breadth",
 ) -> dict:
     """逐行入库：全量校验 → 身份去重/更新 → breadth_manual_records + 索引任务。
 
@@ -532,6 +533,9 @@ def import_rows(
                     continue
             fields["stable_id"] = identity
             fields["in_breadth_nav"] = in_breadth_nav  # 三.1：主导航广度开关
+            # 任务二 2.1：原始栏目归属（行业/ATSC 逐行导入保留原栏目，
+            # 同步广度只改展示入口）
+            fields["origin_section"] = origin_section if origin_section in ("breadth", "industry", "atsc") else "breadth"
             new_rec = BreadthManualRecord(**fields)
             created.append(new_rec)
             # 包内后续同身份行走 UPDATE/去重分支（同内容→duplicate，不同→update）

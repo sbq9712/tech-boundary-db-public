@@ -524,6 +524,8 @@ def _row_fields(rec: dict, upload_id: uuid.UUID, user_id: str, version: int) -> 
         source_version=int(version),
         stable_id=str(rec.get("id", "")) or None,
         feed_key_digest=_feed_key_digest_hex(key),
+        # 任务二 2.1：GitHub 增量包记录归属广度源
+        origin_section="breadth",
         content_hash=_v2_content_hash(rec),
         record_json=rec,
     )

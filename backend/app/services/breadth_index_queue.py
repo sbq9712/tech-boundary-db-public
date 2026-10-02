@@ -124,10 +124,29 @@ def _rec_content_sha(rec: BreadthManualRecord) -> str:
         f"{rec.title}|{rec.document_date}|{rec.body or ''}".encode("utf-8")).hexdigest()
 
 
+def _rec_origin_section(rec: BreadthManualRecord) -> str:
+    """任务二 2.1：记录原始栏目（breadth/industry/atsc）。
+
+    旧数据 origin_section 可能为 NULL（迁移回填前已入库）——按 FK 匹配
+    100% 可回填的前提，这里做读取侧兜底：不可追溯落 breadth 语义并由
+    回填脚本收敛（/api/index/status 会把无归属文档单独列出，不猜测）。
+    """
+    section = (getattr(rec, "origin_section", None) or "").strip().lower()
+    return section if section in ("breadth", "industry", "atsc") else "breadth"
+
+
+_SECTION_SOURCE_TYPE = {
+    "breadth": "breadth-import",
+    "industry": "industry-import",
+    "atsc": "atsc-import",
+}
+
+
 def _upsert_payload(rec: BreadthManualRecord, rev: int = 0) -> dict:
     text = "\n".join(
         part for part in (rec.title or "", rec.ai_summary or "", rec.body or "") if part
     ).strip()
+    origin_section = _rec_origin_section(rec)
     chunks: list[dict] = []
     if text:
         for i in range(0, len(text), CHUNK_CHARS):
@@ -153,7 +172,10 @@ def _upsert_payload(rec: BreadthManualRecord, rev: int = 0) -> dict:
                         "tag": rec.tag or "",
                         "topic": rec.topic or "",
                         "ai_picked": bool(rec.ai_picked),
-                        "source": "breadth-import",
+                        # 任务二 2.1：来源归属贯通——不再统一 breadth-import，
+                        # 按记录原始栏目落值（检索分域/引用归属/图谱 scope 用）
+                        "source": _SECTION_SOURCE_TYPE.get(origin_section, "breadth-import"),
+                        "primary_section": origin_section,
                         # 一.3/一.4：统一记录身份 + 内容指纹 + 队列修订号——
                         # 服务端据此做同身份去重、基础旧版本替换遮蔽、
                         # 迟到旧版本拒绝（source_rev 严格递减拒收）
@@ -172,7 +194,7 @@ def _upsert_payload(rec: BreadthManualRecord, rev: int = 0) -> dict:
         "title": rec.title or "",
         "primary_category": rec.category or "未分类",
         "secondary_categories": [],
-        "source_type": "breadth-import",
+        "source_type": _SECTION_SOURCE_TYPE.get(origin_section, "breadth-import"),
         "checksum_sha256": rec.content_hash,
         "created_at": rec.created_at.isoformat() if rec.created_at else None,
         "chunks": chunks,
@@ -196,7 +218,16 @@ def _post_index_upsert(payload: dict) -> dict:
         response.raise_for_status()
         result = response.json()
     if result.get("status") != "ready":
-        raise RuntimeError("canonical-qa 未确认增量索引已写入")
+        # Codex P1（spec 评审）：全拒收（墓碑/迟到旧版本）必须如实失败——
+        # 「收到写请求」≠「已可检索」。补录顺序契约：unblock → upsert。
+        rejected = (int(result.get("rejected_tombstoned_chunks") or 0)
+                    + int(result.get("rejected_stale_rev_chunks") or 0))
+        detail = ""
+        if rejected:
+            detail = (f"（拒绝 {rejected} chunk：墓碑/旧版本拒收——"
+                      f"如为删除后补录，请先经包通道 unblock 再重试）")
+        raise RuntimeError(
+            f"canonical-qa 未确认增量索引已写入：status={result.get('status')}{detail}")
     return result
 
 

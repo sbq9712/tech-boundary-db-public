@@ -327,11 +327,13 @@ def test_type_correction_requeues_index(db):
     from app.models.index_task import IndexTask
     from sqlalchemy import select as sa_select
     data_v1 = _csv_bytes("标题,链接,情报类型\n甲,https://a/1,新闻\n")
-    _import(db, data_v1, "rq.csv", BASE_MAPPING)
-    tasks1 = db.scalars(sa_select(IndexTask)).all()
+    upload1, _ = _import(db, data_v1, "rq.csv", BASE_MAPPING)
+    tasks1 = db.scalars(sa_select(IndexTask).where(IndexTask.upload_id.in_(
+        [upload1.id]))).all()
     data_v2 = _csv_bytes("标题,链接,情报类型\n甲,https://a/1,文献\n")
-    _import(db, data_v2, "rq.csv", BASE_MAPPING)
-    tasks2 = db.scalars(sa_select(IndexTask)).all()
+    upload2, _ = _import(db, data_v2, "rq.csv", BASE_MAPPING)
+    tasks2 = db.scalars(sa_select(IndexTask).where(IndexTask.upload_id.in_(
+        [upload1.id, upload2.id]))).all()
     assert len(tasks2) == len(tasks1)  # 同一记录同一任务行（覆盖式重入队）
     upserts = [t for t in tasks2 if t.op == "upsert"]
     assert upserts and upserts[0].status == "pending"  # 重入队待处理

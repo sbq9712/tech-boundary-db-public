@@ -1183,6 +1183,124 @@ class IndexDeleteRequest(BaseModel):
     document_id: str = Field(min_length=1)
 
 
+class MetadataPatchRequest(BaseModel):
+    """任务二 2.1：增量索引归属回填——按 document_id 原位补 chunk_metadata。
+
+    只允许白名单键（primary_section/source），不触碰内容指纹与向量/分词。
+    """
+    document_id: str = Field(min_length=1)
+    primary_section: str | None = Field(default=None,
+                                        pattern="^(breadth|industry|atsc)$")
+    source: str | None = Field(default=None)
+
+
+@app.post("/api/index/metadata-patch")
+async def index_metadata_patch(
+    req: MetadataPatchRequest,
+    x_techdb_index_token: str | None = Header(default=None),
+):
+    _check_index_token(x_techdb_index_token)
+    patch: dict = {}
+    if req.primary_section:
+        patch["primary_section"] = req.primary_section
+        # source 与栏目保持一致语义（回填场景二者同补）
+        patch.setdefault("source", {
+            "breadth": "breadth-import", "industry": "industry-import",
+            "atsc": "atsc-import"}[req.primary_section])
+    if req.source:
+        patch["source"] = req.source
+    if not patch:
+        raise HTTPException(status_code=400, detail="空 patch")
+    try:
+        patched = await _incremental_index.patch_document_metadata(
+            req.document_id, patch)
+    except Exception as exc:
+        print(f"[index] metadata-patch failed for {req.document_id}: {exc}", flush=True)
+        raise HTTPException(status_code=503, detail="index unavailable") from exc
+    if patched:
+        mark_fragment_dirty()  # 归属影响图谱 scope 视图（2.4）
+    return {"status": "ok", "document_id": req.document_id, "patched_chunks": patched}
+
+
+@app.get("/api/index/status")
+async def index_status(
+    document_ids: str = "",
+    x_techdb_index_token: str | None = Header(default=None),
+):
+    """任务一 1.1：按文档确认增量索引实际内容——「已可检索」的唯一权威。
+
+    - documents: {document_id: {chunks, vector_ok, bm25_ok, entity_count,
+      content_shas, record_key_shas, primary_section}}（entity_count 用
+      graph_fragment 同源实体抽取计算：0=无适用实体，不是构建失败）；
+    - unattributed_document_ids: 无 primary_section 的存活文档（回填清单，
+      任务二 2.1「不可追溯单独列出，不猜测」）；
+    - 总量聚合（incremental_records/documents/corrupt/epoch）。
+    """
+    _check_index_token(x_techdb_index_token)
+    docs = _incremental_index.documents_metadata()
+    wanted = [d.strip() for d in document_ids.split(",") if d.strip()] if document_ids else None
+    fragment_entities: dict[str, set[str]] = {}
+    try:
+        # 与图谱碎片同源的实体归属：document_id → 实体集（按记录分组抽取）
+        by_doc: dict[str, list[dict]] = {}
+        with _incremental_index._state_lock:
+            for meta in list(_incremental_index.meta):
+                did = str(meta.get("document_id") or "")
+                if not did or (wanted is not None and did not in wanted):
+                    continue
+                by_doc.setdefault(did, []).append(meta)
+        for did, rows in by_doc.items():
+            merged: dict = {}
+            kp: list = []
+            bodies: list[str] = []
+            for m in rows:
+                md = m.get("chunk_metadata") or {}
+                for key in ("t", "as", "a", "s", "c"):
+                    merged.setdefault(key, m.get(key) or "")
+                cand = md.get("kp")
+                if isinstance(cand, list):
+                    kp.extend(str(k) for k in cand)
+            # 正文聚合（截断防爆炸）
+            for m in rows:
+                body = str(m.get("b") or m.get("fb") or "")
+                if body:
+                    bodies.append(body[:4000])
+            merged["kp"] = kp[:50]
+            merged["b"] = "\n".join(bodies)[:20000]
+            pairs = _gfrag.extract_entities(merged)
+            fragment_entities[did] = {name for _etype, name in pairs}
+    except Exception as exc:
+        print(f"[index-status] entity extraction degraded: {exc}", flush=True)
+
+    out_docs: dict[str, dict] = {}
+    unattributed: list[str] = []
+    for did, entry in docs.items():
+        if wanted is not None and did not in wanted:
+            continue
+        entities = fragment_entities.get(did, set())
+        out_docs[did] = {
+            "chunks": entry["chunks"],
+            "vector_ok": entry["chunks"] > 0,
+            "bm25_ok": entry["chunks"] > 0,
+            "entity_count": len(entities),
+            "content_shas": entry["content_shas"],
+            "record_key_shas": entry["record_key_shas"],
+            "primary_section": entry["primary_section"],
+            "source": entry["source"],
+            "checksum_sha256": entry["checksum_sha256"],
+        }
+        if not entry["primary_section"]:
+            unattributed.append(did)
+    return {
+        "documents": out_docs,
+        "unattributed_document_ids": unattributed,
+        "incremental_records": _incremental_index.record_count,
+        "incremental_documents": _incremental_index.document_count,
+        "incremental_corrupt": bool(getattr(_incremental_index, "corrupt", False)),
+        "incremental_reset_epoch": int(getattr(_incremental_index, "reset_epoch", 0) or 0),
+    }
+
+
 @app.post("/api/index/delete")
 async def index_delete(
     req: IndexDeleteRequest,

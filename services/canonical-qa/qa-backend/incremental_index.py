@@ -393,6 +393,74 @@ class IncrementalIndex:
                 n += 1
         return n
 
+    async def patch_document_metadata(
+        self, document_id: str, patch: dict[str, Any]
+    ) -> int:
+        """任务二 2.1：按 document_id 原位更新 chunk_metadata（归属回填）。
+
+        - 与 upsert/remove 同一把 async _lock（Codex P1：并发写不竞争持久化）；
+        - 只改 meta，不重嵌入、不重分词（embeddings/corpus_tokens 不动，
+          内容指纹不受 metadata 影响）；
+        - 返回更新的 chunk 数（0 = 文档不在增量索引，幂等无副作用）。
+        """
+        if not patch:
+            return 0
+        async with self._lock:
+            with self._state_lock:
+                patched = 0
+                for meta in self.meta:
+                    if str(meta.get("document_id") or "") != document_id:
+                        continue
+                    md = meta.get("chunk_metadata")
+                    if not isinstance(md, dict):
+                        md = {}
+                        meta["chunk_metadata"] = md
+                    for key, value in patch.items():
+                        md[key] = value
+                    patched += 1
+                if patched:
+                    self._persist(self.embeddings, self.meta, self.corpus_tokens)
+                return patched
+
+    def documents_metadata(self) -> dict[str, dict[str, Any]]:
+        """按 document_id 聚合存活 chunk 的元数据摘要（状态确认/回填清单用）。
+
+        返回 {document_id: {chunks, content_shas, record_key_shas,
+        primary_section, source, checksum_sha256}}——chunks>0 即该文档在
+        增量索引中实际可检索（向量/BM25 由同一写入路径保证）。
+        """
+        out: dict[str, dict[str, Any]] = {}
+        with self._state_lock:
+            for meta in self.meta:
+                did = str(meta.get("document_id") or "")
+                if not did:
+                    continue
+                md = meta.get("chunk_metadata") or {}
+                entry = out.setdefault(did, {
+                    "chunks": 0,
+                    "content_shas": set(),
+                    "record_key_shas": set(),
+                    "primary_section": None,
+                    "source": None,
+                    "checksum_sha256": None,
+                })
+                entry["chunks"] += 1
+                csha = str(md.get("content_sha") or "")
+                if csha:
+                    entry["content_shas"].add(csha)
+                ksha = str(md.get("record_key_sha") or "")
+                if ksha:
+                    entry["record_key_shas"].add(ksha)
+                entry["primary_section"] = entry["primary_section"] or (
+                    md.get("primary_section") or None)
+                entry["source"] = entry["source"] or (md.get("source") or None)
+                entry["checksum_sha256"] = entry["checksum_sha256"] or (
+                    meta.get("checksum_sha256") or None)
+        for entry in out.values():
+            entry["content_shas"] = sorted(entry["content_shas"])
+            entry["record_key_shas"] = sorted(entry["record_key_shas"])
+        return out
+
     def vector_search(self, query_vector: np.ndarray, top_k: int) -> list[dict[str, Any]]:
         with self._state_lock:
             if not self.record_count:

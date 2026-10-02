@@ -57,6 +57,9 @@ class BreadthManualRecord(Base):
     # UPDATE/DELETE 按 feed_key_digest 直接定位既有行，避免从行字段反推键。
     stable_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     feed_key_digest: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    # 任务二 2.1：原始栏目归属（breadth/industry/atsc）。行业/ATSC 同步到
+    # 广度只改展示入口（in_breadth_nav），检索/引用/图谱归属以本列为准。
+    origin_section: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     # 逐行表格导入的溯源（原文件/工作表/行号）；整包导入为空。
     source_ref: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # 三.1：是否进入主导航广度列表。行业/ATSC 逐行导入默认 False——行记录

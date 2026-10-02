@@ -500,6 +500,7 @@ async def upload_files(
                 category_fallback=manual_category,
                 in_breadth_nav=row_in_breadth_nav,
                 require_type=(section == "breadth" and bsource == "other"),
+                origin_section=section,
             )
             # 三.3：空日期与非法日期分开计数（行日期不再用文件日期静默兜底）
             record.note = (
