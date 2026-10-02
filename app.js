@@ -2228,7 +2228,7 @@ async function loadLibrary(){
       <td>${escapeHtml(docDate)}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
-      <td><div class="row-actions">${breadthViewBtn}${libCanManage?`<button class="secondary-btn" data-lib-rename="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">重命名</button><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
+      <td><div class="row-actions">${breadthViewBtn}<button class="secondary-btn" data-lib-idx-detail="${escapeHtml(f.id)}">索引详情</button>${libCanManage?`<button class="secondary-btn" data-lib-rename="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(baseName)}">重命名</button><button class="secondary-btn" data-download="${escapeHtml(f.id)}">原文件</button>${assetBtns}`:""}${libIsAdmin?`<button class="secondary-btn lib-delete-btn" data-lib-delete="${escapeHtml(f.id)}" data-lib-name="${escapeHtml(f.title||f.original_filename)}">删除</button>`:""}</div></td>
     </tr>`;
   }).join("");
   const start=libTotal?libOffset+1:0,end=Math.min(libOffset+data.files.length,libTotal);
