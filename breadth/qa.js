@@ -293,7 +293,9 @@ function renderAssistantMessage(msg, idx) {
   const content = msg.content || '';
   // RT-029: defensive verified-citation filtering (stale-cache safe)
   const citations = defensivelyFilterCitations(msg);
-  const referenceCards = Array.isArray(msg.reference_cards) ? msg.reference_cards : [];
+  // T6（2026-10-02）：reference_cards/grounding_status 已不在 done 契约内，
+  // 相关渲染（精确对位徽标/来源角色/快照漂移/原文 span）删除——保留只会
+  // 空转；supports_claim_ids 仍是契约字段，证据卡片改由它派生（见下）。
   const isStreaming = msg.streaming || false;
 
   // 2026-09-20: the citation list and the evidence card no longer render
@@ -307,15 +309,14 @@ function renderAssistantMessage(msg, idx) {
       <div class="qa-citations-block">
         <div class="qa-citations-title">📎 来源引用（${citations.length}条）</div>
         ${citations.map(c => {
-          const card = referenceCards.find(r => String(r.citation_id) === String(c.id));
-          const exactSpans = card && card.displayable && Array.isArray(card.spans) ? card.spans : [];
           return `
           <div class="qa-citation-item" data-citation-num="${c.id}" data-record-id="${c.record_id}">
             <div class="qa-citation-head">
               <span class="qa-citation-num">[${c.id}]</span>
               <a class="qa-citation-title" href="${_qaSafeHref(c.url)}" target="_blank" rel="noreferrer">${escHtml(c.title || '')}</a>
             </div>
-            ${(c.grounding_status === 'VALID' || c.grounding_status === 'FUZZY') ? `<span class="qa-ground-badge qa-ground-${c.grounding_status.toLowerCase()}" title="${c.grounding_status === 'VALID' ? '证据已定位到原文：引用文字与原文一字不差' : '证据已定位到原文：原文经过改写/翻译，系统通过相似度分析找到对应段落'}">${c.grounding_status === 'VALID' ? '📍 精确对位' : '📍 相似对位'}</span>` : (c.grounding_status === 'GROUNDING_FAIL' ? '<span class="qa-ground-badge qa-ground-fail" title="未能定位到原文精确片段">⚠️ 未定位</span>' : '')}
+            ${(Array.isArray(c.supports_claim_ids) && c.supports_claim_ids.length)
+              ? `<span class="qa-ground-badge" title="该引用支撑的主张编号">🧩 支撑主张 ${c.supports_claim_ids.map(escHtml).join('、')}</span>` : ''}
             <div class="qa-citation-meta">
               <span>📅 ${c.date || ''}</span>
               <span>📰 ${escHtml(c.source || '')}</span>
@@ -323,16 +324,6 @@ function renderAssistantMessage(msg, idx) {
               ${c.tag ? `<span>🏷️ ${escHtml(c.tag)}</span>` : ''}
               <a class="qa-citation-link" href="${_qaSafeHref(c.url)}" target="_blank" rel="noreferrer">🔗 原文</a>
             </div>
-            ${card && card.source_role && card.source_role !== 'unknown'
-              ? `<div class="qa-reference-role" title="来源性质：厂商/当事方自述（self_reported）或独立第三方（independent）">来源角色：${escHtml(card.source_role)}</div>` : ''}
-            ${card && card.snapshot_drift && card.snapshot_drift.detected
-              ? '<div class="qa-reference-warning" data-warning="SOURCE_SNAPSHOT_DRIFT">⚠️ 来源快照已漂移，精确片段已隐藏</div>' : ''}
-            ${card && !card.displayable && card.policy_reason && !(card.snapshot_drift && card.snapshot_drift.detected)
-              ? `<div class="qa-reference-warning" data-warning="${escHtml(card.policy_reason)}">⚠️ 原文片段未能展示（${card.policy_reason === 'SOURCE_SNAPSHOT_MISSING' ? '该引用生成时未绑定原文快照' : escHtml(card.policy_reason)}），可点"🔗 原文"查看全文</div>` : ''}
-            ${c.ungrouded_note ? `<div class="qa-citation-snippet qa-ungrounded-note">${escHtml(c.ungrouded_note)}</div>` : ''}
-            ${exactSpans.length
-              ? exactSpans.map(span => `<div class="qa-evidence-span" title="已授权精确原文定位">🔖 <mark>${escHtml(span.text || '')}</mark></div>`).join('')
-              : ''}
           </div>
         `}).join('')}
       </div>
@@ -378,7 +369,11 @@ function renderAssistantMessage(msg, idx) {
   // 2026-09-20: hoisted from TK-13 — needed early so the status badge can
   // become the evidence-drawer trigger (owner request: citation wall
   // collapsed behind the status badge click).
-  const claims = msg.claims || [];
+  // T6：claims 明细不在新契约内——旧 localStorage 消息带 claims 则用（兼容），
+  // 否则由 claim_check.unsupported_major_claims + citations.supports_claim_ids 派生。
+  const claims = (Array.isArray(msg.claims) && msg.claims.length)
+    ? msg.claims
+    : deriveClaimsFromCheck(msg, citations);
   const mappedCitations = citations.filter(c => Array.isArray(c.supports_claim_ids) && c.supports_claim_ids.length > 0);
   const hasEvidence = !isStreaming && (citations.length > 0 || (claims.length > 0 && mappedCitations.length > 0));
 
@@ -388,7 +383,12 @@ function renderAssistantMessage(msg, idx) {
     // evidence_summary is a backend dict {requirements_total, …}; render it
     // as a readable stats string instead of "[object Object]" (2026-09-20).
     let summaryText = '';
-    const es = msg.evidence_summary;
+    // T6：evidence_summary 已不在契约内（服务端构造器未接线）——由
+    // claim_check 派生同形态；旧缓存字符串/对象仍兼容。
+    const es = (msg.evidence_summary && (typeof msg.evidence_summary === 'string'
+      || (msg.evidence_summary.requirements_total > 0)))
+      ? msg.evidence_summary
+      : deriveEvidenceSummary(msg.claim_check);
     if (typeof es === 'string') summaryText = es;
     else if (es && typeof es === 'object') {
       const parts = [];
@@ -396,6 +396,8 @@ function renderAssistantMessage(msg, idx) {
         parts.push(`主张${es.requirements_total}条`);
         parts.push(`已支持${es.requirements_supported || 0}条`);
         if (es.requirements_partial > 0) parts.push(`部分${es.requirements_partial}条`);
+        // T6：关键主张未支持数（claim_check.unsupported_major_claims 派生）
+        if (es.requirements_unsupported > 0) parts.push(`关键未支持${es.requirements_unsupported}条`);
       }
       if (Number.isFinite(es.independent_source_groups)) parts.push(`独立来源${es.independent_source_groups}个`);
       summaryText = parts.join(' · ');
@@ -463,7 +465,10 @@ function renderAssistantMessage(msg, idx) {
             const rl = relationLabel(r.relation);
             return `<span class="qa-rel-chip ${rl.cls}" ${rl.tip ? `title="${escHtml(rl.tip)}"` : ''}>${rl.icon} ${rl.label} [${r.citation_id}]</span>`;
           }).join('');
-          if (!supCits.length && !relChips) return '';
+          // T6：UNSUPPORTED 主张即使无任何引用也必须成行（claim_check 的
+          // unsupported_major_claims 正是「关键主张无证据」本身——丢行等于
+          // 把最重要的核验结论藏掉）。旧缓存 claims 无引用且无状态仍跳过。
+          if (!supCits.length && !relChips && cl.status !== 'UNSUPPORTED') return '';
           const statusCls = cl.status === 'SUPPORTED' ? 'qa-claim-supported' : (cl.status === 'UNSUPPORTED' ? 'qa-claim-unsupported' : '');
           // Number from the claim's own id (claim_6 → 6) so the card matches
           // the 「支持 主张6」 badges in the citation list; positional numbering
@@ -476,6 +481,8 @@ function renderAssistantMessage(msg, idx) {
             <div class="qa-claim-cites">
               ${supCits.map(c => `<span class="qa-claim-cite" data-citation-num="${c.id}">[${c.id}]</span>`).join('')}
               ${relChips}
+              ${(!supCits.length && !relChips && cl.status === 'UNSUPPORTED')
+                ? '<span class="qa-rel-chip qa-rel-contradict" title="claim_check 判定：无任何引用支撑该关键主张">⚠️ 关键未支持</span>' : ''}
             </div>
           </div>`;
         }).join('')}
@@ -490,7 +497,9 @@ function renderAssistantMessage(msg, idx) {
 
   // Evidence drawer: citations + claim card live behind a click trigger
   // (the answer-status badge, or a fallback button when no status exists).
-  const hasEvidenceDrawer = !!(citationsHtml || evidenceCardHtml);
+  // T6：库内边界 + 安全提示（done 契约实有字段，此前只存不渲染）
+html += renderBoundaryAndSafety(msg);
+const hasEvidenceDrawer = !!(citationsHtml || evidenceCardHtml);
   if (hasEvidenceDrawer) {
     html += `
       <div class="qa-evidence-drawer" id="qa-evidence-drawer-${idx}" aria-hidden="true">
@@ -720,6 +729,8 @@ function defensivelyFilterCitations(msg) {
 
 function relationLabel(relation) {
   switch (relation) {
+    // T6：supports_claim_ids 反向派生的关系（新契约主张→引用映射）
+    case 'SUPPORTS': return { icon: '✅', label: '支撑', cls: 'qa-rel-support', tip: '该引用的原文支撑此主张（由引用的支撑主张编号反查）' };
     case 'DIRECT_SUPPORT': return { icon: '✅', label: '直接支持', cls: 'qa-rel-support', tip: '引用原文本身就是该事实的报道，事实有出处' };
     case 'PREMISE_SUPPORT': return { icon: '✅', label: '前提支持', cls: 'qa-rel-support', tip: '引用原文为该主张提供了前提依据' };
     case 'ATTRIBUTION': return { icon: '📣', label: '引述', cls: 'qa-rel-attribution', tip: '原文确实这样说过（归属属实），但所说内容本身是真是假未经证实' };
@@ -846,6 +857,8 @@ function handleSSEData(data, assistantMsg, eventName) {
     // canonical-qa done 载荷实有字段（server.py）：知识边界与证据态
     assistantMsg.knowledge_boundary = data.knowledge_boundary || null;
     assistantMsg.safety_hits = data.safety_hits || [];
+    // T6（2026-10-02）：claim_check（紧凑核验摘要）是主张级证据的新数据源
+    assistantMsg.claim_check = (data.claim_check && typeof data.claim_check === 'object') ? data.claim_check : null;
     assistantMsg.evidence = data.evidence || null;
     assistantMsg.retrieval_trace = data.retrieval_trace || null;
   }
@@ -1131,6 +1144,67 @@ function getAnswerStatusConfig(status) {
     },
   };
   return configs[status] || configs['UNVERIFIED'];
+}
+
+// ── T6（2026-10-02）：新 done 契约（claim_check/safety_hits/knowledge_boundary）
+// 的证据区数据源。旧富字段（claims 明细/reference_cards/evidence_summary/
+// grounding_status）已不在契约内——渲染优先 claim_check，旧字段仅作为
+// localStorage 历史消息的兼容回退，杜绝「读不到数据的半死不活」。 ──
+
+// 旧 evidence_summary 形态从 claim_check 派生（徽标摘要行数据源）。
+function deriveEvidenceSummary(claimCheck) {
+  if (!claimCheck || typeof claimCheck !== 'object') return null;
+  const total = Number(claimCheck.claims_total);
+  const supported = Number(claimCheck.claims_supported);
+  if (!Number.isFinite(total) || total <= 0) return null;
+  const unsupported = Array.isArray(claimCheck.unsupported_major_claims)
+    ? claimCheck.unsupported_major_claims.length : 0;
+  return {
+    requirements_total: total,
+    requirements_supported: Number.isFinite(supported) ? supported : 0,
+    requirements_partial: 0,
+    requirements_unsupported: unsupported,
+  };
+}
+
+// 旧 claims 明细形态从 citations.supports_claim_ids + unsupported_major_claims
+// 派生（证据卡片数据源：主张→引用映射；无主张文本，用编号行）。
+function deriveClaimsFromCheck(msg, citations) {
+  const claimCheck = msg && msg.claim_check;
+  if (!claimCheck || typeof claimCheck !== 'object') return [];
+  const unsupported = new Set(
+    (Array.isArray(claimCheck.unsupported_major_claims) ? claimCheck.unsupported_major_claims : [])
+      .map(String));
+  const byClaim = new Map();
+  (Array.isArray(citations) ? citations : []).forEach(c => {
+    (Array.isArray(c.supports_claim_ids) ? c.supports_claim_ids : []).forEach(cid => {
+      const key = String(cid);
+      if (!byClaim.has(key)) byClaim.set(key, { id: key, text: '', relations: [] });
+      byClaim.get(key).relations.push({ citation_id: c.id, relation: 'SUPPORTS' });
+    });
+  });
+  unsupported.forEach(cid => {
+    if (!byClaim.has(cid)) byClaim.set(cid, { id: cid, text: '', relations: [] });
+  });
+  const rows = Array.from(byClaim.values());
+  rows.forEach(r => { r.status = unsupported.has(String(r.id)) ? 'UNSUPPORTED' : 'SUPPORTED'; });
+  return rows;
+}
+
+// 库内边界条 + 安全提示（T6：存了两年没渲染的字段，现在可见）。
+function renderBoundaryAndSafety(msg) {
+  let html = '';
+  const boundary = msg && msg.knowledge_boundary
+    ? String(msg.knowledge_boundary) : '';
+  if (boundary) {
+    html += `<div class="qa-boundary-bar" style="margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--surface-2,#f1f5f9);color:var(--text-secondary,#475569);font-size:12px;line-height:1.5;">🧭 库内边界：${escHtml(boundary)}</div>`;
+  }
+  const hits = msg && Array.isArray(msg.safety_hits) ? msg.safety_hits : [];
+  if (hits.length) {
+    const firstType = hits[0] && hits[0].type ? `（如 ${escHtml(String(hits[0].type))}）` : '';
+    html += `<div class="qa-safety-bar" style="margin-top:6px;padding:6px 10px;border-radius:8px;background:rgba(180,83,9,0.08);color:#b45309;font-size:12px;">🛡 安全提示：命中 ${hits.length} 处${firstType}</div>`;
+  }
+  return html;
 }
 
 // ── Knowledge Graph Visualization ──
@@ -1482,6 +1556,10 @@ function saveConversationsToStorage() {
           user_warning: m.user_warning || '',
           answer_status: m.answer_status || null,
           evidence_summary: m.evidence_summary || null,
+          // T6：核验摘要与边界/安全提示跨页面重载保留
+          claim_check: m.claim_check || null,
+          knowledge_boundary: m.knowledge_boundary || null,
+          safety_hits: Array.isArray(m.safety_hits) ? m.safety_hits : [],
           stop_reason: m.stop_reason || null,
           trace_id: m.trace_id || null,
         })),
@@ -1513,5 +1591,7 @@ window.qaModule = {
   switchToQAView,
   switchFromQAView,
   initQAView,
-  __testHooks: { sseFrameParser, handleSSEData, renderMarkdown, _qaSafeUrl, _qaSafeHref },
+  __testHooks: { sseFrameParser, handleSSEData, renderMarkdown, _qaSafeUrl, _qaSafeHref,
+    getAnswerStatusConfig, deriveEvidenceSummary, deriveClaimsFromCheck, renderBoundaryAndSafety,
+    renderAssistantMessage },
 };
