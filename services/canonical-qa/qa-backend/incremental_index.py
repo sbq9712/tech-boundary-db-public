@@ -7,10 +7,12 @@ survives container restarts through the mounted data directory.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import pickle
 import tempfile
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +34,8 @@ def _tokens(text: str) -> list[str]:
 
 
 class IncrementalIndex:
+    EPOCH_FILE = "reset-epoch.json"
+
     def __init__(self, path: Path, embedding_func):
         self.path = path
         self.embedding_func = embedding_func
@@ -42,6 +46,12 @@ class IncrementalIndex:
         self._lock = asyncio.Lock()
         self._state_lock = threading.RLock()
         self.loaded = False
+        # G1/T3（2026-10-02）：损坏检测与恢复信号——
+        # corrupt=True 表示「文件存在但加载失败已清空」（此前 health 恒报
+        # ready，增量召回静默丢失）；reset_epoch 持久在数据卷（重启不丢），
+        # api 侧据此触发已完成任务的幂等重放。
+        self.corrupt = False
+        self.reset_epoch = self._read_epoch()
 
     @property
     def record_count(self) -> int:
@@ -50,6 +60,28 @@ class IncrementalIndex:
     @property
     def document_count(self) -> int:
         return len({item.get("document_id") for item in self.meta})
+
+    def _epoch_path(self) -> Path:
+        return self.path.with_name(self.EPOCH_FILE)
+
+    def _read_epoch(self) -> int:
+        try:
+            data = json.loads(self._epoch_path().read_text("utf-8"))
+            return int(data.get("epoch") or 0)
+        except Exception:
+            return 0
+
+    def _bump_epoch(self) -> int:
+        epoch = self._read_epoch() + 1
+        try:
+            self._epoch_path().parent.mkdir(parents=True, exist_ok=True)
+            self._epoch_path().write_text(
+                json.dumps({"epoch": epoch,
+                            "reset_at": datetime.now(timezone.utc).isoformat()}),
+                "utf-8")
+        except Exception:
+            pass  # epoch 写失败不阻断清空重建——api 侧另有计数兜底
+        return epoch
 
     def load(self) -> None:
         if self.loaded:
@@ -77,13 +109,17 @@ class IncrementalIndex:
                 flush=True,
             )
         except Exception as exc:
-            # Do not hide a corrupt incremental file: the base index remains
-            # usable, while the health endpoint exposes the reset state.
-            print(f"[startup] WARNING: incremental index ignored: {exc}", flush=True)
+            # G1/T3：损坏不再静默——置 corrupt（health 如实报 unhealthy，
+            # compose healthcheck 会标记容器），并持久 bump reset epoch
+            # 供 api 侧幂等重放已完成任务（重启不丢信号）。
+            print(f"[startup] WARNING: incremental index corrupt, reset: {exc}",
+                  flush=True)
             self.embeddings = np.empty((0, 1024), dtype=np.float32)
             self.meta = []
             self.corpus_tokens = []
             self.bm25 = None
+            self.corrupt = True
+            self.reset_epoch = self._bump_epoch()
 
     def _persist(
         self,

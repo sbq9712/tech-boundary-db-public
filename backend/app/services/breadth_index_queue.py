@@ -282,7 +282,12 @@ def _execute(db: Session, task: IndexTask) -> None:
         return
     payload = _upsert_payload(rec, rev=task.rev or 0)
     if not payload["chunks"]:
-        return
+        # T4（2026-10-02）：空文本（title/summary/body 全空）的 upsert 不再
+        # 静默成功——导入链 title 必填，空文本属异常数据；如实失败进
+        # retry/failed（last_error 可审计），避免"协议层吞错假装完成"。
+        raise RuntimeError(
+            f"empty payload: record {document_id} has no indexable text "
+            "(title/ai_summary/body all empty)")
     _post_index_upsert(payload)
 
 
@@ -457,9 +462,22 @@ def recover_stale_processing() -> int:
 
 
 def run_worker(poll_seconds: float = POLL_SECONDS) -> None:
-    """守护线程主体：与 upload_ingestion.recover_pending_uploads 同一模式。"""
+    """守护线程主体：与 upload_ingestion.recover_pending_uploads 同一模式。
+
+    T3/G1：每小时轮询 canonical-qa 增量索引 reset epoch，损坏清空后自动
+    幂等重放全部 done upsert 任务（重放后 canonical 恢复写入即回到 healthy）。
+    """
     recover_stale_processing()
+    epoch_check_at = 0.0
+    EPOCH_POLL_SECONDS = 3600.0
     while True:
+        now = time.monotonic()
+        if now - epoch_check_at >= EPOCH_POLL_SECONDS:
+            epoch_check_at = now
+            try:
+                check_incremental_reset_and_replay()
+            except Exception:  # noqa: BLE001 — 轮询异常不影响主循环
+                logger.exception("incremental reset epoch check failed")
         try:
             processed = process_batch()
         except Exception:  # noqa: BLE001
@@ -467,3 +485,66 @@ def run_worker(poll_seconds: float = POLL_SECONDS) -> None:
             processed = 0
         if not processed:
             time.sleep(poll_seconds)
+
+
+# ── T3/G1：canonical 增量索引损坏重放（2026-10-02）────────────────────
+
+
+def check_incremental_reset_and_replay() -> int:
+    """轮询 canonical-qa /api/health 的 reset epoch：发现新 epoch 即把全部
+    done+upsert 任务重置 pending（幂等重放）。
+
+    - 触发条件：incremental_reset_epoch > 本地已确认 epoch（qa_replay_state
+      单行持久——api 重启不重复/不漏触发）；
+    - 只重放 upsert：delete 的墓碑独立持久，不受增量清空影响；
+    - canonical 不可达/字段缺失：静默跳过（下小时再查），不抛错拖垮 worker；
+    - 返回重置条数（供测试与日志）。
+    """
+    import os
+
+    base_url = os.getenv("TECHDB_QA_SERVICE_URL", "").strip().rstrip("/")
+    if not base_url:
+        return 0
+    token = os.getenv("TECHDB_QA_INDEX_TOKEN", "").strip()
+    headers = {"X-TechDB-Index-Token": token} if token else {}
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(f"{base_url}/api/health", headers=headers)
+            resp.raise_for_status()
+            health = resp.json()
+        epoch = int(health.get("incremental_reset_epoch") or 0)
+    except Exception:  # noqa: BLE001 — 诊断轮询失败不影响队列主循环
+        logger.debug("incremental reset epoch poll failed", exc_info=True)
+        return 0
+
+    from app.models.qa_replay_state import QaReplayState
+
+    db = SessionLocal()
+    try:
+        row = db.get(QaReplayState, 1)
+        if row is None:
+            row = QaReplayState(id=1, last_confirmed_epoch=0)
+            db.add(row)
+            db.flush()
+        if epoch <= row.last_confirmed_epoch:
+            row.last_confirmed_epoch = epoch  # 对齐（canonical 可能回退重建）
+            db.commit()
+            return 0
+        res = db.execute(
+            update(IndexTask)
+            .where(IndexTask.status == "done", IndexTask.op == "upsert")
+            .values(status="pending", attempts=0, not_before=None,
+                    last_error="replay: canonical incremental index reset "
+                               f"(epoch {epoch})", claim_token=None,
+                    lease_expires_at=None)
+            .execution_options(synchronize_session=False))
+        replayed = int(res.rowcount or 0)
+        row.last_confirmed_epoch = epoch
+        db.commit()
+        if replayed:
+            logger.warning(
+                "canonical incremental index reset (epoch=%s) — requeued %s "
+                "done upsert tasks for idempotent replay", epoch, replayed)
+        return replayed
+    finally:
+        db.close()

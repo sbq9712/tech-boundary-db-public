@@ -1061,7 +1061,10 @@ async def health():
         "bm25_ready": _bm25_index is not None,
         "indexed_records": len(_index_meta) if _index_meta else 0,
         "bm25_records": len(_bm25_meta) if _bm25_meta else 0,
-        "incremental_index_ready": _incremental_index.loaded,
+        "incremental_index_ready": _incremental_index.loaded and not getattr(
+            _incremental_index, "corrupt", False),
+        "incremental_corrupt": bool(getattr(_incremental_index, "corrupt", False)),
+        "incremental_reset_epoch": int(getattr(_incremental_index, "reset_epoch", 0) or 0),
         "incremental_records": _incremental_index.record_count,
         "incremental_documents": _incremental_index.document_count,
         "total_indexed_records": (len(_index_meta) if _index_meta else 0) + _incremental_index.record_count,
@@ -1530,7 +1533,10 @@ async def stats():
         "total_records": total,
         "indexed_records": indexed,
         "bm25_records": len(_bm25_meta) if _bm25_meta else 0,
-        "incremental_index_ready": _incremental_index.loaded,
+        "incremental_index_ready": _incremental_index.loaded and not getattr(
+            _incremental_index, "corrupt", False),
+        "incremental_corrupt": bool(getattr(_incremental_index, "corrupt", False)),
+        "incremental_reset_epoch": int(getattr(_incremental_index, "reset_epoch", 0) or 0),
         "incremental_records": _incremental_index.record_count,
         "incremental_documents": _incremental_index.document_count,
         "total_indexed_records": indexed + _incremental_index.record_count,

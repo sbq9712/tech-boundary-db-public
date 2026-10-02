@@ -11,6 +11,7 @@ from app.models.breadth_manual_record import BreadthManualRecord
 from app.models.breadth_import_session import BreadthImportSession
 from app.models.index_task import IndexTask
 from app.models.feed_tombstone import FeedTombstone
+from app.models.qa_replay_state import QaReplayState
 
 __all__ = [
     "Domain", "InfoItem", "InfoItemDomain", "User",
@@ -24,4 +25,5 @@ __all__ = [
     "BreadthImportSession",
     "IndexTask",
     "FeedTombstone",
+    "QaReplayState",
 ]

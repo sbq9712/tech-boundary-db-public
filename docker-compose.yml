@@ -50,7 +50,9 @@ services:
     ports:
       - "${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8765}:8765"
     healthcheck:
-      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready']"]
+      # T3/G1（2026-10-02）：增断言 incremental_index_ready——增量索引文件
+      # 存在但损坏（已清空重建、召回静默丢失）时容器必须显示 unhealthy。
+      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready'] and d['incremental_index_ready']"]
       interval: 30s
       timeout: 5s
       start_period: 90s
