@@ -92,9 +92,6 @@ check('boundary HTML 转义', !xss.includes('<img') && xss.includes('&lt;img'));
 const xss2 = rvs({ answer_status: 'SUPPORTED', safety_hits: [{ type: '<script>x</script>' }] });
 check('safety type 转义', !xss2.includes('<script>'));
 
-console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
-process.exit(failures === 0 ? 0 : 1);
-
 // ═══ 5. codex 审查（2026-10-02）：实时/历史字段提取等价性 ═══
 // 实时 done: extra{answer_status, knowledge_boundary(串), claim_check, safety_hits}
 // 历史加载: extra{answer_status←summary, knowledge_boundary←claim_check.boundary_message, ...}
@@ -123,3 +120,7 @@ process.exit(failures === 0 ? 0 : 1);
   const c = rvs({ answer_status: 'UNVERIFIED', claim_check: { claims_total: 1 }, knowledge_boundary: null });
   check('knowledge_boundary=null 无 [object Object]', !c.includes('[object Object]'));
 }
+
+console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
+process.exit(failures === 0 ? 0 : 1);
+
