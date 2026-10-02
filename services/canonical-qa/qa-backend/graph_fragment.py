@@ -413,13 +413,28 @@ def prune_static_by_ops(static: dict, records: list, sha_of, masked,
 
 
 def fragment_signature(meta_rows: list[dict]) -> str:
-    """碎片输入指纹：len + 各 chunk key 拼接哈希——脏检查用。"""
+    """碎片输入指纹（任务二 2.4 修复）：len + 各 chunk（key, checksum_sha256,
+    primary_section）拼接哈希——脏检查用。
+
+    历史缺陷：读取 meta["checksum"]，而增量索引 meta 的真实字段是
+    checksum_sha256——同记录数、同 chunk key 的 UPDATE（正文/类型/归属
+    变化，checksum_sha256 变）不改变签名，scoped 碎片缓存永远返回旧图
+    （复现：category 旧技术类别→新技术类别，scoped 图仍回旧类别）。
+    修复后签名覆盖：内容（checksum_sha256）、身份（key）、归属
+    （primary_section——归属回填改变 scope 视图）。
+    """
     import hashlib
     h = hashlib.sha256()
     h.update(str(len(meta_rows)).encode())
     for meta in meta_rows:
+        md = meta.get("chunk_metadata") if isinstance(meta.get("chunk_metadata"), dict) else {}
         h.update(str(meta.get("key") or "").encode())
-        h.update(str(meta.get("checksum") or "").encode())
+        h.update(str(
+            meta.get("checksum_sha256")
+            or md.get("content_sha")
+            or meta.get("checksum")  # 历史形状（一直为空的旧字段）兜底参与
+            or "").encode())
+        h.update(str(meta.get("primary_section") or md.get("primary_section") or "").encode())
     return h.hexdigest()[:16]
 
 

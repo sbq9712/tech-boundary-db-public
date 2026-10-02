@@ -272,7 +272,16 @@ _FRAGMENT_CACHE: dict = {"dirty": True, "sig": "", "data": {"nodes": [], "edges"
 
 
 def mark_fragment_dirty() -> None:
+    """任务二 2.4：全量碎片与 scoped 视图一并失效。
+
+    历史缺陷：只置 _FRAGMENT_CACHE.dirty——_scoped_fragment 不消费该
+    脏标志，仅靠签名比对；而签名曾读错字段（checksum vs checksum_sha256）
+    使同记录数 UPDATE 后 scoped 图永远返回旧内容。现在：①签名已修复为
+    覆盖 key/checksum_sha256/primary_section；②所有索引变异点显式清空
+    scoped 缓存（双保险：即便未来签名漏掉某个维度，脏标志也强制重建）。
+    """
     _FRAGMENT_CACHE["dirty"] = True
+    _SCOPED_FRAGMENT_CACHE.update({"sig": "", "scopes": {}})
 
 
 def _fragment() -> dict:
@@ -692,7 +701,7 @@ async def vector_search(query: str, top_k: int = RETRIEVAL_TOP_K,
         # Cosine similarity (embeddings are pre-normalized)
         scores = _vector_index @ query_vec
         top_indices = np.argsort(scores)[::-1]
-        # 候选池取 3 倍再过滤：墓碑/被替换版本剔除后仍够 top_k
+        # 候选过滤（墓碑/被替换版本剔除）先于计满 top_k（任务二 2.2）
         kept = 0
         for idx in top_indices:
             if kept >= top_k:
@@ -702,10 +711,15 @@ async def vector_search(query: str, top_k: int = RETRIEVAL_TOP_K,
                 continue
             results.append({"meta": meta, "score": float(scores[int(idx)])})
             kept += 1
-    inc_results = _incremental_index.vector_search(query_vec, top_k * 3)
-    results.extend(r for r in inc_results
-                   if _result_allowed(r["meta"], is_base=False)
-                   and _scope_allowed(r["meta"], is_base=False, sources=sources))
+    # 任务二 2.2（修复）：来源范围与墓碑/版本门控下沉到增量索引候选
+    # 形成阶段——先过滤再计满 top_k。历史缺陷：全局 top_k*3 截断后再
+    # 过滤来源，6 条高分广度 chunk 可把唯一的 atsc 命中整体挤出（范围
+    # 查询双路 0 召回）。三源共享物理存储，但每个源的路由池逻辑独立。
+    def _inc_allowed(meta: dict) -> bool:
+        return (_result_allowed(meta, is_base=False)
+                and _scope_allowed(meta, is_base=False, sources=sources))
+    inc_results = _incremental_index.vector_search(query_vec, top_k, allowed=_inc_allowed)
+    results.extend(inc_results)
     return sorted(results, key=lambda item: item["score"], reverse=True)[:top_k]
 
 
@@ -723,7 +737,9 @@ def bm25_search(query: str, top_k: int = RETRIEVAL_TOP_K,
     base_results = []
     if _bm25_index is not None and tokens and base_in_scope:
         scores = _bm25_index.get_scores(tokens)
-        top_indices = np.argsort(scores)[::-1][:top_k * 3]
+        # 任务二 2.2：基础侧同样先过滤（墓碑/替换遮蔽）再计满 top_k——
+        # 不再全局 top_k*3 截断后过滤（密集墓碑时合法候选被挤出）。
+        top_indices = np.argsort(scores)[::-1]
         for idx in top_indices:
             if float(scores[int(idx)]) <= 0:
                 continue
@@ -733,10 +749,13 @@ def bm25_search(query: str, top_k: int = RETRIEVAL_TOP_K,
             base_results.append({"meta": meta, "score": float(scores[int(idx)])})
             if len(base_results) >= top_k:
                 break
-    incremental_results = _incremental_index.bm25_search(" ".join(tokens), top_k * 3) if tokens else []
-    incremental_results = [r for r in incremental_results
-                           if _result_allowed(r["meta"], is_base=False)
-                           and _scope_allowed(r["meta"], is_base=False, sources=sources)]
+    # 任务二 2.2（修复）：同 vector_search——来源范围与门控下沉到候选
+    # 形成阶段，小体量源不再被全局截断挤出。
+    def _inc_allowed(meta: dict) -> bool:
+        return (_result_allowed(meta, is_base=False)
+                and _scope_allowed(meta, is_base=False, sources=sources))
+    incremental_results = (_incremental_index.bm25_search(
+        " ".join(tokens), top_k, allowed=_inc_allowed) if tokens else [])
     # BM25 scores from separately built corpora are not numerically comparable.
     # Interleave their ranked lists before the outer RRF fusion.
     results = []
@@ -789,18 +808,67 @@ def rrf_fuse(vec_results: list, bm25_results: list,
     } for item in fused]
 
 
-async def hybrid_search(query: str, sources: tuple | None = None) -> tuple:
-    """Hybrid retrieval: vector + BM25 → RRF fusion → dynamic cutoff.
+async def _route_with_retry(route_name: str, run, routes: dict,
+                            retry_once: bool = True) -> list:
+    """任务二 2.3：单路执行 + 失败定向重试（仅失败路）。
 
-    Returns (search_results, is_relevant) where is_relevant indicates
-    whether results are good enough to generate an answer.
-    sources（任务二 2.2）：透传给两路候选获取的来源范围。
+    - 异常不外抛（一路故障绝不连带丢弃另一路的合法结果）；
+    - 瞬时失败重试 1 次仍失败则如实记录 error，返回 []；
+    - routes[route_name] 记录 executed/succeeded/raw_candidates/
+      duration_ms/error（成功零命中是 succeeded+0，不是失败）。
     """
-    # Run both routes in parallel
-    vec_task = vector_search(query, top_k=RETRIEVAL_TOP_K, sources=sources)
-    bm25_task = asyncio.to_thread(bm25_search, query, RETRIEVAL_TOP_K, sources)
+    import time as _time
+    t0 = _time.monotonic()
+    try:
+        results = await run()
+        routes[route_name] = {
+            "executed": True, "succeeded": True, "raw_candidates": len(results),
+            "duration_ms": int((_time.monotonic() - t0) * 1000), "error": None,
+        }
+        return results
+    except Exception as exc:  # noqa: BLE001 — 单路失败必须隔离
+        if retry_once:
+            try:
+                t1 = _time.monotonic()
+                results = await run()
+                routes[route_name] = {
+                    "executed": True, "succeeded": True,
+                    "raw_candidates": len(results),
+                    "duration_ms": int((_time.monotonic() - t0) * 1000),
+                    "error": None, "retried_after": f"{exc.__class__.__name__}",
+                }
+                return results
+            except Exception as exc2:  # noqa: BLE001
+                exc = exc2
+        routes[route_name] = {
+            "executed": True, "succeeded": False, "raw_candidates": 0,
+            "duration_ms": int((_time.monotonic() - t0) * 1000),
+            "error": f"{exc.__class__.__name__}: {str(exc)[:160]}",
+        }
+        return []
 
-    vec_results, bm25_results = await asyncio.gather(vec_task, bm25_task)
+
+async def _hybrid_routes(query: str, sources: tuple | None = None) -> tuple:
+    """Hybrid 检索（路线隔离版，任务二 2.3）。
+
+    与 hybrid_search 同序（vector + BM25 并行 → RRF → 动态相关性截断），
+    但返回三段式 (search_results, is_relevant, routes)；routes 为两路的
+    真实执行记录（原始候选数、各自时长、失败原因）——orchestrated_search
+    的 source_route_matrix 消费它，不再把融合计数当原始候选数、不再把
+    hybrid 总时长复制到两路。
+    """
+    routes: dict = {}
+
+    async def _vec() -> list:
+        return await vector_search(query, top_k=RETRIEVAL_TOP_K, sources=sources)
+
+    def _bm() -> list:
+        return bm25_search(query, RETRIEVAL_TOP_K, sources)
+
+    vec_task = _route_with_retry("vector", _vec, routes)
+    bm_task = _route_with_retry(
+        "keyword", lambda: asyncio.to_thread(_bm), routes)
+    vec_results, bm25_results = await asyncio.gather(vec_task, bm_task)
 
     # If BM25 not available, just use vector
     if not bm25_results:
@@ -817,6 +885,21 @@ async def hybrid_search(query: str, sources: tuple | None = None) -> tuple:
         is_relevant = best_vec_score >= RELEVANCE_FLOOR or has_bm25_hit
 
     results, _dropped = dedup_search_results(results)
+    routes["fused_candidates"] = len(results)
+    return results, is_relevant, routes
+
+
+async def hybrid_search(query: str, sources: tuple | None = None) -> tuple:
+    """Hybrid retrieval: vector + BM25 → RRF fusion → dynamic cutoff.
+
+    Returns (search_results, is_relevant) where is_relevant indicates
+    whether results are good enough to generate an answer.
+    sources（任务二 2.2）：透传给两路候选获取的来源范围。
+    任务二 2.3：内部改用路线隔离实现——单路异常不再丢弃另一路的合法
+    结果（历史缺陷：vector 抛错 → gather 整体失败 → 最终 0 结果、
+    graph_calls=0；keyword 的有效候选被连带丢弃）。
+    """
+    results, is_relevant, _routes = await _hybrid_routes(query, sources=sources)
     return results, is_relevant
 
 
@@ -882,6 +965,14 @@ def _hydrate_texts(results: list) -> list:
     return out
 
 
+def _matrix_cell() -> dict:
+    """任务二 2.3：source_route_matrix 单元契约——executed（是否真实执行）/
+    succeeded（执行成功与否；成功零命中=true）/candidates（该路原始候选数，
+    非融合计数）/duration_ms（该路自身耗时）/error（失败原因）。"""
+    return {"executed": False, "succeeded": None, "candidates": 0,
+            "duration_ms": 0, "error": None}
+
+
 async def orchestrated_search(query: str, exclude_ids: list | None = None,
                               final_top_k: int = FINAL_TOP_K,
                               sources: tuple | None = None) -> tuple:
@@ -914,9 +1005,8 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
         scopes = tuple(x for x in sources
                        if x in VALID_SOURCES + (UNATTRIBUTED_SCOPE,))
         trace["sources"] = list(scopes)
-    matrix: dict = {sc: {"vector": {"executed": False, "candidates": 0, "duration_ms": 0},
-                         "keyword": {"executed": False, "candidates": 0, "duration_ms": 0},
-                         "graph": {"executed": False, "candidates": 0, "duration_ms": 0}}
+    matrix: dict = {sc: {"vector": _matrix_cell(), "keyword": _matrix_cell(),
+                         "graph": _matrix_cell()}
                     for sc in scopes}
 
     def _scope_of(meta: dict) -> str:
@@ -930,22 +1020,28 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
 
         # 2) ITERATIVE_RETRIEVAL：按源分池的多路 hybrid 检索 + RRF 归并
         #    （候选获取阶段过滤来源——每个源独立 top-k 池）
+        #    任务二 2.3：矩阵消费路线隔离记录——raw_candidates 是各路
+        #    融合前的原始候选数、duration_ms 是各路自身耗时（不再把融合
+        #    计数当原始候选数、不再把 hybrid 总时长复制给两路）；失败路
+        #    如实记 error（executed=true/succeeded=false），成功零命中是
+        #    succeeded=true + candidates=0，绝不混淆。
         per_scope_rounds: dict[str, list] = {}
         import time as _time
         for sub in subqueries[:4]:
             for sc in scopes:
                 sc_sources = (sc,)  # 每个源独立 top-k 池（含未归属池）
-                t0 = _time.monotonic()
-                results, _rel = await hybrid_search(sub, sources=sc_sources)
-                vec_n = len([r for r in results if r.get("vec_score")])
-                bm_n = len([r for r in results if r.get("bm25_score")])
+                results, _rel, h_routes = await _hybrid_routes(sub, sources=sc_sources)
                 m = matrix[sc]
-                m["vector"]["executed"] = True
-                m["vector"]["candidates"] += vec_n
-                m["vector"]["duration_ms"] += int((_time.monotonic() - t0) * 1000)
-                m["keyword"]["executed"] = True
-                m["keyword"]["candidates"] += bm_n
-                m["keyword"]["duration_ms"] += int((_time.monotonic() - t0) * 1000)
+                for route_name in ("vector", "keyword"):
+                    info = h_routes.get(route_name) or {}
+                    m[route_name]["executed"] = bool(info.get("executed"))
+                    m[route_name]["candidates"] += int(info.get("raw_candidates") or 0)
+                    m[route_name]["duration_ms"] += int(info.get("duration_ms") or 0)
+                    if info.get("error"):
+                        m[route_name]["error"] = str(info["error"])
+                        m[route_name]["succeeded"] = False
+                    elif info.get("executed"):
+                        m[route_name]["succeeded"] = True
                 if results:
                     per_scope_rounds.setdefault(sc, []).extend(_hydrate_texts(results))
         rounds = [rs for rs in per_scope_rounds.values() if rs]
@@ -968,14 +1064,26 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
             for sc in scopes:
                 t0 = _time.monotonic()
                 sc_sources = (sc,)
-                labels, adjacency = _merged_graph(sc)
+                try:
+                    labels, adjacency = _merged_graph(sc)
+                except Exception as exc:  # noqa: BLE001 — 图谱路故障不牵连其他路
+                    matrix[sc]["graph"].update({
+                        "executed": True, "succeeded": False, "candidates": 0,
+                        "error": f"_merged_graph {exc.__class__.__name__}: {str(exc)[:120]}",
+                    })
+                    continue
                 entities = _pl_match_entities(base, labels) if FLAGS.get("ENTITY_RESOLUTION_ENABLED") else []
                 m = matrix[sc]["graph"]
                 m["executed"] = True
+                # 任务二 2.3：图谱正常零命中（无匹配实体/无合格扩展）不是
+                # 失败——succeeded=true + candidates=0；只有异常才 succeeded=false。
+                m["succeeded"] = True
+                m.setdefault("duration_ms", 0)
                 if sc == "breadth" and _STATIC_GRAPH_STATE.get("degraded"):
                     m["degrade_reason"] = "static graph unbound; fragment-only"
                 if not entities:
                     m["degrade_reason"] = m.get("degrade_reason") or "no entity matched"
+                    m["duration_ms"] += int((_time.monotonic() - t0) * 1000)
                     continue
                 neighbor_labels, paths = _pl_graph_expand(entities, adjacency)
                 if sc == "breadth":

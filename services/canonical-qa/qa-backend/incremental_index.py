@@ -14,7 +14,7 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import jieba
 import numpy as np
@@ -479,18 +479,40 @@ class IncrementalIndex:
             entry["record_key_shas"] = sorted(entry["record_key_shas"])
         return out
 
-    def vector_search(self, query_vector: np.ndarray, top_k: int) -> list[dict[str, Any]]:
+    def vector_search(
+        self, query_vector: np.ndarray, top_k: int,
+        allowed: Callable[[dict], bool] | None = None,
+    ) -> list[dict[str, Any]]:
+        """任务二 2.2：allowed 谓词在【候选形成阶段】生效——按来源范围
+        （及墓碑/版本门控）先过滤再计满 top_k，小体量源不再被其他源的
+        高分 chunk 在全局 top-k*3 截断处挤出（历史缺陷：6 条高分 breadth
+        chunk + 1 条可命中 atsc chunk，atsc 范围查询双路 0 召回）。"""
         with self._state_lock:
             if not self.record_count:
                 return []
             scores = self.embeddings @ query_vector
-            top_indices = np.argsort(scores)[::-1][:top_k]
-            return [
-                {"meta": self.meta[int(index)], "score": float(scores[int(index)])}
-                for index in top_indices
-            ]
+            top_indices = np.argsort(scores)[::-1]
+            if allowed is None:
+                top_indices = top_indices[:top_k]
+                return [
+                    {"meta": self.meta[int(index)], "score": float(scores[int(index)])}
+                    for index in top_indices
+                ]
+            out: list[dict[str, Any]] = []
+            for index in top_indices:
+                if len(out) >= top_k:
+                    break
+                meta = self.meta[int(index)]
+                if not allowed(meta):
+                    continue
+                out.append({"meta": meta, "score": float(scores[int(index)])})
+            return out
 
-    def bm25_search(self, query: str, top_k: int) -> list[dict[str, Any]]:
+    def bm25_search(
+        self, query: str, top_k: int,
+        allowed: Callable[[dict], bool] | None = None,
+    ) -> list[dict[str, Any]]:
+        """任务二 2.2：同 vector_search——allowed 在候选形成阶段生效。"""
         with self._state_lock:
             if self.bm25 is None:
                 return []
@@ -498,10 +520,19 @@ class IncrementalIndex:
             if not tokens:
                 return []
             scores = self.bm25.get_scores(tokens)
-            top_indices = np.argsort(scores)[::-1][:top_k]
+            top_indices = np.argsort(scores)[::-1]
+            # 计满 top_k：allowed 在计满 top_k 前裁剪不允许的候选——
+            # 小体量源在范围内取满；非 allowed 模式维持旧全局截断 + overlap 门。
+            kept: list[int] = []
+            for index in top_indices:
+                if len(kept) >= top_k:
+                    break
+                if allowed is not None and not allowed(self.meta[int(index)]):
+                    continue
+                kept.append(int(index))
             results = []
             query_tokens = set(tokens)
-            for index in top_indices:
+            for index in kept:
                 position = int(index)
                 overlap = len(query_tokens.intersection(self.corpus_tokens[position]))
                 if overlap:
