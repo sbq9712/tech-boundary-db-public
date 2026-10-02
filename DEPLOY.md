@@ -75,7 +75,14 @@ curl -I http://localhost:8080/.git/config
 curl -I http://localhost:8080/backend/app/main.py
 ```
 
-预期迁移为 `0020_upload_embedding_state (head)`，健康检查返回 `{"status":"ok"}`，三个敏感路径返回 404。再使用管理员账号从上传页完成一次真实上传，检查服务器目标目录、资料库分类状态、`embedding_status=ready` 和鉴权下载。
+预期迁移为当前链头（2026-10 起 `0032_qa_replay_state (head)`，以 `alembic current` 实际输出为准），健康检查返回 `{"status":"ok"}`，三个敏感路径返回 404。再使用管理员账号从上传页完成一次真实上传，检查服务器目标目录、资料库分类状态、`embedding_status=ready` 和鉴权下载。
+
+## 日常数据更新（离线环境）
+
+服务器不拉外网 Git：每日广度增量从 [sbq9712/tech-boundary-data-feed](https://github.com/sbq9712/tech-boundary-data-feed)
+下载 daily zip，走门户「资料库 → 广度追踪 → GitHub 广度情报」上传导入，
+随后确认导入计数、索引任务队列清零与 QA 增量索引增长。完整步骤与故障处理
+（幂等重放/400 包不合规/队列重试）见 [服务器迁移说明.md](./服务器迁移说明.md) 第 7 章。
 
 ## 常用命令
 
