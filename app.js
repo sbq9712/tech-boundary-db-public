@@ -1571,10 +1571,14 @@ async function submitQuery(options={}){
 
     if(requestConversationIsVisible(requestState))lastFailedQuery=query;
     const stopped=err?.name==='AbortError';
+    // 网络层故障（fetch TypeError / Failed to fetch / 回答流提前结束）不再透出
+    // 英文原文——后端已加 SSE 心跳根治长回答被反代掐断的问题，此处只做兜底
+    // 文案 + 重试引导（2026-10-03）。
+    const netFail=!stopped&&(err?.name==='TypeError'||/^(Failed to fetch|NetworkError|Load failed)/i.test(String(err?.message||''))||err?.message==='回答流提前结束');
     if(creatingConversation&&!requestState.sessionId)pendingConversation=null;
     assistantMsg.streaming=false;
     assistantMsg.status='';
-    assistantMsg.error=stopped?'已停止生成。':(err?.message||'连接失败，请稍后重试。');
+    assistantMsg.error=stopped?'已停止生成。':(netFail?'网络连接中断，答案可能仍在后台生成；请点击"重试"重新提问。':(err?.message||'连接失败，请稍后重试。'));
     if(regenerate&&replacedMessage){requestState.messages.pop();requestState.messages.push(replacedMessage);showToast(assistantMsg.error);}
     else refreshRequestConversationSurface(requestState);
     if(retryBtn)retryBtn.hidden=false;
@@ -2003,7 +2007,35 @@ function libraryView(){
     </section>`;
   }
   /* 列表页（广度子页或 industry/atsc）：顶部三分区按钮恒定展示 */
-  return `<section class="flat-content library">${navBtn}<div class="lib-head"><div class="filter-row"><select id="categoryFilter" aria-label="行业图景节点"><option value="">全部节点</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>行业图景节点</th><th>状态</th><th>资料时间</th><th>上传者</th><th>上传时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">ATSC用户与管理员上传的文档经分类与索引后会显示在这里</div></div><div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;
+  /* 2026-10-03（B3 补全）：其他广度情报页在文件表下方追加「行业/ATSC 同步的
+     情报」区块——行业/ATSC 上传勾选「同步上传到广度情报」的逐行记录按
+     spec-3tasks 契约在此展示（同步仅是展示入口，检索归属原栏目，不重复）。 */
+  const syncedBlock=(section==="breadth"&&sub==="other")?`<div id="syncedBreadthBlock" style="margin-top:18px;"></div>`:"";
+  return `<section class="flat-content library">${navBtn}<div class="lib-head"><div class="filter-row"><select id="categoryFilter" aria-label="行业图景节点"><option value="">全部节点</option></select><select id="statusFilter" aria-label="分类状态"><option value="">全部状态</option><option value="pending">待分类</option><option value="processing">分类中</option><option value="classified">已分类</option><option value="unclassified">未分类</option><option value="irrelevant">不相关</option><option value="failed">分类失败</option><option value="legacy_unclassified">历史未分类</option></select><button class="primary-btn" id="uploadLink" type="button" style="display:none;">上传资料</button></div></div><div class="table-scroll lib-table-scroll"><table><thead><tr><th>资料</th><th>行业图景节点</th><th>状态</th><th>资料时间</th><th>上传者</th><th>上传时间</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><div id="emptyMsg" class="lib-empty" style="display:none;"><div class="lib-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="lib-empty-title">暂无资料</div><div class="lib-empty-hint">ATSC用户与管理员上传的文档经分类与索引后会显示在这里</div></div>${syncedBlock}<div class="lib-foot"><span class="lib-count" id="countInfo"></span><div class="row-actions"><button class="secondary-btn" id="prevBtn" type="button">上一页</button><button class="secondary-btn" id="nextBtn" type="button">下一页</button></div></div></section>`;
+}
+/* 同步广度区块加载：行业/ATSC 勾选「同步上传到广度情报」的逐行记录（in_breadth_nav）。
+   只展示 origin_section 为 industry/atsc 的行（本页文件上传记录已在上方文件表）。 */
+async function loadSyncedBreadthBlock(){
+  const host=document.getElementById("syncedBreadthBlock");
+  if(!host)return;
+  let data=null;
+  try{
+    const r=await apiFetch("/api/breadth/manual-records?visibility=nav&limit=500");
+    if(r&&r.ok)data=await r.json();
+  }catch(_e){}
+  const originMap={"industry":"行业追踪","atsc":"ATSC内部报告"};
+  const rows=(data&&data.records||[]).filter(rec=>originMap[rec.origin_section]);
+  if(!rows.length){host.innerHTML="";return;}
+  const body=rows.slice(0,200).map(rec=>`<tr>
+      <td style="max-width:420px"><div style="font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(rec.title||"")}">${escapeHtml(rec.title||"未命名")}</div>${rec.url?`<a href="${escapeHtml(rec.url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--brand)">原文链接</a>`:""}</td>
+      <td>${escapeHtml(rec.category||"未分类")}</td>
+      <td>${escapeHtml(originMap[rec.origin_section]||rec.origin_section)}</td>
+      <td>${escapeHtml(rec.document_date||"-")}</td>
+      <td>${escapeHtml(rec.source_name||"-")}</td>
+      <td>${escapeHtml((rec.body||"").slice(0,80))}${(rec.body||"").length>80?"…":""}</td>
+    </tr>`).join("");
+  host.innerHTML=`<div class="lib-head"><div class="filter-row"><span style="font-size:13.5px;font-weight:650;color:var(--text-primary)">来自行业/ATSC 同步的情报</span><span style="font-size:12px;color:var(--text-tertiary)">${rows.length} 条 · 行业追踪/ATSC内部报告上传时勾选「同步上传到广度情报」的逐行记录</span></div></div>
+    <div class="table-scroll lib-table-scroll"><table><thead><tr><th>标题</th><th>行业图景节点</th><th>来源栏目</th><th>资料时间</th><th>来源</th><th>内容摘要</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function libFmtSize(n){if(!n)return "-";const u=["B","KB","MB","GB"];let i=0,s=n;while(s>=1024&&i<3){s/=1024;i++;}return s.toFixed(s<10?1:0)+" "+u[i];}
 function libFmtTime(iso){if(!iso)return "-";const d=new Date(iso);return isNaN(d)?"-":d.toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});}
@@ -2202,6 +2234,7 @@ async function loadLibrary(){
     /* 任务一 1.2（修复）：GitHub 页排队/构建中自动轮询——历史缺陷：本分支
        提前 return，轮询定时器永不建立（index_queued → scheduled_polls=0） */
     scheduleLibPolling(data.files);
+    loadSyncedBreadthBlock();
     return;
   }
   tb.innerHTML=data.files.map(f=>{
@@ -2249,6 +2282,7 @@ async function loadLibrary(){
   tb.querySelectorAll("button[data-lib-asset]").forEach(b=>b.onclick=()=>{const [id,asset]=b.dataset.libAsset.split("|");libAsset(id,asset,b.dataset.libName,b);});
   libRestoreIdxDetails(tb);
   scheduleLibPolling(data.files);
+  loadSyncedBreadthBlock();
 }
 function libAsset(id,asset,name,button){
   if(button)button.disabled=true;
@@ -2725,11 +2759,9 @@ function upOpenRowCfg(idx){
   const renderBody=(sheetName)=>{
     const sheet=sheets.find(s=>s.name===sheetName)||sheets[0];
     const headers=sheet.headers||[];
+    /* 导入方式已上移到上传文件行内（2026-10-03），此处只配工作表 + 列映射。 */
     return `<div style="margin-bottom:10px;"><label style="font-size:13px;">工作表：
       <select id="upCfgSheet" style="margin-left:6px;">${sheets.map(s=>`<option value="${escapeHtml(s.name)}" ${s.name===sheet.name?"selected":""}>${escapeHtml(s.name)}（${s.total_rows??(s.rows||[]).length} 行）</option>`).join("")}</select></label></div>
-      <div style="margin-bottom:10px;font-size:13px;">导入方式：
-      <label style="margin-right:14px;"><input type="radio" name="upCfgMode" value="row" ${(f.rowMode||"row")==="row"?"checked":""}> 每行一个情报</label>
-      <label><input type="radio" name="upCfgMode" value="file" ${f.rowMode==="file"?"checked":""}> 整个文件一个情报</label></div>
       <div class="lib-upload-tablewrap" style="max-height:300px;overflow:auto;"><table class="lib-upload-table"><thead><tr><th>语义槽位</th><th>表格列（必映射：标题${upTypeStrict(f)?"、情报类型":""}）</th></tr></thead><tbody>${slotRows(headers)}</tbody></table></div>
       ${typePreview(sheet,f.rowMapping)}`;
   };
@@ -2772,7 +2804,7 @@ function upOpenRowCfg(idx){
   ov.querySelector("#upCfgClose").onclick=()=>ov.remove();
   ov.querySelector("#upCfgCancel").onclick=()=>ov.remove();
   ov.querySelector("#upCfgSave").onclick=()=>{
-    f.rowMode=ov.querySelector('input[name="upCfgMode"]:checked').value;
+    /* rowMode 不再从弹窗读取：行内单选已是唯一入口（见 upRenderList）。 */
     f.rowSheet=ov.querySelector("#upCfgSheet").value;
     const m={};ov.querySelectorAll("[data-slot]").forEach(sel=>{if(sel.value)m[sel.dataset.slot]=sel.value;});
     f.rowMapping=m;
@@ -2780,9 +2812,11 @@ function upOpenRowCfg(idx){
   };
 }
 function upRowCfgLabel(f){
+  /* 2026-10-03：导入方式已内联在文件行；此按钮只在逐行模式渲染（弹窗配
+     工作表 + 列映射），标签直接给出当前工作表名。 */
   if(f._previewError)return "预览失败";
   if(!f._previewSheets)return "读取中…";
-  return f.rowMode==="file"?"整文件导入":(f.rowSheet||"配置映射");
+  return f.rowSheet?("工作表 "+f.rowSheet):"配置映射";
 }
 function upAddFiles(fileList){
   const duplicated=[];
@@ -2816,9 +2850,18 @@ function upRenderList(){
   if(dialog)dialog.classList.toggle("has-table",has);
   list.innerHTML=upPending.map((f,i)=>{
     const meta=upRowStateMeta(f);
-    const rowLocked=upIsTableRowFile(f.name)&&(f.rowMode||"row")==="row"&&f.rowSheet; /* 逐行模式：日期来自各行 */
+    const isTable=upIsTableRowFile(f.name);
+    const rowLocked=isTable&&(f.rowMode||"row")==="row"&&f.rowSheet; /* 逐行模式：日期来自各行 */
+    /* 2026-10-03（用户反馈）：导入方式（每行一个情报 / 整个文件一个情报）
+       直接内联在文件行里选择，不再需要点开「表格导入配置」弹窗才能改。
+       弹窗保留工作表选择 + 列映射（仅逐行模式有意义）。 */
+    const modeSel=isTable?`
+      <div class="lib-up-mode" role="radiogroup" aria-label="导入方式" data-up-mode="${i}">
+        <label class="${(f.rowMode||"row")==="row"?"is-on":""}"><input type="radio" name="upMode-${i}" value="row" ${(f.rowMode||"row")==="row"?"checked":""}>每行一个情报</label>
+        <label class="${f.rowMode==="file"?"is-on":""}"><input type="radio" name="upMode-${i}" value="file" ${f.rowMode==="file"?"checked":""}>整个文件一个情报</label>
+      </div>`:"";
     return `<tr data-up-row="${i}" class="${meta.cls.trim()}">
-      <td class="lib-up-fname" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}<small>${libFmtSize(f.size)}</small></td>
+      <td class="lib-up-fname" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}<small>${libFmtSize(f.size)}</small>${modeSel}</td>
       <td><input class="lib-upload-input lib-up-title" type="text" placeholder="留空则自动识别" aria-label="资料标题" value="${escapeHtml(f.upTitle||"")}"></td>
       <td><div class="lib-up-datebox" data-up-datebox="${i}" ${rowLocked?'title="逐行模式：日期取自每行的日期列，无需文件级日期"':""}>
         <fieldset ${rowLocked?'disabled':""} style="border:0;padding:0;margin:0;display:inline;">
@@ -2830,7 +2873,7 @@ function upRenderList(){
       <td><select class="lib-upload-input lib-up-cat" aria-label="行业图景节点">${upTaxonomy?upTaxonomyOptions():'<option value="">不指定，通过AI自动识别</option>'}</select></td>
       <td><input class="lib-upload-input lib-up-note" type="text" placeholder="选填" aria-label="备注" value="${escapeHtml(f.upNote||"")}"></td>
       <td>${upSyncColVisible()?'<input type="checkbox" class="lib-up-sync" data-up-sync="${i}" aria-label="同步该文件到广度情报" '+(f.upSyncBreadth?'checked':'')+'>':'<span class="lib-up-sync-na">—</span>'}</td>
-      <td class="lib-up-op">${upIsTableRowFile(f.name)?`<button class="lib-upload-rm" type="button" data-up-cfg="${i}" title="导入方式 / 工作表 / 列映射">${escapeHtml(upRowCfgLabel(f))}</button>`:""}<span class="lib-up-state">${escapeHtml(meta.text)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
+      <td class="lib-up-op">${isTable&&(f.rowMode||"row")==="row"?`<button class="lib-upload-rm" type="button" data-up-cfg="${i}" title="工作表 / 列映射">${escapeHtml(upRowCfgLabel(f))}</button>`:""}<span class="lib-up-state">${escapeHtml(meta.text)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
     </tr>`;}).join("");
   /* 已选分类回显（value 不能直接内联在 select 上） */
   list.querySelectorAll("[data-up-row]").forEach(tr=>{
@@ -2839,6 +2882,17 @@ function upRenderList(){
   });
   list.querySelectorAll("button[data-up-rm]").forEach(b=>b.onclick=()=>{upPending.splice(Number(b.dataset.upRm),1);upRenderList();});
   list.querySelectorAll("button[data-up-cfg]").forEach(b=>b.onclick=()=>upOpenRowCfg(Number(b.dataset.upCfg)));
+  /* 行内导入方式切换：立刻落状态 + 需要时补拉预览（切到逐行且尚无工作表数据时
+     自动加载并猜测列映射），随后重渲染让日期锁定态/按钮显隐即时联动。 */
+  list.querySelectorAll(".lib-up-mode input[type=radio]").forEach(r=>r.addEventListener("change",()=>{
+    const f=upPending[Number(r.closest(".lib-up-mode").dataset.upMode)];
+    if(!f)return;
+    f.rowMode=r.value;
+    if(r.value==="row"&&!f._previewSheets&&!f._previewError){
+      upLoadRowPreview(f).then(()=>upRenderList());
+    }
+    upRenderList();
+  }));
   upBindRowInputs();
   const submit=document.getElementById("upSubmit");
   if(submit)submit.disabled=upPending.length===0;

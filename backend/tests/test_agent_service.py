@@ -334,3 +334,103 @@ def test_sop_header_uses_only_actually_used_citations_at_callsite():
     src = inspect.getsource(agent_service._stream_agent_response_impl)
     assert "_header_citations = _used_citations(full_response, citations)\n" in src
     assert "or final_citations" not in src.split("_header_citations")[1].split("\n")[0]
+
+
+# ── SSE 心跳泵（2026-10-03：门户 network error 根治回归）─────────────────
+
+def test_heartbeat_pump_inserts_ping_during_silence():
+    """静默超过 interval 时下发 ": ping" 注释行，事件序列不变。"""
+    async def slow_impl():
+        yield "event: status\ndata: {}\n\n"
+        await asyncio.sleep(0.12)
+        yield "event: done\ndata: {}\n\n"
+
+    async def run():
+        out = []
+        async for chunk in agent_service._heartbeat_pump(slow_impl(), 0.03):
+            out.append(chunk)
+        return out
+
+    chunks = asyncio.run(run())
+    events = [c for c in chunks if not c.startswith(":")]
+    pings = [c for c in chunks if c.startswith(":")]
+    assert events == ["event: status\ndata: {}\n\n", "event: done\ndata: {}\n\n"]
+    assert pings and all(p == ": ping\n\n" for p in pings)
+
+
+def test_heartbeat_pump_no_ping_when_events_flow():
+    """事件持续流动时不插心跳（token 流期间无额外字节）。"""
+    async def chatty_impl():
+        for _ in range(5):
+            yield "event: token\ndata: {}\n\n"
+            await asyncio.sleep(0.01)
+
+    async def run():
+        return [c async for c in agent_service._heartbeat_pump(chatty_impl(), 5.0)]
+
+    chunks = asyncio.run(run())
+    assert len(chunks) == 5 and not any(c.startswith(":") for c in chunks)
+
+
+def test_heartbeat_pump_propagates_impl_exception():
+    """实现体异常原样转交（外壳统一落库 failed + 下发 error 事件）。"""
+    class Boom(Exception):
+        pass
+
+    async def broken_impl():
+        yield "event: status\ndata: {}\n\n"
+        raise Boom("verify chain crashed")
+
+    async def run():
+        try:
+            async for _ in agent_service._heartbeat_pump(broken_impl(), 0.05):
+                pass
+        except Boom as exc:
+            return str(exc)
+        return "no-raise"
+
+    assert asyncio.run(run()) == "verify chain crashed"
+
+
+def test_heartbeat_pump_consumer_cancel_cancels_producer():
+    """客户端断开（消费任务被取消，uvicorn 断连语义）→ 生产者被取消，不悬挂。"""
+    import contextlib
+
+    started = asyncio.Event()
+    cancelled = {"flag": False}
+
+    async def stalled_impl():
+        yield "event: status\ndata: {}\n\n"
+        started.set()
+        try:
+            await asyncio.sleep(30)
+            yield "event: done\ndata: {}\n\n"  # pragma: no cover
+        except asyncio.CancelledError:
+            cancelled["flag"] = True
+            raise
+
+    async def run():
+        agen = agent_service._heartbeat_pump(stalled_impl(), 0.05)
+
+        async def consume():
+            async for _ in agen:
+                pass
+
+        task = asyncio.create_task(consume())
+        await started.wait()
+        await asyncio.sleep(0.01)  # 让泵回到 queue.get() 等待点
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(0.05)
+        return cancelled["flag"]
+
+    assert asyncio.run(run()) is True
+
+
+def test_stream_agent_response_wraps_impl_with_heartbeat(monkeypatch):
+    """外壳注入心跳：HEARTBEAT_SECONDS>0 时 impl 被 _heartbeat_pump 包裹。"""
+    import re as _re
+    src = inspect.getsource(agent_service.stream_agent_response)
+    assert "_heartbeat_pump(impl, HEARTBEAT_SECONDS)" in src
+    assert _re.search(r"HEARTBEAT_SECONDS\s*=\s*float\(\s*os\.getenv\(\s*\"TECHDB_AGENT_HEARTBEAT_SECONDS\",\s*\"15\"", src + inspect.getsource(agent_service)) is not None

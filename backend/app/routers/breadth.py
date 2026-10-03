@@ -60,6 +60,9 @@ def _serialize(record: BreadthManualRecord) -> dict:
         "ai_picked": bool(record.ai_picked),
         "source_ref": record.source_ref,
         "in_breadth_nav": bool(record.in_breadth_nav),
+        # 行业/ATSC「同步上传到广度」的行记录归属原栏目（spec-3tasks：
+        # 同步仅是展示入口）——门户广度页展示该组记录时需要此字段。
+        "origin_section": record.origin_section,
         "created_at": _iso(record.created_at),
         "updated_at": _iso(record.updated_at),
         # 广度总表短键（与 meta-part 记录字段逐字对齐）

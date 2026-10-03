@@ -612,6 +612,70 @@ def _sse(event: str, payload: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+# ── SSE 心跳（2026-10-03：门户「提问后 network error」根治）──────────────
+# 根因（web 容器 nginx error log 实证：upstream timed out while reading
+# upstream，/api/assistant/stream，间隔恰为 proxy_read_timeout=300s）：
+# token 流结束 → 答案侧核验链（补充分类/事实核验/claim 映射/修复改写）
+# 是多段串行 LLM 调用，预算 QA_VERIFY_BUDGET=300s / QA_MAPPING_TIMEOUT=300s
+# / QA_SUPPLEMENTAL_CLASSIFY_BUDGET=240s——静默窗口合计可达 600s+，期间
+# 不向客户端下发任何字节；nginx 在 300s 无字节流动时切断连接，前端只看
+# 到流中断（「回答流提前结束」/Failed to fetch = 用户口中的 network
+# error）。历次修复都针对 error 事件路径，从未触及「静默期」本身。
+# 方案：泵模式心跳——实现体事件写入队列，外层在队列空转
+# TECHDB_AGENT_HEARTBEAT_SECONDS 时下发 SSE 注释行 ": ping"（SSE 规范
+# 注释行，EventSource 与门户自研解析器均忽略），持续重置 nginx 读时钟。
+# 0 = 关闭（本地直连 api 无反代场景）。心跳不改变事件序列与语义。
+HEARTBEAT_SECONDS = float(os.getenv("TECHDB_AGENT_HEARTBEAT_SECONDS", "15") or 0)
+
+
+async def _heartbeat_pump(
+    impl: AsyncIterator[str], interval: float
+) -> AsyncIterator[str]:
+    """给 SSE 实现体加心跳泵：静默期下发 ": ping" 注释行。
+
+    - 实现体异常（含 CancelledError）原样转交消费者，不吞不改；
+    - 消费者提前关闭（客户端断开）时取消实现体任务并转交清理；
+    - 事件顺序与去心跳后完全一致，仅插入注释行。
+    """
+    queue: asyncio.Queue[tuple[str, object] | None] = asyncio.Queue()
+    captured: list[BaseException] = []
+    state = {"finished": False}
+
+    async def _produce() -> None:
+        try:
+            async for event in impl:
+                await queue.put(("event", event))
+        except BaseException as exc:  # CancelledError 也转交外层统一收尾
+            captured.append(exc)
+        finally:
+            state["finished"] = True
+            await queue.put(None)
+
+    producer = asyncio.create_task(_produce())
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=interval)
+            except asyncio.TimeoutError:
+                yield ": ping\n\n"
+                continue
+            if item is None:
+                break
+            kind, payload = item
+            if kind != "event":
+                raise payload  # pragma: no cover - 队列只放 event 元组
+            yield payload
+    finally:
+        if not state["finished"]:
+            producer.cancel()
+            try:
+                await producer
+            except BaseException:
+                pass
+    if captured:
+        raise captured[0]
+
+
 def _finish_run(
     db: Session,
     run: ConversationAgentRun,
@@ -674,14 +738,25 @@ async def stream_agent_response(
     提取阶段的 NameError）都会 ①把 run 落库定为 failed（绝不永久停留
     running）②向客户端下发与落库一致的 error 事件，而不是让生成器在
     中途抛出、前端只看到流中断（network error）。
+
+    外层包 _heartbeat_pump：检索/分类/核验链等静默期每 15s（可配）下发
+    ": ping" 注释行，防止 nginx proxy_read_timeout 切断长回答流（用户侧
+    表现为提问后 network error；web 容器 error log 有 upstream timed out
+    实证）。心跳不改变事件语义，注释行对一切 SSE 解析器不可见。
     """
     run_ref: dict = {}
     try:
-        async for event in _stream_agent_response_impl(
+        impl = _stream_agent_response_impl(
             query, session_id, db, run_ref,
             selected_model=selected_model, current_user=current_user,
             regenerate=regenerate, retry=retry,
-        ):
+        )
+        event_stream = (
+            _heartbeat_pump(impl, HEARTBEAT_SECONDS)
+            if HEARTBEAT_SECONDS > 0
+            else impl
+        )
+        async for event in event_stream:
             yield event
     except asyncio.CancelledError:
         # 客户端断开/任务取消：与实现体内部取消同语义地收尾后继续传播

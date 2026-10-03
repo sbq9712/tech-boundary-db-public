@@ -126,24 +126,13 @@ function switchView(view) {
   if (calendarSidebar) calendarSidebar.style.display = 'none';
   if (reportContent) reportContent.style.display = 'none';
   if (calendarContent) calendarContent.style.display = 'none';
-  const qaSidebar = $('qaSidebar');
-  if (qaSidebar) qaSidebar.style.display = 'none';
 
-  const qaView = $('qaView');
   const mainContent = document.querySelector('.content');
 
-  if (view === 'qa') {
-    if (qaView) qaView.style.display = 'flex';
-    if (mainContent) mainContent.style.display = 'none';
-    filterBlocks.forEach((b) => { b.style.display = 'none'; });
-    if (qaSidebar) qaSidebar.style.display = '';
-    if (contentToolbar) contentToolbar.style.display = 'none';
-    recordList.style.display = 'none';
-    if (window.qaModule && window.qaModule.switchToQAView) {
-      window.qaModule.switchToQAView();
-    }
-  } else if (view === 'reports') {
-    if (qaView) qaView.style.display = 'none';
+  // qa 视图已移除（2026-10-03）：问答入口统一到门户 index.html。防御性
+  // 兜底——外部脚本仍传 'qa' 时回落情报总表，不再渲染已删除的 DOM。
+  if (view === 'qa') view = 'intelligence';
+  if (view === 'reports') {
     if (mainContent) mainContent.style.display = '';
     if (reportView) reportView.style.display = '';
     filterBlocks.forEach((b) => { b.style.display = 'none'; });
@@ -158,7 +147,6 @@ function switchView(view) {
     reportContent.style.display = '';
     renderReportView();
   } else if (view === 'calendar') {
-    if (qaView) qaView.style.display = 'none';
     if (mainContent) mainContent.style.display = '';
     if (calendarSidebar) calendarSidebar.style.display = '';
     filterBlocks.forEach((b) => { b.style.display = 'none'; });
@@ -173,7 +161,6 @@ function switchView(view) {
     calendarContent.style.display = '';
     renderCalendarView();
   } else {
-    if (qaView) qaView.style.display = 'none';
     if (mainContent) mainContent.style.display = '';
     filterBlocks.forEach((b) => { b.style.display = ''; });
     if (contentToolbar) contentToolbar.style.display = '';

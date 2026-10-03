@@ -1,7 +1,8 @@
 // T7/G11（2026-10-02）共享 URL 消毒器 + 门户/广度两页接线的行为与契约测试：
 //   node tests/js/test_safe_url.mjs
 // 覆盖：safe_url.js 本体（scheme 白名单/控制字符剔除/引号编码/实体转义）、
-// qa.js 委托共享实现、app.js inlineMd 与动态 href 注入点、HTML 加载顺序。
+// app.js inlineMd 与动态 href 注入点、HTML 加载顺序。
+// 2026-10-03：qa.js 委托段随广度「数据库问答」视图移除而删除。
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -84,18 +85,11 @@ check('safeHref & 实体转义（防 &colon;/&#58; 实体绕过）',
   && !entOut.startsWith('javascript:'));
 check('safeHref < > 转义', !safe.safeHref('https://x/<b>').includes('<'));
 
-// ═══ 2. qa.js 委托共享实现（预装 TechDBSafeUrl 后 eval qa.js） ═══
-console.log('qa.js 委托');
-installStubs();
-globalThis.TechDBSafeUrl = safe; // 模拟 breadth/index.html 先加载 safe_url.js
-const qaSrc = readFileSync(join(root, 'breadth', 'qa.js'), 'utf8');
-(0, eval)(qaSrc.replace(/^window\.qaModule/m, 'globalThis.qaModule'));
-const hooks = globalThis.qaModule.__testHooks ?? globalThis.window.qaModule.__testHooks;
-const { _qaSafeUrl, _qaSafeHref } = hooks;
-check('_qaSafeUrl 委托后 javascript: → #', _qaSafeUrl('javascript:alert(1)') === '#');
-check('_qaSafeUrl 委托后 java\\tscript: → #', _qaSafeUrl('java\tscript:alert(1)') === '#');
-check('_qaSafeUrl 委托后 https 放行', _qaSafeUrl('https://ok.example/x') === 'https://ok.example/x');
-check('_qaSafeHref 委托后无裸引号', !_qaSafeHref('/a" x="1').includes('"'));
+// ═══ 2.（已删除）qa.js 委托段 ═══
+// 2026-10-03：广度页「数据库问答」视图整体移除（问答入口统一收敛到门户
+// index.html /api/assistant/stream），breadth/qa.js 随之删除；其安全行为
+// （safeUrl 委托）由共享 assets/lib/safe_url.js 本体（第 1 节）与门户
+// app.js 注入点（第 3 节）继续覆盖。
 
 // ═══ 3. app.js inlineMd / 动态 href 注入点（整文件 eval + 全局函数） ═══
 console.log('app.js 注入点');
@@ -139,9 +133,10 @@ check('index.html safe_url.js 先于 app.js',
 const brHtml = readFileSync(join(root, 'breadth', 'index.html'), 'utf8');
 check('breadth/index.html 加载 ../assets/lib/safe_url.js',
   brHtml.includes('../assets/lib/safe_url.js'));
-check('breadth safe_url.js 先于 qa.js',
-  brHtml.indexOf('../assets/lib/safe_url.js') < brHtml.indexOf('qa.js?v='));
-check('qa.js 委托共享实现', qaSrc.includes('window.TechDBSafeUrl.safeUrl'));
+check('breadth safe_url.js 先于 app.js',
+  brHtml.indexOf('../assets/lib/safe_url.js') < brHtml.indexOf('app.js?v='));
+// 2026-10-03：qa.js 已随广度「数据库问答」视图移除——确保不再被页面引用。
+check('breadth/index.html 不再加载 qa.js', !brHtml.includes('qa.js'));
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

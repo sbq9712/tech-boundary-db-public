@@ -184,6 +184,29 @@ def test_list_endpoint_shape():
     db.close()
 
 
+def test_list_endpoint_exposes_origin_section():
+    """2026-10-03（B3 补全）：行业/ATSC 同步行记录须暴露 origin_section——
+    门户「其他广度情报」页的同步区块按该字段过滤与标注来源栏目。"""
+    db = _db()
+    rec = _mk_upload(db)
+    sync_breadth_manual_record(db, rec, "origin-section-probe")
+    row = db.execute(
+        text("SELECT id FROM breadth_manual_records WHERE upload_id=:u ORDER BY created_at DESC LIMIT 1"),
+        {"u": str(rec.id)},
+    ).scalar_one()
+    db.execute(
+        text("UPDATE breadth_manual_records SET origin_section='industry' WHERE id=:i"),
+        {"i": str(row)},
+    )
+    db.commit()
+    db.close()
+    db = _db()
+    data = list_manual_records(level=None, limit=500, offset=0, current_user="breadthtest", db=db)
+    hit = next(r for r in data["records"] if r["id"] == str(row))
+    assert hit["origin_section"] == "industry"
+    db.close()
+
+
 def test_rename_survives_index_outage(monkeypatch, tmp_path):
     """检索服务停机（网络层失败）不阻断改名：200 + 标题双向生效。"""
     import httpx as _httpx
