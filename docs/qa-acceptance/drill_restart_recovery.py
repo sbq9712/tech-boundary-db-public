@@ -264,9 +264,16 @@ def phase_a(jwt: str, keep: bool = False) -> None:
             try:
                 st, _ = api(jwt, "DELETE", f"/api/uploads/{up_id}")
                 print(f"清理 upload {up_id[:8]}: {st}")
-                time.sleep(4)
-                check("清理后搜索归零（墓碑生效）", search_hits(MARK) == 0,
-                      f"hits={search_hits(MARK)}")
+                # 删除→worker→canonical 墓碑传播有时延（首轮实测 4s 不够）：
+                # 轮询至多 40s，超时才算 FAIL。
+                hits, waited = -1, 0
+                while waited < 40:
+                    time.sleep(4); waited += 4
+                    hits = search_hits(MARK)
+                    if hits == 0:
+                        break
+                check("清理后搜索归零（墓碑生效）", hits == 0,
+                      f"hits={hits} waited={waited}s")
             except Exception as e:
                 print(f"清理失败：{e}")
 
