@@ -1,0 +1,60 @@
+== 演练标记：matrix25-e90718 ==
+== 种子上传 ==
+  [PASS] breadth 种子上传 | st=201 row_import=2
+  [PASS] breadth 种子 indexed | status=index_processing
+  [PASS] industry 种子上传 | st=201
+  [PASS] industry 种子 indexed | status=index_processing
+  [PASS] atsc 种子上传 | st=201
+  [PASS] atsc 种子 indexed | status=index_processing
+  [PASS] 冲突对 breadth 新情报 indexed | st=201
+  [PASS] sync 种子上传+indexed | st=201
+== 3×3 矩阵（每源每路真实召回）==
+  [PASS] vector × breadth 召回 | cell=50 hits=1 attempt=1
+  [PASS] vector × industry 召回 | cell=3 hits=1 attempt=1
+  [PASS] vector × atsc 召回 | cell=50 hits=1 attempt=1
+  [PASS] keyword × breadth 召回 | cell=50 hits=1
+  [PASS] keyword × industry 召回 | cell=3 hits=1
+  [PASS] keyword × atsc 召回 | cell=2 hits=1
+  [PASS] graph × breadth（scope 图谱可用） | nodes=500
+  [PASS] graph × industry（scope 图谱含种子实体） | entity=matrix25-e90718 行业专属分类 nodes=6
+  [PASS] graph × atsc（scope 图谱含种子实体） | entity=matrix25-e90718 内部专属分类 nodes=8
+  [PASS] graph 路 via_graph 归因进入终局引用（非装饰） | cell_cand=25 via_graph引用=17 示例=['锂电', '锂电', '锂电']
+== 场景：收窄/零证据 ==
+  [PASS] 仅 industry 收窄命中（不串源） | sections=['industry', 'industry', 'industry']
+  [PASS] industry 专属内容不串入 atsc 池（收窄如实） | leak=0
+  [PASS] 全无证据如实上报（evidence 非 sufficient，弱候选不冒充） | results=50 evidence=partial cov=0.2222
+== 场景：跨源证据冲突 ==
+  [PASS] 同题新旧证据同时召回且可分辨（ATSC 2024-11 350 vs breadth 2026-09 420） | a1=('atsc', '2024-11-15') c1=('breadth', '2026-09-25')
+== 场景：图谱无边对照 ==
+  [PASS] industry 图谱归因不虚标（无边记录不伪造 via_graph） | i2_via_graph=None
+== 场景：sync 同步广度不重复召回 ==
+  [PASS] sync 记录只归 industry（breadth 检索零命中，不重复召回） | industry=1 breadth=0
+== 场景：权限 ==
+  [PASS] 未登录问答被拒（401） | st=401
+  [PASS] 管理员创建普通用户 | st=201
+  [PASS] 普通用户登录
+  [PASS] 普通用户可访问图谱/检索面 | st=200
+  [PASS] 普通用户可检索 ATSC 数据（引用 primary_section=atsc） | found=True
+  [PASS] 普通用户上传被拒（403，写权限不变） | st=403
+== 场景：门户背景 breadth-only ==
+  [PASS] 门户背景不含 industry/atsc 专属实体（服务端过滤，种子唯一分类不泄漏） | nodes=500 leak=False
+  [PASS] industry 视图含自身实体（对照） | nodes=6
+== 真实模型问答抽样（portal SSE，glm-5.2）==
+  [PASS] 问答实质答案或诚实拒答（绝不编造能量密度） | len=169 done=True has350=False boundary=True fab=False head='数据来源：行业情报\n\n数据库中没有相关信息。（据现有证据尚未证实）检索资料中与 matrix25' err={}
+  [PASS] 问答/检索 ATSC 归因一致（primary_section=atsc） | secs={'industry'} cites=1 ans_mark=True fallback=True
+  [PASS] 行业题答案引用行业来源（citations 或检索层归因） | cites=2 ans_mark=True fallback=True
+  [PASS] 无法支持主张时不冒充（答案层知识边界） | len=481 boundary=True head=数据来源：无（本轮检索资料中未找到与该主题相关的证据）
+
+数据库中没有关于「量子通量超驱动矩阵技术」的相关信息。
+
+需要
+== 清理 ==
+  delete upload 73b2914e: 200
+  delete upload 4628518a: 200
+  delete upload 39ac948b: 200
+  delete upload ea519382: 200
+  delete upload 64a37587: 200
+  delete user m25ud9b37b: 204
+  [PASS] 清理后搜索归零（墓碑生效） | hits=0
+
+结果：37 PASS / 0 FAIL / 0 SKIP

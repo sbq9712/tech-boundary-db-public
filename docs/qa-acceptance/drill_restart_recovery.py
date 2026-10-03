@@ -358,7 +358,10 @@ def phase_b() -> None:
                 run_checked("销毁隔离实例", "docker", "rm", "-f", ISO_NAME, timeout=60)
                 print("  隔离实例已销毁（--rm 卷随容器回收）")
             except Exception as e:
-                print(f"  隔离实例清理失败（请手动 docker rm -f {ISO_NAME}）：{e}")
+                # Codex r5 P3-4：隔离容器清理失败必须计入 FAIL（残留容器会
+                # 占用 ISO_NAME/端口，污染下一轮演练）
+                check("隔离实例清理成功", False,
+                      f"请手动 docker rm -f {ISO_NAME}：{e}")
         # 防御性说明：共享栈在本方法学下从未被写坏（损坏仅发生在隔离实例），
         # 故无需「恢复备份」步骤；若未来有人把破坏步骤搬回共享栈，必须
         # 在 finally 里补备份恢复——旧版 Drill 的教训。
@@ -371,8 +374,20 @@ def main() -> int:
     args = ap.parse_args()
     jwt = login()
     print(f"== 演练标记：{MARK} ==")
-    phase_a(jwt, keep=args.keep)
-    phase_b()
+    try:
+        phase_a(jwt, keep=args.keep)
+        # Codex r5 P3-4：Phase A 有 FAIL 时跳过 Phase B——在错误状态上继续
+        # 破坏性演练只会产出误导性结论（11 号规则：失败即中止所在阶段）。
+        if FAIL:
+            print(f"[SKIP] Phase B 跳过：Phase A 已有 {len(FAIL)} 项 FAIL")
+        else:
+            phase_b()
+    except (KeyboardInterrupt, SystemExit) as e:
+        # 中断也是失败：计入 FAIL 后按非零码退出，不静默吞掉
+        check("演练未被中断", False, f"interrupted: {e!r}")
+        print(f"\n结果：{len(PASS)} PASS / {len(FAIL)} FAIL / {len(SKIP)} SKIP")
+        print("FAILED:", "; ".join(FAIL))
+        return 1
     print(f"\n结果：{len(PASS)} PASS / {len(FAIL)} FAIL / {len(SKIP)} SKIP")
     if FAIL:
         print("FAILED:", "; ".join(FAIL))

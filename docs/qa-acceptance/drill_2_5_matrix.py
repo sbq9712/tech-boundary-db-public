@@ -40,6 +40,7 @@ import argparse
 import http.client
 import io
 import json
+import os
 import re
 import secrets
 import sys
@@ -140,7 +141,9 @@ def upload_rows(jwt, section, rows, mapping=None, sync=False, tag="", breadth_so
         fields["breadth_source"] = breadth_source
     if sync:
         fields["sync_upload_to_breadth"] = "true"
-    body, ct = multipart(fields, {"files": (f"m25{tag}.xlsx", xlsx_bytes(rows), XLSX_MIME)})
+    # Codex r5 P3-2：文件名用强演练指纹 m25qa-drill-*（预清理只认该前缀+标题
+    # matrix25- 双指纹，杜绝误删他人碰巧 m25*.xlsx 的真实上传）。
+    body, ct = multipart(fields, {"files": (f"m25qa-drill-{tag}.xlsx", xlsx_bytes(rows), XLSX_MIME)})
     req = urllib.request.Request(
         API + "/api/uploads", method="POST", data=body,
         headers={"Authorization": f"Bearer {jwt}", "Content-Type": ct})
@@ -255,30 +258,39 @@ def main() -> int:
     temp_user = "m25u" + secrets.token_hex(3)
     temp_pw = secrets.token_urlsafe(12)
 
-    # ── 预清理：删除历史演练残留（文件名 m25*.xlsx / 标题 matrix25-*）──
+    # ── 预清理：删除历史演练残留（强指纹：m25qa-drill-* 文件名 + matrix25 标题）──
     # 起因：某轮演练在清理前被中断，残留的 matrix25-bb1481 内容与本轮种子
     # 逐字相同，向量路 RRF 去重时旧副本胜出、本轮 mark 命中=0，造成 vector×atsc
     # 假性 FAIL。演练自愈：开跑前扫列表接口删除自身命名约定的一切残留。
+    # Codex r5 P3-2/P3-3：删除只认强指纹——文件名 m25qa-drill-*.xlsx 前缀
+    # （真实用户上传不会以该演练专有前缀命名；行上传的列表 title 是
+    # 「表格情报 <文件名>」不含记录标题，故指纹只能落在文件名上）；
+    # 删除受理与归零轮询全部计入断言（失败=FAIL，不再只 WARN）；
+    # 轮询上限环境变量可调。
     try:
         st, d = api(jwt, "GET", "/api/uploads?limit=500")
         stale = []
         for f in (d.get("files") or d.get("items") or []):
             fn = str(f.get("original_filename") or "")
-            if fn.startswith("m25") and fn.endswith(".xlsx"):
+            if fn.startswith("m25qa-drill-") and fn.endswith(".xlsx"):
                 stale.append(f.get("id"))
         for sid in stale:
             st2, _ = api(jwt, "DELETE", f"/api/uploads/{sid}")
             print(f"  预清理残留上传 {str(sid)[:8]}: {st2}")
+            check("预清理删除受理", st2 in (200, 202, 204), f"st={st2}")
         if stale:
-            for _ in range(12):
+            deadline = int(os.environ.get("DRILL_PRECLEAN_TIMEOUT", "120"))
+            waited = 0
+            while waited < deadline:
+                time.sleep(5); waited += 5
                 st3, d3 = qa_search("matrix25")
-                if not (d3.get("results") or []):
+                if not hits_marked(d3, "matrix25-"):
                     break
-                time.sleep(5)
             st3, d3 = qa_search("matrix25")
-            print(f"  预清理后 matrix25 命中={len(d3.get('results') or [])}")
-    except Exception as exc:  # 预清理失败不阻断演练，但如实打印
-        print(f"  [WARN] 预清理异常：{exc!r}")
+            check("预清理后 matrix25 检索归零", not hits_marked(d3, "matrix25-"),
+                  f"hits={len(hits_marked(d3, 'matrix25-'))} waited={waited}s")
+    except Exception as exc:  # 预清理链路异常必须计入 FAIL（不能静默继续）
+        check("预清理链路无异常", False, f"exc={exc!r}")
 
     try:
         # ── 种子（三源真实上传入口）────────────────────────────
@@ -506,19 +518,52 @@ def main() -> int:
             # 不限源全局 FINAL_TOP_K=25 窗口实测排 ~42（同查询 atsc 收窄检索 rank-0，
             # 见矩阵格）——答案层契约是「实质答案 或 诚实拒答」，两者都合法；
             # 编造数值（给出非 350 的能量密度断言却无引用）是唯一 FAIL 路径。
-            boundary_words = ("没有找到", "未找到", "未检索到", "无法确认", "没有相关",
-                              "未见", "无法", "不存在", "暂无", "未收录", "知识边界")
-            is_boundary = any(k in ans for k in boundary_words)
-            substantive = "350" in ans
-            # 冒充检测：答案断言了别的能量密度数值（Wh/kg 数字≠350）且无内部评估引用
-            other_wh = [m for m in re.findall(r"(\d{3})\s*Wh", ans) if m != "350"]
-            fabricated = bool(other_wh) and not any(
-                "内部评估" in str(c.get("title")) for c in cites)
+            # Codex r5 P2-1：拒答判定改为受约束短语（完整句式，不能是散落词），
+            # 冒充检测覆盖中文数字/变换单位（Wh/kg、kWh/kg、watt-hours/kg、瓦时）。
+            boundary_phrases = (
+                "数据库中没有", "数据库中未", "未检索到", "没有找到相关", "未找到相关",
+                "未见相关证据", "没有相关信息", "未收录", "知识边界",
+                "无法确认", "无法提供",
+            )
+            is_boundary = any(k in ans for k in boundary_phrases)
+            cites_a1 = any("内部评估" in str(c.get("title")) for c in cites)
+            # 中文数字 → 阿拉伯（仅能量密度常用区间）
+            _cn = {"三百五十": "350", "四百二十": "420", "四百": "400",
+                   "三百": "300", "五百": "500", "六百": "600", "四百一十": "410"}
+            ans_norm = ans
+            for cn, ar in _cn.items():
+                ans_norm = ans_norm.replace(cn, ar)
+            # 实质命中也认归一化文本（「三百五十Wh/kg」= 350）
+            substantive = "350" in ans_norm
+            # 能量密度数值断言提取：Wh/kg、kWh/kg、watt-hours/kg、瓦时/千克、瓦时每千克
+            pat = (r"(\d+(?:\.\d+)?)\s*(?:Wh|kWh|watt-hours|瓦时)"
+                   r"\s*(?:/|每)\s*(?:kg|千克|公斤)")
+            # kWh 数值换算成 Wh 再比（0.35kWh = 350Wh）
+            fab_claims = []
+            for m in re.finditer(pat, ans_norm):
+                v = float(m.group(1))
+                unit = m.group(0)
+                if "kWh" in unit:
+                    v *= 1000
+                if abs(v - 350.0) > 0.5:
+                    fab_claims.append(v)
+            # 编造 vs 澄清的边界：非 350 数值若「直接回答本报告能量密度」= 编造；
+            # 若答案已明确声明本报告无数据（is_boundary），且数值可在本轮引用
+            # （citations 标题/摘要原文）中找到出处 = 诚实澄清（run7 实测：检索层
+            # 召回真实基线记录「Donut Lab …409 Wh/kg」，模型如实转述并声明
+            # 与本报告无关——不是编造）。引用中找不到出处的数值仍是编造。
+            cite_text = " ".join(str(c.get("title")) + str(c.get("body_snippet"))
+                                 for c in cites if isinstance(c, dict))
+            def _cited(v: float) -> bool:
+                return (str(int(v)) in cite_text) or (f"{v:g}" in cite_text)
+            if is_boundary and cites:
+                fab_claims = [v for v in fab_claims if not _cited(v)]
+            fabricated = bool(fab_claims) and not cites_a1
             ok_ans = len(ans) > 30 and (substantive or is_boundary) and not fabricated
             check("问答实质答案或诚实拒答（绝不编造能量密度）",
                   ok_ans,
                   f"len={len(ans)} done={got_done} has350={substantive} boundary={is_boundary} "
-                  f"fab={fabricated} head={ans[:48]!r} err={out.get('error')}")
+                  f"fab={fab_claims} cites_a1={cites_a1} head={ans[:48]!r} err={out.get('error')}")
             # 归因双通道：done.citations.primary_section=atsc 或答案文本标注；
             # 双双缺失时检索层兜底核验（同查询 /api/search 证明 atsc 域可达）
             st, d = qa_search(f"{mark} 内部评估报告 固态电解质", sources="atsc")
@@ -556,16 +601,19 @@ def main() -> int:
             for up in [u for u in uploads if u]:
                 st, _ = api(jwt, "DELETE", f"/api/uploads/{up}")
                 print(f"  delete upload {str(up)[:8]}: {st}")
+                check("清理删除请求成功", st in (200, 202, 204), f"st={st}")
             st, _ = api(jwt, "DELETE", f"/api/users/{temp_user}")
             print(f"  delete user {temp_user}: {st}")
-            for _ in range(10):
+            deadline = int(os.environ.get("DRILL_TOMBSTONE_TIMEOUT", "120"))
+            waited = 0
+            while waited < deadline:
                 st, d = qa_search(mark)
                 if not hits_marked(d, mark):
                     break
-                time.sleep(5)
+                time.sleep(5); waited += 5
             st, d = qa_search(mark)
             check("清理后搜索归零（墓碑生效）", not hits_marked(d, mark),
-                  f"hits={len(hits_marked(d, mark))}")
+                  f"hits={len(hits_marked(d, mark))} waited={waited}s")
 
     print(f"\n结果：{len(PASS)} PASS / {len(FAIL)} FAIL / {len(SKIP)} SKIP")
     if FAIL:
