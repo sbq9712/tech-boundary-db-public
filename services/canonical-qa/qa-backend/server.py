@@ -1291,6 +1291,9 @@ def build_context(search_results: list) -> tuple:
             tags = [tags]
         url = record.get("u", "") or ""
         sc = record.get("sc", 0)
+        # 任务二 2.3：图谱路归因（orchestrated_search 图谱扩展在 meta 注入
+        # via_graph=<桥接实体>）——引用层透传给 /api/search 与门户问答。
+        via_graph = (meta or {}).get("via_graph") if isinstance(meta, dict) else None
 
         # Add to context
         context_parts.append(
@@ -1328,6 +1331,10 @@ def build_context(search_results: list) -> tuple:
             "url": url,
             "body_snippet": (body[:200] if body else (ai_summary[:200] if ai_summary else "")),
             "similarity": round(score, 3),
+            # 任务二 2.3（可观测性补丁，2026-10-02）：图谱扩展召回的记录带
+            # meta.via_graph=<桥接实体>——引用层透传，否则图谱路的真实贡献
+            # 在 /api/search 与问答引用里不可见（非装饰性无法从外部验证）。
+            "via_graph": via_graph,
             **upload_provenance,
         })
 

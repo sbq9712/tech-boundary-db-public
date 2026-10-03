@@ -2,8 +2,11 @@ ARG QA_BASE_IMAGE=techdb-canonical-qa:0801-base
 FROM ${QA_BASE_IMAGE}
 
 USER root
+# 增量覆盖清单必须与「改动过的文件」对齐——graph_fragment.py（2.4
+# 碎片签名修复）曾遗漏导致镜像混版（新 server + 旧 fragment）。
 COPY --chown=qa:qa qa-backend/config.py qa-backend/server.py \
-    qa-backend/incremental_index.py qa-backend/retrieval_pipeline.py /app/qa-backend/
+    qa-backend/incremental_index.py qa-backend/retrieval_pipeline.py \
+    qa-backend/graph_fragment.py /app/qa-backend/
 RUN mkdir -p /app/data/lightrag/incremental \
     && chown -R qa:qa /app/data/lightrag/incremental
 
