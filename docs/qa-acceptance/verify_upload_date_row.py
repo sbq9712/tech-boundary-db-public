@@ -5,17 +5,22 @@
 {width:100%;min-width:110px}(0,2,0) 压制，年/月/日各被撑到 ≥110px，日期列
 换行成三行。修复：同特异性后置覆盖 + flex nowrap。断言：三段 y 坐标一致
 （±2px 亚像素容差，日历按钮与输入框高度不同属正常）。
+
+可移植性（Codex r4 P3-3）：BASE/API 地址与仓库根路径可用环境变量覆盖，
+缺省沿用本机部署值；仓库根按脚本相对位置定位，不再硬编码绝对路径。
 """
-import json, urllib.request, re, sys, io
+import json, urllib.request, re, sys, io, os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-REPO = Path("/home/rhett/tech-boundary-db")
+REPO = Path(os.environ.get("TECHDB_REPO",
+                           Path(__file__).resolve().parents[2]))
+BASE = os.environ.get("TECHDB_BASE", "http://localhost:8080").rstrip("/")
 env = (REPO/".env").read_text()
 u = re.search(r"TECHDB_INITIAL_ADMIN_USERNAME=(.*)", env).group(1).strip()
 p = re.search(r"TECHDB_INITIAL_ADMIN_PASSWORD=(.*)", env).group(1).strip()
 tok = json.load(urllib.request.urlopen(urllib.request.Request(
-    "http://localhost:8080/api/auth/login", method="POST",
+    f"{BASE}/api/auth/login", method="POST",
     data=json.dumps({"username":u,"password":p}).encode(),
     headers={"Content-Type":"application/json"})))["access_token"]
 
@@ -23,7 +28,7 @@ with sync_playwright() as pw:
     b = pw.chromium.launch()
     pg = b.new_page(viewport={"width":1440,"height":900})
     pg.add_init_script(f"localStorage.setItem('auth_token','{tok}')")
-    pg.goto("http://localhost:8080/#library?section=industry")
+    pg.goto(f"{BASE}/#library?section=industry")
     pg.wait_for_timeout(2000)
     pg.click("text=上传资料")
     pg.wait_for_timeout(800)

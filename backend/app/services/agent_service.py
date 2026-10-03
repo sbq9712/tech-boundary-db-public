@@ -359,6 +359,9 @@ def _normalize_citations(items: list[dict]) -> list[dict]:
                 "url": str(item.get("url") or ""),
                 "body_snippet": str(item.get("body_snippet") or "")[:500],
                 "similarity": item.get("similarity"),
+                # 图谱路归因（任务二 2.5「图谱非装饰」）：canonical /api/search 已
+                # 透传 via_graph；主问答链路重建 citation 时同样保留，缺键时为 None。
+                "via_graph": item.get("via_graph"),
                 **({key: item.get(key) for key in ("document_id", "chunk_id", "chunk_metadata", "chunk_text")}
                    if item.get("document_id") else {}),
             }

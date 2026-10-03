@@ -8,9 +8,12 @@ via_graph（非图谱路记录为 None，保持向后兼容）。
 
 不导入完整 server.py（顶层依赖 FastAPI/numpy），从源码截取
 build_context 纯函数执行（与 test_hydrate_upload_texts 同约定）。
+
+截取用 ast 定位函数边界（Codex r4 P3-2：正则锚点对源码改动脆弱——
+装饰器/注释/空行变化都会错位；ast 按节点行号精确切分）。
 """
+import ast
 import json
-import re
 import tempfile
 from pathlib import Path
 
@@ -19,16 +22,32 @@ import pytest
 SERVER_SRC = Path(__file__).resolve().parent.parent / "server.py"
 
 
+def _extract_func_src(src: str, *names: str) -> str:
+    """按 ast 节点行号精确截取顶层函数源码（含装饰器），未命中即断言失败。"""
+    tree = ast.parse(src)
+    found: dict[str, ast.FunctionDef] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names:
+            found[node.name] = node
+    missing = [n for n in names if n not in found]
+    assert not missing, f"server.py 缺少函数: {missing}（结构变化，请更新测试截取）"
+    lines = src.splitlines(keepends=True)
+    out = []
+    for n in names:
+        node = found[n]
+        start = min([node.lineno] + [d.lineno for d in node.decorator_list]) - 1
+        out.append("".join(lines[start:node.end_lineno]))
+    return "\n".join(out)
+
+
 def _load_build_context(lite_records: list):
     src = SERVER_SRC.read_text(encoding="utf-8")
-    m1 = re.search(r"\ndef load_records\(\).*?(?=\ndef )", src, re.S)
-    m2 = re.search(r"\ndef build_context\(.*?(?=\n# ── Request Models)", src, re.S)
-    assert m1 and m2, "server.py 结构变化，请更新测试截取"
+    func_src = _extract_func_src(src, "load_records", "build_context")
     tmp = Path(tempfile.mkdtemp())
     lite = tmp / "lite.json"
     lite.write_text(json.dumps(lite_records), encoding="utf-8")
     ns = {"LITE_PATH": lite, "json": json, "_records": None}
-    exec(m1.group(0) + m2.group(0), ns)
+    exec(func_src, ns)
     return ns["build_context"]
 
 

@@ -253,6 +253,16 @@ def test_normalize_citations_carries_primary_section():
     assert out[1]["primary_section"] == "breadth"
 
 
+def test_normalize_citations_carries_via_graph_attribution():
+    # 任务二 2.5「图谱非装饰」：canonical /api/search 返回的 via_graph 归因
+    # （桥接实体）必须在主问答链路重建 citation 时保留；缺键安全（None）。
+    with_graph = sample_citation(id=1, via_graph="锂电")
+    without_key = sample_citation(id=2)
+    out = _normalize_citations([with_graph, without_key])
+    assert out[0]["via_graph"] == "锂电"
+    assert out[1]["via_graph"] is None
+
+
 def test_prompt_groups_evidence_by_source_in_sop_order():
     items = [
         sample_citation(id=3),                       # breadth（基线）

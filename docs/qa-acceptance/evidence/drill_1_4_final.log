@@ -1,0 +1,35 @@
+== 演练标记（标题含）：drill4cfd1b ==
+
+== A 包（2 新增）==
+  [PASS] A 包导入成功（200/201） | status=201 detail={'count': 1, 'files': [{'id': '504f984b-b58a-430b-ae0d-a45d4c953e32', 'document_id': '504f984b-b58a-430b-ae0d-a45d4c953e
+  [PASS] A 包 imported=2（skipped_tombstoned=0） | {'session_id': '7e9acb57-3628-4875-8687-85933133cc6e', 'package_date': '2026-10-01', 'schema_version': 'tech-boundary-feed-package/v2', 'data_version': 'dv-drill-2026-10-01', 'record_count': 2, 'impor
+  [PASS] A 包状态到 indexed | status=indexed
+  [PASS] A 包 searchable=true（canonical 权威） | index={'documents_checked': 2, 'documents_found': 2, 'documents_missing': 0, 'missing_document_ids': [], 'content_hash_missing': [], 'chunks': 2, 'vector_ok': 2, 'bm25_ok': 2, 'entity_count': 7, 'primary_sections': ['breadth'], 'unattributed': 0}
+  [PASS] A 包归属 breadth | chunks=2
+
+== B 包（1 更新 + 1 新增）==
+  [PASS] B 包导入成功（200/201） | status=201 {'count': 1, 'files': [{'id': 'c812533e-2ce0-41ac-b00d-64d047d9c4f0', 'document_id': 'c812533e-2ce0-41ac-b00d-64d047d9c4
+  [PASS] B 包 imported=1（更新走 UPDATE 不重复）+ 新增 1 | github_import={'session_id': 'ba755787-85d5-4969-9887-a87ceeedcc90', 'package_date': '2026-10-02', 'schema_version': 'tech-boundary-feed-package/v2', 'data_version': 'dv-drill-2026-10-02', 'record_count': 2, 'imported': 2, 'skipped_duplicate': 0, 'skipped_upstream_conflict': 0, 'failed': 0, 'package_deduplicated': False, 'replayed': False, 'failed_titles': [], 'details': {'added': 1, 'failed': 0, 'deleted': 0, 'updated': 1, 'conflicts': 0, 'conflict_keys': [], 'skipped_stale': 0, 'deleted_missing': 0, 'skipped_upstream': 0, 'skipped_protected': 0, 'skipped_unchanged': 0, 'skipped_in_package': 0, 'skipped_tombstoned': 0, 'package_deduplicated': False}}
+  [PASS] B 包状态 indexed | status=indexed
+  [PASS] 更新不重复建行（B 名下 2 条：1 更新+1 新增） | A.records=1 B.records=2
+
+== C 包（1 删除）==
+  [PASS] C 包导入成功（200/201） | status=201 {'count': 1, 'files': [{'id': 'f8cc28b0-9de5-4a65-9f02-eb0db8d64214', 'document_id': 'f8cc28b0-9de5-4a65-9f02-eb0db8d642
+  [PASS] 删除传播：演练记录全局 3→2 | A.records=0 B.records=2
+  [PASS] 删除后索引不再召回被删记录（电解质） | titles=drill4cfd1b 钠离子电池硬碳负极 drill4cfd1b 钙钛矿叠层电池效率突破 卤化物电解质实现非/低结晶固态电解质的进步 氢能电解质工程 双（氟磺酰基）亚胺锂和氟代碳酸乙烯酯电解质中浓度依赖性固体电解质界面 原位凝胶混合聚合物
+
+== 2.5 检索矩阵（sources × 检索路）==
+  [PASS] scope=breadth 命中演练记录 | hits=5 titles=['drill4cfd1b 钙钛矿叠层电池效', 'drill4cfd1b 钠离子电池硬碳负']
+  [PASS] 引用带 primary_section=breadth | sections={'breadth'}
+  [PASS] scope=industry 如实 0 命中（无该源数据） | hits=0
+  [PASS] scope=atsc 不含广度记录 | hits=1
+  [PASS] 默认三源（含 BM25 路）命中演练记录 | hits=5
+  [PASS] 图谱 scope=breadth 可用（200 且有节点） | total_nodes=158094 fragment=911
+  [PASS] 图谱 scope=industry 仅增量碎片（0 节点） | total_nodes=0 fragment=0
+
+== 结果：19 PASS / 0 FAIL ==
+
+== 清理演练数据 ==
+  delete 504f984b: 200
+  delete c812533e: 200
+  delete f8cc28b0: 200

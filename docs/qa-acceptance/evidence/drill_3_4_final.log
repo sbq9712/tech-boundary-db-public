@@ -1,0 +1,15 @@
+== 演练标记：t341791018291 ==
+  [PASS] 预览返回表头（含「情报类型」） | headers=['标题', '日期', '链接', '情报类型', '正文']
+  [PASS] 合法表导入成功 | status=201 {'count': 1, 'files': [{'id': '298e2759-4a90-4a0f-a198-7484d996ab39', 'document_id': '298e2759-4a90-4a0f-a198-7484d996ab39', 'filename': 't34.xlsx', '
+  [PASS] 导入计数 imported=3 | row_import={'rows_total': 3, 'imported': 3, 'updated': 0, 'skipped_empty': 0, 'skipped_duplicate': 0, 'skipped_upstream_conflict': 0, 'rows_missing_date': 0, 'rows_invalid_date': 0}
+  [PASS] 导航可见 3 条导入记录 | titles=['t341791018291 钙钛矿涂层新工艺', 't341791018291 固态电解质综述', 't341791018291 组件回收研究']
+  [PASS] 类型落库：新闻→news、文献→literature | intelligence_types={'news', 'literature'}
+  [PASS] 索引完成（index-status 权威判定） | status=indexed index={'documents_checked': 3, 'documents_found': 3, 'documents_missing': 0, 'missing_document_ids': [], 'content_hash_missing': [], 'chunks': 3, 'vector_ok': 3, 'bm25_ok': 3, 'entity_count': 7, 'primary_sections': ['breadth'], 'unattributed': 0}
+  [PASS] 检索引用 chunk_metadata 带 intelligence_type | cited types={'news', 'literature'}
+  [PASS] 非法类型整文件拒绝（400） | status=400 {'detail': '表格解析失败：情报类型校验未通过（1 处），本文件未导入任何行：\n[t34-bad.xlsx] 工作表「数据」第 3 行：「情报类型」列情报类型非法：原值「综述」（仅允许：新闻/文献）'}
+  [PASS] 报错定位到物理行与原值 | {'detail': '表格解析失败：情报类型校验未通过（1 处），本文件未导入任何行：\n[t34-bad.xlsx] 工作表「数据」第 3 行：「情报类型」列情报类型非法：原值「综述」（仅允许：新闻/文献）'}
+  [PASS] 无部分入库（好行也未写入） | leaked=[]
+  [PASS] 修复脚本 dry-run 可修复 0 | 候选（逐行表格存量记录）：3 | 可修复：0 · 待人工（不猜测）：0
+
+结果：11 PASS / 0 FAIL
+清理 upload 298e2759: 200

@@ -1,0 +1,24 @@
+== 演练标记：drr1791017999 ==
+== Phase A：共享栈（非破坏）导入/重启/刷新一致/清理 ==
+  [PASS] 导入成功（3 行） | status=201 row_import={'rows_total': 3, 'imported': 3, 'updated': 0, 'skipped_empty': 0, 'skipped_duplicate': 0, 'skipped_upstream_conflict': 0, 'rows_missing_date': 0, 'rows_invalid_date': 0}
+  [PASS] 初始索引完成（searchable） | status=indexed states={'breadth_visible': {'state': 'complete', 'reason': None}, 'vector': {'state': 'complete', 'reason': None}, 'keyword': {'state': 'complete', 'reason': None}, 'graph': {'state': 'complete', 'reason': None}}
+  [PASS] 初始搜索命中 3 | hits=3
+  [PASS] canonical-qa 重启后健康
+  [PASS] 重启后索引持久（搜索仍命中 3） | hits=3 incremental_records=1490
+  [PASS] 重启后状态仍 indexed/searchable | status=indexed searchable=True
+  [PASS] 刷新一致（真实页面两轮刷新，渲染状态不变） | round1=表格情报 drr… / 逐行导入 3 条 / 	- / 人工分类 / 	已入索引	—	SBQ	10/03 17:00	 / 在广度总表中查看 / 索引详情 / 重命名 / 原文件 / 删除 round2=表格情报 drr… / 逐行导入 3 条 / 	- / 人工分类 / 	已入索引	—	SBQ	10/03 17:00	 / 在广度总表中查看 / 索引详情 / 重命名 / 原文件 / 删除
+  [PASS] API 交叉验证（列表与详情状态一致） | list=indexed detail=indexed
+清理 upload 5cf2aefd: 200
+  [PASS] 清理删除请求成功 | st=200
+  [PASS] 清理后搜索归零（墓碑生效） | hits=0 waited=4s
+== Phase B：隔离实例（破坏性损坏/恢复，不触碰共享索引）==
+  [PASS] 隔离实例健康
+  [PASS] 隔离种子命中 1 | hits=1
+  [PASS] 隔离索引持久化落盘 | records=1
+  [PASS] 损坏实例重启后健康（降级存活）
+  [PASS] health 如实（corrupt=true / 记录清零） | corrupt=True records=0
+  [PASS] 损坏后搜索命中归零（不冒充有证据） | hits=0
+  [PASS] 重放 upsert 后命中恢复 | hits=1 records=1
+  隔离实例已销毁（--rm 卷随容器回收）
+
+结果：17 PASS / 0 FAIL / 0 SKIP

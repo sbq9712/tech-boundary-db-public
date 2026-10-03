@@ -264,10 +264,15 @@ def phase_a(jwt: str, keep: bool = False) -> None:
             try:
                 st, _ = api(jwt, "DELETE", f"/api/uploads/{up_id}")
                 print(f"清理 upload {up_id[:8]}: {st}")
-                # 删除→worker→canonical 墓碑传播有时延（首轮实测 4s 不够）：
-                # 轮询至多 40s，超时才算 FAIL。
+                # 删除请求本身失败必须计为 FAIL（Codex r4 P2-2：不能把失败降级为成功）
+                check("清理删除请求成功", st in (200, 202, 204), f"st={st}")
+                # 删除→worker→canonical 墓碑传播有时延：队列 worker 5s 轮询 +
+                # 失败退避 30s 起，加网络/嵌入耗时，最坏 90-120s（Codex r4 P3-1）。
+                # 判定契约是搜索归零（墓碑语义）；上传删除后 index-status 可能
+                # 404，不能作为组合条件。总上限可用环境变量覆盖（默认 120s）。
+                deadline_s = int(os.environ.get("DRILL_TOMBSTONE_TIMEOUT", "120"))
                 hits, waited = -1, 0
-                while waited < 40:
+                while waited < deadline_s:
                     time.sleep(4); waited += 4
                     hits = search_hits(MARK)
                     if hits == 0:
@@ -275,7 +280,8 @@ def phase_a(jwt: str, keep: bool = False) -> None:
                 check("清理后搜索归零（墓碑生效）", hits == 0,
                       f"hits={hits} waited={waited}s")
             except Exception as e:
-                print(f"清理失败：{e}")
+                # 清理链路异常同样必须 FAIL——演练结论不能建立在未验证的清理之上
+                check("清理链路无异常", False, f"exc={e!r}")
 
 
 def iso_upsert(base: str, token: str, doc_id: str) -> None:
