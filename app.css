@@ -3078,6 +3078,11 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 .lib-up-datebox{display:flex;align-items:center;gap:2px;position:relative}
 .lib-up-seg{width:44px;text-align:center;padding:7px 4px}
 .lib-up-seg-y{width:54px}
+/* 资料日期年/月/日必须同一行：表格作用域规则(0,2,0)会以 min-width:110px
+   压过 .lib-up-seg(0,1,0) 导致三段换行——同特异性后置覆盖 + 禁换行。 */
+.lib-upload-table .lib-up-datebox{flex-wrap:nowrap;white-space:nowrap}
+.lib-upload-table .lib-up-seg{width:44px;min-width:44px;flex:0 0 auto;padding:6px 2px}
+.lib-upload-table .lib-up-seg-y{width:54px;min-width:54px;flex:0 0 auto}
 .lib-up-datebox .lib-up-native-date{
   position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;
 }
