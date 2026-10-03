@@ -1578,7 +1578,7 @@ async function submitQuery(options={}){
     if(creatingConversation&&!requestState.sessionId)pendingConversation=null;
     assistantMsg.streaming=false;
     assistantMsg.status='';
-    assistantMsg.error=stopped?'已停止生成。':(netFail?'网络连接中断，答案可能仍在后台生成；请点击"重试"重新提问。':(err?.message||'连接失败，请稍后重试。'));
+    assistantMsg.error=stopped?'已停止生成。':(netFail?'连接已中断，请点击"重试"重新提问。':(err?.message||'连接失败，请稍后重试。'));
     if(regenerate&&replacedMessage){requestState.messages.pop();requestState.messages.push(replacedMessage);showToast(assistantMsg.error);}
     else refreshRequestConversationSurface(requestState);
     if(retryBtn)retryBtn.hidden=false;
@@ -2020,21 +2020,24 @@ async function loadSyncedBreadthBlock(){
   if(!host)return;
   let data=null;
   try{
-    const r=await apiFetch("/api/breadth/manual-records?visibility=nav&limit=500");
+    /* 服务端 origin_section 过滤（Codex P2）：避免客户端拉全量再过滤导致
+       同步记录被 created_at 窗口挤出；count 用于截断提示。 */
+    const r=await apiFetch("/api/breadth/manual-records?visibility=nav&origin_section=industry,atsc&limit=200");
     if(r&&r.ok)data=await r.json();
   }catch(_e){}
   const originMap={"industry":"行业追踪","atsc":"ATSC内部报告"};
   const rows=(data&&data.records||[]).filter(rec=>originMap[rec.origin_section]);
   if(!rows.length){host.innerHTML="";return;}
+  const total=Number(data&&data.count||rows.length)||rows.length;
   const body=rows.slice(0,200).map(rec=>`<tr>
-      <td style="max-width:420px"><div style="font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(rec.title||"")}">${escapeHtml(rec.title||"未命名")}</div>${rec.url?`<a href="${escapeHtml(rec.url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--brand)">原文链接</a>`:""}</td>
+      <td style="max-width:420px"><div style="font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(rec.title||"")}">${escapeHtml(rec.title||"未命名")}</div>${rec.url?`<a href="${techdbSafeHref(rec.url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--brand)">原文链接</a>`:""}</td>
       <td>${escapeHtml(rec.category||"未分类")}</td>
       <td>${escapeHtml(originMap[rec.origin_section]||rec.origin_section)}</td>
       <td>${escapeHtml(rec.document_date||"-")}</td>
       <td>${escapeHtml(rec.source_name||"-")}</td>
       <td>${escapeHtml((rec.body||"").slice(0,80))}${(rec.body||"").length>80?"…":""}</td>
     </tr>`).join("");
-  host.innerHTML=`<div class="lib-head"><div class="filter-row"><span style="font-size:13.5px;font-weight:650;color:var(--text-primary)">来自行业/ATSC 同步的情报</span><span style="font-size:12px;color:var(--text-tertiary)">${rows.length} 条 · 行业追踪/ATSC内部报告上传时勾选「同步上传到广度情报」的逐行记录</span></div></div>
+  host.innerHTML=`<div class="lib-head"><div class="filter-row"><span style="font-size:13.5px;font-weight:650;color:var(--text-primary)">来自行业/ATSC 同步的情报</span><span style="font-size:12px;color:var(--text-tertiary)">${total>rows.length?`共 ${total} 条，当前显示最新 ${rows.length} 条 · `:``}行业追踪/ATSC内部报告上传时勾选「同步上传到广度情报」的逐行记录</span></div></div>
     <div class="table-scroll lib-table-scroll"><table><thead><tr><th>标题</th><th>行业图景节点</th><th>来源栏目</th><th>资料时间</th><th>来源</th><th>内容摘要</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function libFmtSize(n){if(!n)return "-";const u=["B","KB","MB","GB"];let i=0,s=n;while(s>=1024&&i<3){s/=1024;i++;}return s.toFixed(s<10?1:0)+" "+u[i];}
@@ -2704,19 +2707,25 @@ function upGuessMapping(headers){
    「情报类型」列（任务三 3.1/3.2）；行业/ATSC/GitHub/整文件入口不受影响。 */
 function upTypeStrict(f){return upSection==="breadth"&&upSub==="other"&&((f&&f.rowMode)||"row")==="row";}
 async function upLoadRowPreview(f){
+  /* in-flight 去重（Codex P3）：行内单选/配置弹窗/重试可能并发触发，
+     同一文件只允许一个预览请求，复用进行中的 Promise。 */
+  if(f._previewReq)return f._previewReq;
+  f._previewReq=(async()=>{
   const token=window.Auth&&typeof Auth.getToken==='function'?Auth.getToken():(localStorage.getItem('auth_token')||'');
   try{
     const fd=new FormData();fd.append("file",f);
     const resp=await fetch('/api/uploads/row-preview',{method:'POST',body:fd,headers:token?{'Authorization':'Bearer '+token}:{}});
     if(!resp.ok){const j=await resp.json().catch(()=>({}));f._previewError=(j.detail||resp.status);upRenderList();upShowResult("表格预览失败："+(j.detail||resp.status),"err");return;}
     const data=await resp.json();
-    if(!data.sheets||!data.sheets.length){f._previewError="没有可用工作表";upRenderList();upShowResult("表格中没有可用工作表","err");return;}
-    f._previewSheets=data.sheets;delete f._previewError;
+    if(!data.sheets||!data.sheets.length){f._previewError="没有可用工作表";f._previewNoSheets=true;upRenderList();upShowResult("表格中没有可用工作表","err");return;}
+    f._previewSheets=data.sheets;delete f._previewError;delete f._previewNoSheets;
     f.rowMode=f.rowMode||"row";
     f.rowSheet=f.rowSheet||data.sheets[0].name;
     f.rowMapping=f.rowMapping||upGuessMapping(data.sheets[0].headers||[]);
     upRenderList();
   }catch(e){f._previewError=String(e);upRenderList();upShowResult("表格预览失败："+e,"err");}
+  })().finally(()=>{f._previewReq=null;});
+  return f._previewReq;
 }
 /* 单个表格文件的独立配置弹窗（三.2）：工作表下拉（含非首个工作表）+
    导入方式 + 语义槽位列映射，全部读写该文件条目自身的状态。 */
@@ -2888,7 +2897,9 @@ function upRenderList(){
     const f=upPending[Number(r.closest(".lib-up-mode").dataset.upMode)];
     if(!f)return;
     f.rowMode=r.value;
-    if(r.value==="row"&&!f._previewSheets&&!f._previewError){
+    /* 重试窗口（Codex P3）：传输类失败后切回逐行会自动重试；
+       「表格中没有可用工作表」是数据性结论，不重试。 */
+    if(r.value==="row"&&!f._previewSheets&&!f._previewNoSheets){
       upLoadRowPreview(f).then(()=>upRenderList());
     }
     upRenderList();

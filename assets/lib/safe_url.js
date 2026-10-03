@@ -1,11 +1,12 @@
 /**
  * TechDB 共享 URL 消毒器（T7/G11，2026-10-02）。
  *
- * 背景：qa.js 的 _qaSafeUrl/_qaSafeHref 已修复引用卡 javascript: 注入，
+ * 背景：（历史）广度页 qa.js 的 _qaSafeUrl/_qaSafeHref 已修复引用卡 javascript: 注入；
+ * 该脚本已随广度「数据库问答」视图于 2026-10-03 下线删除，本库规则保留供门户复用。
  * 但 app.js inlineMd 把 markdown 链接原始 URL 直插 href——同一漏洞在
  * 门户渲染链复现。消毒逻辑必须单一来源，两页共享，禁止各自复制粘贴漂移。
  *
- * 规则（与 qa.js 原实现语义一致，codex 复审 R2-1 结论）：
+ * 规则（与已删除的 qa.js 原实现语义一致，codex 复审 R2-1 结论）：
  *  1. 先剔 ASCII 控制字符 \x00-\x1F\x7F 再 trim——浏览器 URL 解析会剔
  *     TAB/LF/CR 与首尾 C0，`java\tscript:` / `\0javascript:` 由此归一为
  *     javascript:；先匹配 scheme 再剔控制字符会被绕过。
@@ -14,7 +15,7 @@
  *  3. 无 scheme 的相对地址原样放行（站内跳转）。
  *
  * 形态：浏览器经典脚本 IIFE 挂 window.TechDBSafeUrl（两页均无 ES module，
- * script 标签顺序加载，须先于 app.js/qa.js）；同时 CommonJS 导出供
+ * script 标签顺序加载，须先于 app.js）；同时 CommonJS 导出供
  * tests/js（Node）直接 require 复用。
  */
 (function (root) {

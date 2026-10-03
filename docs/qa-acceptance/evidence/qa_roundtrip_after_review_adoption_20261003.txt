@@ -1,0 +1,542 @@
+# 2026-10-03 Codex 评审采纳后完整问答往返（api:1018 / web:1016 经 nginx）
+# 问题：用两句话概括：钠离子电池产业化的最新进展
+# 结果：284.8s 收到 event: done（exit 0），17 个 ": ping" 心跳，39772 字节
+# 说明：时长已超旧 nginx proxy_read_timeout=300s 边界场景量级，SSE 专属
+#       location（1800s）+ 心跳泵保证核验链静默期不再掐断连接。
+# 以下为脱敏事件结构（payload 已抹除，保留事件序列与规模）：
+event: status
+data: <redacted payload, 49 chars>
+
+: ping
+
+event: status
+data: <redacted payload, 56 chars>
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+event: status
+data: <redacted payload, 47 chars>
+
+: ping
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 19} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 19} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 19} chars
+
+event: token
+data: {"<redacted>": 19} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 18} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 16} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+event: token
+data: {"<redacted>": 17} chars
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+: ping
+
+event: status
+data: <redacted payload, 364 chars>
+
+event: done
+data: <redacted payload, 20456 chars>
+
+

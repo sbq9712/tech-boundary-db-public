@@ -138,5 +138,21 @@ check('breadth safe_url.js 先于 app.js',
 // 2026-10-03：qa.js 已随广度「数据库问答」视图移除——确保不再被页面引用。
 check('breadth/index.html 不再加载 qa.js', !brHtml.includes('qa.js'));
 
+// ═══ 2026-10-03 Codex P1/P2 采纳：同步广度区块的安全与数据完整性契约 ═══
+const appSrc2 = readFileSync(join(root, 'app.js'), 'utf8');
+const fnStart = appSrc2.indexOf('async function loadSyncedBreadthBlock');
+const fnEnd = appSrc2.indexOf('function libFmtSize', fnStart);
+check('loadSyncedBreadthBlock 存在', fnStart >= 0 && fnEnd > fnStart);
+const fnSrc = appSrc.slice(fnStart, fnEnd);
+// P1：同步记录 rec.url 必须过 safeHref 白名单（escapeHtml 不拦 javascript:）
+check('同步广度区块 rec.url 使用 techdbSafeHref',
+  fnSrc.includes('href="${techdbSafeHref(rec.url)}"') &&
+  !fnSrc.includes('href="${escapeHtml(rec.url)}"'));
+// P2：服务端 origin_section 过滤 + 截断提示
+check('同步广度区块走服务端 origin_section 过滤',
+  fnSrc.includes('origin_section=industry,atsc'));
+check('同步广度区块展示截断提示（count>rows 时）',
+  fnSrc.includes('total>rows.length') && fnSrc.includes('当前显示最新'));
+
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

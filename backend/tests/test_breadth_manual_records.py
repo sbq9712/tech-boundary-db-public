@@ -248,3 +248,55 @@ def test_github_import_combo_now_accepted():
         _validate_section_combo("breadth", None)
     with pytest.raises(HTTPException):
         _validate_section_combo("industry", "other")
+
+
+def test_list_endpoint_origin_section_filter():
+    """2026-10-03（Codex P2）：origin_section 服务端过滤——同步区块不再拉全量
+    客户端过滤（避免 created_at 窗口把同步记录挤出 limit 导致静默漏数据）；
+    白名单外取值 422。"""
+    from fastapi import HTTPException
+
+    db = _db()
+    rec = _mk_upload(db)
+    sync_breadth_manual_record(db, rec, "origin-filter-probe")
+    row = db.execute(
+        text("SELECT id FROM breadth_manual_records WHERE upload_id=:u ORDER BY created_at DESC LIMIT 1"),
+        {"u": str(rec.id)},
+    ).scalar_one()
+    db.execute(
+        text("UPDATE breadth_manual_records SET origin_section='industry' WHERE id=:i"),
+        {"i": str(row)},
+    )
+    db.commit()
+    db.close()
+    db = _db()
+    # 单值 + 组合值过滤：只返回行业同步记录，count 同步收窄
+    data = list_manual_records(
+        level=None, limit=500, offset=0, visibility="nav",
+        origin_section="industry", current_user="breadthtest", db=db,
+    )
+    assert data["count"] >= 1
+    assert all(r["origin_section"] == "industry" for r in data["records"])
+    assert any(r["id"] == str(row) for r in data["records"])
+    data2 = list_manual_records(
+        level=None, limit=500, offset=0, visibility="nav",
+        origin_section="atsc, industry ", current_user="breadthtest", db=db,
+    )
+    assert all(r["origin_section"] in ("industry", "atsc") for r in data2["records"])
+    assert any(r["id"] == str(row) for r in data2["records"])
+    # 不传参数：行为与历史一致（不过滤）
+    data3 = list_manual_records(
+        level=None, limit=500, offset=0, visibility="nav",
+        origin_section=None, current_user="breadthtest", db=db,
+    )
+    assert data3["count"] >= data["count"]
+    # 白名单外取值 → 422
+    try:
+        list_manual_records(
+            level=None, limit=500, offset=0, visibility="nav",
+            origin_section="industry,evil", current_user="breadthtest", db=db,
+        )
+        raise AssertionError("白名单外取值应 422")
+    except HTTPException as exc:
+        assert exc.status_code == 422
+    db.close()

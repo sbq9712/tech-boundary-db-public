@@ -433,4 +433,21 @@ def test_stream_agent_response_wraps_impl_with_heartbeat(monkeypatch):
     import re as _re
     src = inspect.getsource(agent_service.stream_agent_response)
     assert "_heartbeat_pump(impl, HEARTBEAT_SECONDS)" in src
-    assert _re.search(r"HEARTBEAT_SECONDS\s*=\s*float\(\s*os\.getenv\(\s*\"TECHDB_AGENT_HEARTBEAT_SECONDS\",\s*\"15\"", src + inspect.getsource(agent_service)) is not None
+    assert _re.search(
+        r"HEARTBEAT_SECONDS\s*=\s*_heartbeat_seconds_from_env\(\)",
+        inspect.getsource(agent_service),
+    ) is not None
+
+
+def test_heartbeat_env_invalid_falls_back_to_default(monkeypatch, caplog):
+    """Codex P3：import 期配置解析不得让进程崩溃——非法/负值回退 15s 并告警。"""
+    fn = agent_service._heartbeat_seconds_from_env
+    with caplog.at_level("WARNING"):
+        assert fn("abc") == 15.0
+        assert fn("-3") == 15.0
+        assert fn("nan") == 15.0
+        assert fn("inf") == 15.0
+    assert fn("30") == 30.0
+    assert fn("") == 15.0
+    assert fn(None) == 15.0
+    assert any("TECHDB_AGENT_HEARTBEAT_SECONDS" in r.message for r in caplog.records)

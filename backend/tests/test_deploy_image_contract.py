@@ -55,3 +55,30 @@ def test_release_image_contains_full_migrated_qa_chain():
     )
     for module in required_modules:
         assert module in dockerfile
+
+
+def test_nginx_long_timeout_scoped_to_sse_only():
+    """SSE 专属长超时（2026-10-03 network error 修复 + Codex P3 收窄）。
+
+    1800s 只允许出现在流式端点的 location 块内；普通 /api/ 维持 300s，
+    防止心跳机制把真实卡死的普通请求无差别续命。
+    """
+    import re
+
+    conf = (ROOT / "nginx.conf").read_text(encoding="utf-8")
+    blocks = re.findall(
+        r"location\s+([^\{]+)\{([^{}]*)\}", conf, flags=re.S
+    )
+    assert blocks, "nginx.conf 应至少包含一个 location 块"
+    seen_sse = False
+    for header, body in blocks:
+        header = header.strip()
+        if re.search(r"/api/\(assistant/stream\|breadth/qa/chat/stream\)", header):
+            seen_sse = True
+            assert "proxy_read_timeout 1800s" in body, header
+            assert "proxy_send_timeout 1800s" in body, header
+            assert "proxy_buffering off" in body, header
+        elif header == "/api/":
+            assert "proxy_read_timeout 300s" in body, header
+            assert "proxy_read_timeout 1800s" not in body, header
+    assert seen_sse, "SSE 端点应有独立 location 承载 1800s 超时"

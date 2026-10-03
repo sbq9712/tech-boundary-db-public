@@ -35,7 +35,7 @@ services:
     environment:
       TZ: Asia/Shanghai
       TECHDB_QA_INDEX_TOKEN: ${TECHDB_QA_INDEX_TOKEN:-}
-      # 广度页「数据库问答」视图走 canonical-qa /api/chat/stream（旧契约），
+      # canonical-qa 自身 chat/graph-ingest 生成侧需要 ZAI key（广度页问答视图已下线，
       # 生成侧需要 ZAI key（config.py 优先读 env，缺省回落宿主 env 文件）。
       TECHDB_QA_LLM_API_KEY: ${TECHDB_QA_LLM_API_KEY:-}
       TECHDB_QA_INCREMENTAL_INDEX_PATH: /app/data/lightrag/incremental/index.pkl

@@ -92,6 +92,28 @@ class LevelPayload(BaseModel):
     level: int = Field(ge=0, le=3)
 
 
+# 行业/ATSC「同步上传到广度」的行记录 origin_section 白名单——门户广度页
+# 「来自行业/ATSC 同步的情报」区块按此过滤，取值外一律 422，防任意探测。
+ORIGIN_SECTION_CHOICES = ("industry", "atsc")
+
+
+def _parse_origin_section(raw: str | None) -> list[str] | None:
+    """解析 origin_section 过滤参数（逗号分隔，白名单校验）。
+
+    直接以函数形式调用（单测）时 raw 可能是未展开的 FastAPI Query 默认
+    对象——视作未传参，不过滤（与 visibility 参数的历史行为一致）。
+    """
+    if not isinstance(raw, str):
+        return None
+    wanted = [part.strip() for part in raw.split(",") if part.strip()]
+    invalid = [part for part in wanted if part not in ORIGIN_SECTION_CHOICES]
+    if invalid:
+        raise HTTPException(
+            422, f"origin_section 仅支持 {ORIGIN_SECTION_CHOICES}，收到 {invalid}"
+        )
+    return wanted or None
+
+
 @router.get("/breadth/manual-records")
 def list_manual_records(
     level: int | None = Query(default=None, ge=0, le=3),
@@ -100,9 +122,13 @@ def list_manual_records(
     # 三.1：nav=仅主导航广度列表（默认，隐藏行业/ATSC 未勾选同步的行记录）；
     # all=资料库管理全量（含 in_breadth_nav=false 的行记录）。
     visibility: Literal["nav", "all"] = Query(default="nav"),
+    # B3 同步区块服务端过滤：避免客户端拉全量再过滤导致同步记录被
+    # created_at 窗口挤出（limit 截断时静默漏数据）。
+    origin_section: str | None = Query(default=None),
     current_user: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    origin_sections = _parse_origin_section(origin_section)
     stmt = select(BreadthManualRecord).order_by(
         BreadthManualRecord.created_at.desc(), BreadthManualRecord.id.desc()
     )
@@ -110,14 +136,22 @@ def list_manual_records(
         stmt = stmt.where(BreadthManualRecord.in_breadth_nav)  # 主导航默认过滤
     if level is not None:
         stmt = stmt.where(BreadthManualRecord.level == level)
+    if origin_sections:
+        stmt = stmt.where(BreadthManualRecord.origin_section.in_(origin_sections))
     rows = db.scalars(stmt.limit(limit).offset(offset)).all()
     count_stmt = select(func.count()).select_from(BreadthManualRecord)
     if visibility == "nav":
         count_stmt = count_stmt.where(BreadthManualRecord.in_breadth_nav)
+    if origin_sections:
+        count_stmt = count_stmt.where(
+            BreadthManualRecord.origin_section.in_(origin_sections)
+        )
     total = db.scalar(count_stmt) or 0
     lv_stmt = select(BreadthManualRecord.level)
     if visibility == "nav":
         lv_stmt = lv_stmt.where(BreadthManualRecord.in_breadth_nav)
+    if origin_sections:
+        lv_stmt = lv_stmt.where(BreadthManualRecord.origin_section.in_(origin_sections))
     all_rows = db.scalars(lv_stmt).all()
     level_counts = {
         "curated": sum(1 for lv in all_rows if lv >= 1),

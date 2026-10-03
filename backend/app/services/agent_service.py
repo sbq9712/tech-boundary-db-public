@@ -625,7 +625,38 @@ def _sse(event: str, payload: dict) -> str:
 # TECHDB_AGENT_HEARTBEAT_SECONDS 时下发 SSE 注释行 ": ping"（SSE 规范
 # 注释行，EventSource 与门户自研解析器均忽略），持续重置 nginx 读时钟。
 # 0 = 关闭（本地直连 api 无反代场景）。心跳不改变事件序列与语义。
-HEARTBEAT_SECONDS = float(os.getenv("TECHDB_AGENT_HEARTBEAT_SECONDS", "15") or 0)
+def _heartbeat_seconds_from_env(raw: str | None = None) -> float:
+    """解析 TECHDB_AGENT_HEARTBEAT_SECONDS；非法/缺失回退默认 15s（Codex P3）。
+
+    import 期解析配置不能让进程直接崩溃——非法值告警并回退默认，
+    保证一次配置手误不至于打挂整个 api 服务。raw 参数仅供单测注入。
+    """
+    if raw is None:
+        raw = os.getenv("TECHDB_AGENT_HEARTBEAT_SECONDS") or ""
+    raw = raw.strip()
+    if not raw:
+        return 15.0
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning(
+            "TECHDB_AGENT_HEARTBEAT_SECONDS=%r 不是数字，回退默认 15s", raw
+        )
+        return 15.0
+    if value != value or value in (float("inf"), float("-inf")) or value < 0:  # NaN/inf/负数
+        logger.warning(
+            "TECHDB_AGENT_HEARTBEAT_SECONDS=%r 超出合法范围（>=0 的有限数），回退默认 15s",
+            raw,
+        )
+        return 15.0
+    return value
+
+
+HEARTBEAT_SECONDS = _heartbeat_seconds_from_env()
+# 消费者提前断开时，收尾等待实现体任务的时限（防实现体取消路径卡死外层）。
+HEARTBEAT_JOIN_TIMEOUT = float(
+    os.getenv("TECHDB_AGENT_HEARTBEAT_JOIN_TIMEOUT", "5") or 5
+)
 
 
 async def _heartbeat_pump(
@@ -669,9 +700,27 @@ async def _heartbeat_pump(
         if not state["finished"]:
             producer.cancel()
             try:
-                await producer
+                # 限时收尾（Codex P3）：实现体取消路径若卡住，不让外层跟着挂。
+                await asyncio.wait_for(producer, timeout=HEARTBEAT_JOIN_TIMEOUT)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "SSE 实现体在 %.1fs 内未完成取消收尾，放弃等待（任务=%s）",
+                    HEARTBEAT_JOIN_TIMEOUT,
+                    producer.get_name(),
+                )
+            except asyncio.CancelledError:
+                # 区分来源：外层任务正在被取消（cancelling>0）必须继续上抛；
+                # 否则是 producer 自身取消的收尾传播，吞掉即可。
+                outer = asyncio.current_task()
+                if (
+                    outer is not None
+                    and getattr(outer, "cancelling", lambda: 0)() > 0
+                ):
+                    raise
+                if not producer.done():
+                    raise
             except BaseException:
-                pass
+                pass  # 实现体自身的取消/异常已由正常路径处理
     if captured:
         raise captured[0]
 

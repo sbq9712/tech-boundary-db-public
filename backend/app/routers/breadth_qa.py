@@ -1,12 +1,15 @@
-"""广度页面「数据库问答」视图的认证代理（TagDB 完整接入收口）。
+"""canonical-qa 的认证代理（TagDB 完整接入收口，2026-10-03 更新）。
 
-tech-db 原生 qa.js 直连 qa-backend :8765（无鉴权）。本仓部署形态下
-canonical-qa 仅内网可达（compose 内部网络 + 127.0.0.1 绑定），广度页面
-iframe 与门户同源，故经 api 服务加 Bearer 鉴权后转发，保持一条问答链路：
+历史：tech-db 原生广度页问答视图（qa 脚本）直连 qa-backend :8765（无鉴权），
+经本代理加 Bearer 鉴权转发。2026-10-03 广度页问答入口已按需求三下线
+（问答统一走门户 /api/assistant/stream），前端不再调用本组端点。
 
-    breadth/qa.js → /api/breadth/qa/chat/stream → canonical-qa /api/chat/stream
-                                      /api/breadth/qa/graph   → canonical-qa /api/graph
-                                      /api/breadth/qa/stats   → canonical-qa /api/stats
+保留原因：脚本/外部工具的既有直连契约（chat/graph/stats 三端点），
+且属对 canonical-qa 唯一的带鉴权 HTTP 出口，删除属破坏性变更：
+
+    外部直连 → /api/breadth/qa/chat/stream → canonical-qa /api/chat/stream
+                          /api/breadth/qa/graph   → canonical-qa /api/graph
+                          /api/breadth/qa/stats   → canonical-qa /api/stats
 
 SSE 逐块转发（不做整包缓冲），错误以 QAServiceError 的公开口径返回。
 
