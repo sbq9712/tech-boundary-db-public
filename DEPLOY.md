@@ -3,9 +3,10 @@
 ## 前提
 
 - Linux 服务器，Docker 24+，Docker Compose V2
-- x86_64 Linux 服务器，建议至少 8GB 内存；磁盘需覆盖五个镜像、PostgreSQL 和上传资料
+- x86_64 Linux 服务器，建议至少 8GB 内存；磁盘需覆盖六个镜像（约 12GB 解压后）、PostgreSQL 和上传资料
 - 公司内网或本地 OpenAI 兼容模型端点
-- `docker-images` 分支提供的五个镜像 tar；服务器部署不依赖公网构建或下载模型
+- GitHub Release `server-20261004` 提供的六个镜像分片（qa=1008、api=1019、readonly-agent=1019、web=1016、postgres:16、alpine:3）与六类数据资产；服务器部署不依赖公网构建或下载模型
+- 装载：`cat <镜像>.tar.gz.part-* | gunzip | docker load`（`docker-images` 分支已废弃）
 
 ## 首次部署
 
@@ -28,10 +29,11 @@ TECHDB_QA_SERVICE_URL=http://canonical-qa:8765
 TECHDB_QA_SERVICE_TIMEOUT_SECONDS=120
 TECHDB_QA_INDEX_TIMEOUT_SECONDS=300
 TECHDB_QA_INDEX_TOKEN=<随机内部写入令牌>
-TECHDB_QA_INCREMENTAL_VOLUME=techdb_qa_incremental_0801
+TECHDB_QA_INCREMENTAL_VOLUME=techdb_qa_incremental_0033
+# MTU：公司 Linux 默认 1500（TECHDB_DOCKER_MTU）；WSL 内跑 Docker 需 1410
 ```
 
-`deploy.sh` 会创建并检查上传目录、准备 PostgreSQL 卷、优先复用已导入的 `0801` 镜像，并执行 Alembic 迁移。只有镜像缺失或 `TECHDB_FORCE_BUILD=true` 时才从源码构建。访问入口为 `http://<服务器>:8080`。
+`deploy.sh` 会创建并检查上传目录、准备 PostgreSQL 卷、优先复用已导入的交付镜像（默认 tag 见 `.env.example`，qa=1008/api=1019/agent=1019/web=1016），并执行 Alembic 迁移（当前 head `0033`）。只有镜像缺失或 `TECHDB_FORCE_BUILD=true` 时才从源码构建。访问入口为 `http://<服务器>:8080`。
 
 ## 持久数据
 
@@ -39,7 +41,8 @@ TECHDB_QA_INCREMENTAL_VOLUME=techdb_qa_incremental_0801
 |---|---|---|
 | PostgreSQL | `${TECHDB_PG_VOLUME}` Docker 卷 | 元数据、分类状态、校验和 |
 | 上传对象 | `${TECHDB_UPLOAD_HOST_PATH}` | 必须是服务器持久盘目录 |
-| canonical QA 资产 | `techdb-canonical-qa:0801` 镜像 | 内置 bge-m3、既有索引、记录与图谱；不在服务器下载 |
+| canonical QA 资产 | `techdb-canonical-qa:1008` 镜像 + `graph-live.tar.gz` 挂载 | 内置 bge-m3、基线索引、jieba；图谱经只读挂载；不在服务器下载 |
+| Docling 模型 | `external-data/document-models`（Release `document-models.tar.gz`） | api 解析 PDF/DOCX 的本地模型，bind-mount |
 | 上传增量索引 | `${TECHDB_QA_INCREMENTAL_VOLUME}` Docker 卷 | 新资料的 bge-m3 向量、BM25 和 chunk 元数据；不修改基线 |
 | 知识库 | `${TECHDB_KB_PATH}` | 只读挂载 |
 | 交付视图 | `${TECHDB_DELIVERY_VIEWS_PATH}` | 只读挂载 |
@@ -53,7 +56,7 @@ TECHDB_QA_INCREMENTAL_VOLUME=techdb_qa_incremental_0801
 
 ## Canonical QA 资产边界
 
-`techdb-canonical-qa:0801` 固定到上游提交 `fdffba1` 和 bge-m3 revision `5617a9f`，内置并校验向量/BM25 索引、jieba 字典、图谱、59,717 条记录和 24,091 条索引元数据。启动时会修复并验证分片重建导致的记录下标漂移；映射失败则拒绝就绪，避免引用错文。该容器只负责检索，门户 API 负责使用公司内网模型生成回答，因此 QA 容器不需要 Z.AI 或其他 LLM 密钥。不要在服务器运行上游 `setup.sh`，也不要使用 Cloudflare 或任何本机转发地址。
+`techdb-canonical-qa:1008` 固定 bge-m3 revision 与基线向量/BM25 索引、jieba 字典，基线 68,523 条记录；`graph-export.json` 由 compose 只读挂载（Release `graph-live.tar.gz`）。启动时校验索引映射，失败则拒绝就绪，避免引用错文。该容器只负责检索，门户 API 负责使用公司内网模型生成回答，因此 QA 容器不需要 Z.AI 或其他 LLM 密钥。不要在服务器运行上游 `setup.sh`，也不要使用 Cloudflare 或任何本机转发地址。
 
 ## 备份与恢复
 
@@ -75,7 +78,7 @@ curl -I http://localhost:8080/.git/config
 curl -I http://localhost:8080/backend/app/main.py
 ```
 
-预期迁移为当前链头（2026-10 起 `0032_qa_replay_state (head)`，以 `alembic current` 实际输出为准），健康检查返回 `{"status":"ok"}`，三个敏感路径返回 404。再使用管理员账号从上传页完成一次真实上传，检查服务器目标目录、资料库分类状态、`embedding_status=ready` 和鉴权下载。
+预期迁移为当前链头（2026-10-04 交付集为 `0033`，以 `alembic current` 实际输出为准），健康检查返回 `{"status":"ok"}`，三个敏感路径返回 404。再使用管理员账号从上传页完成一次真实上传，检查服务器目标目录、资料库分类状态、`embedding_status=ready` 和鉴权下载。
 
 ## 日常数据更新（离线环境）
 
