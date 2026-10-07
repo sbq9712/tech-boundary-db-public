@@ -876,26 +876,50 @@ def _process_uploaded_file_impl(uid: uuid.UUID) -> bool:
                     classified_at=datetime.now(timezone.utc),
                 )
             else:
-                result = request_ai_classification(
-                    representative_sample(text, CLASSIFICATION_BUDGET_CHARS), taxonomy
-                )
-                db.refresh(record)
-                values = {
-                    "taxonomy_version": taxonomy.version,
-                    "primary_category": result["primary_category"],
-                    "secondary_categories": result["secondary_categories"],
-                    "classification_status": classification_status_for(result["primary_category"]),
-                    "classification_confidence": result["confidence"],
-                    "classification_source": "ai",
-                    "classification_reason": result["reason"],
-                    "classification_error": None,
-                    "classified_at": datetime.now(timezone.utc),
-                }
-                if record.title_source != "manual" and result["title"]:
-                    values["title"] = result["title"]
-                    values["title_source"] = "ai_filled"
-                if not _commit_processing_result(db, uid, **values):
-                    return False
+                # 分类走外部 LLM 网关，嵌入是本地 bge-m3。两者解耦：
+                # 网关不可达（离线部署未配网关）只标记分类失败，继续本地嵌入，
+                # 保证上传资料仍可被问答检索。后续可用
+                # POST /uploads/{id}/classification/retry 或人工分类补齐。
+                try:
+                    result = request_ai_classification(
+                        representative_sample(text, CLASSIFICATION_BUDGET_CHARS), taxonomy
+                    )
+                except Exception as cls_exc:
+                    cls_message = str(cls_exc)[:2000]
+                    logger.warning(
+                        "AI classification failed for %s (embedding continues): %s",
+                        uid, cls_message,
+                    )
+                    _commit_processing_result(
+                        db,
+                        uid,
+                        taxonomy_version=taxonomy.version,
+                        primary_category="未分类",
+                        secondary_categories=[],
+                        classification_status="failed",
+                        classification_source="system",
+                        classification_reason="分类服务不可用，本地嵌入已完成，可稍后重试分类",
+                        classification_error=cls_message,
+                        classified_at=datetime.now(timezone.utc),
+                    )
+                else:
+                    db.refresh(record)
+                    values = {
+                        "taxonomy_version": taxonomy.version,
+                        "primary_category": result["primary_category"],
+                        "secondary_categories": result["secondary_categories"],
+                        "classification_status": classification_status_for(result["primary_category"]),
+                        "classification_confidence": result["confidence"],
+                        "classification_source": "ai",
+                        "classification_reason": result["reason"],
+                        "classification_error": None,
+                        "classified_at": datetime.now(timezone.utc),
+                    }
+                    if record.title_source != "manual" and result["title"]:
+                        values["title"] = result["title"]
+                        values["title_source"] = "ai_filled"
+                    if not _commit_processing_result(db, uid, **values):
+                        return False
             db.refresh(record)
 
         if not text:

@@ -279,6 +279,88 @@ def test_incremental_index_rejects_stale_source_rev(tmp_path):
     assert index.record_count == 2
 
 
+def test_classification_gateway_failure_does_not_block_local_embedding(
+    monkeypatch, tmp_path
+):
+    """离线部署（未配 LLM 网关）时分类失败不得拖垮本地 bge-m3 嵌入。
+
+    v7（0033 期离线交付）：分类走外部网关，嵌入是本地 canonical-qa；
+    两者解耦后上传资料在无网关环境仍可被问答检索，分类可事后重试。
+    """
+    from app.services import upload_ingestion
+
+    original = tmp_path / "b.txt"
+    original.write_text("synthetic offline text")
+    record = SimpleNamespace(
+        id=uuid.uuid4(),
+        stored_filename="b.txt",
+        original_filename="b.txt",
+        checksum_sha256=storage.sha256(original),
+        document_assets=None,
+        document_date=None,
+        classification_status="pending",
+        classification_attempts=0,
+        classification_error=None,
+        primary_category=None,
+        secondary_categories=None,
+        embedding_status="pending",
+        embedding_error=None,
+        chunk_count=0,
+        title=None,
+        title_source=None,
+        primary_section="industry",
+        breadth_source=None,
+    )
+    statements = []
+
+    class Session:
+        def execute(self, statement):
+            params = statement.compile().params
+            statements.append(params)
+            for key, value in params.items():
+                if hasattr(record, key):
+                    setattr(record, key, value)
+            return SimpleNamespace(rowcount=1)
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            pass
+
+        def get(self, *args):
+            return record
+
+        def refresh(self, *args):
+            pass
+
+    monkeypatch.setattr(upload_ingestion, "SessionLocal", Session)
+    monkeypatch.setattr(upload_ingestion, "upload_root", lambda: tmp_path)
+    monkeypatch.setattr(runner, "ingest", lambda **kwargs: (None, "synthetic offline text", [
+        {"chunk_id": "c1", "text": "synthetic offline text", "metadata": {"page_number": 1}}
+    ]))
+    monkeypatch.setattr(upload_ingestion, "sync_breadth_manual_record", lambda *args: None)
+
+    def unreachable_gateway(*args, **kwargs):
+        raise RuntimeError("分类模型调用失败（重试 2 次后仍不可用）：ConnectError")
+
+    monkeypatch.setattr(upload_ingestion, "request_ai_classification", unreachable_gateway)
+    monkeypatch.setattr(
+        upload_ingestion,
+        "request_incremental_index",
+        lambda rec, data: {"status": "ready", "chunk_count": len(data)},
+    )
+    assert upload_ingestion.process_uploaded_file(record.id) is True
+    assert record.embedding_status == "ready"
+    assert record.chunk_count == 1
+    assert record.classification_status == "failed"
+    assert "仍不可用" in (record.classification_error or "")
+    assert record.primary_category == "未分类"
+
+
 def test_ingestion_index_failure_preserves_assets_for_retry(monkeypatch, tmp_path):
     from app.services import upload_ingestion
 
