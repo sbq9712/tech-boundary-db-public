@@ -37,6 +37,14 @@ if [ ! -d "$UPLOAD_PATH" ] || [ ! -r "$UPLOAD_PATH" ]; then
     exit 1
 fi
 
+# 上传对象与 QA 增量卷均经 alpine 临时容器打包（root 属主文件宿主 tar 读不了）。
+if ! docker image inspect alpine:3 >/dev/null 2>&1; then
+    echo "[$(date)] ERROR: 缺少 alpine:3 镜像（容器打包必需）。"
+    echo "  在线环境: docker pull alpine:3"
+    echo "  离线环境: cat alpine-3.tar.gz.part-* | gunzip | docker load"
+    exit 1
+fi
+
 cleanup_parts() {
     rm -f -- "$DUMP_PART" "$UPLOAD_PART" "$QA_PART"
 }
@@ -51,8 +59,14 @@ fi
 mv -- "$DUMP_PART" "$DUMP_FILE"
 
 # 文件对象一经落盘不再修改。数据库快照先于文件归档，可保证所有 DB 引用都能进入归档。
+# 经 alpine 临时容器打包：uploads 子目录由容器以 root 属主写入，宿主 tar 会因
+# Permission denied 漏读/失败（离线交付实测踩坑）。
 echo "[$(date)] 开始备份上传对象 ${UPLOAD_PATH} ..."
-if ! tar --exclude='./.incoming' -C "$UPLOAD_PATH" -czf "$UPLOAD_PART" .; then
+if ! docker run --rm \
+    -v "${UPLOAD_PATH}:/data:ro" \
+    -v "${BACKUP_DIR}:/backup" \
+    --entrypoint /bin/sh alpine:3 \
+    -c "cd /data && tar --exclude='./.incoming' -czf /backup/$(basename "$UPLOAD_PART") . && chmod 644 /backup/$(basename "$UPLOAD_PART")" >/dev/null; then
     rm -f -- "$DUMP_FILE"
     echo "[$(date)] ERROR: 上传对象备份失败，已移除不完整的数据库单份备份"
     exit 1
@@ -69,7 +83,7 @@ if docker volume inspect "$QA_VOLUME" >/dev/null 2>&1; then
         -v "${QA_VOLUME}:/data:ro" \
         -v "${BACKUP_DIR}:/backup" \
         --entrypoint /bin/sh alpine:3 \
-        -c "cd /data && tar -czf /backup/$(basename "$QA_PART") ." >/dev/null; then
+        -c "cd /data && tar -czf /backup/$(basename "$QA_PART") . && chmod 644 /backup/$(basename "$QA_PART")" >/dev/null; then
         rm -f -- "$DUMP_FILE" "$UPLOAD_ARCHIVE"
         echo "[$(date)] ERROR: QA 增量索引备份失败，已移除本组其余备份"
         exit 1

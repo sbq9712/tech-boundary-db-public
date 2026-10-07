@@ -52,6 +52,16 @@ def test_deploy_script_asserts_incremental_index_ready():
     assert "incremental_corrupt" in deploy
 
 
+def test_db_backup_packs_uploads_via_container():
+    # uploads 子目录由容器以 root 属主写入，宿主 tar 会 Permission denied；
+    # 必须经 alpine 临时容器打包（离线交付实测踩坑）。
+    backup = (ROOT / "scripts" / "db_backup.sh").read_text(encoding="utf-8")
+    assert "alpine:3" in backup
+    assert '-v "${UPLOAD_PATH}:/data:ro"' in backup
+    host_tar = 'tar --exclude=\'./.incoming\' -C "$UPLOAD_PATH"'
+    assert host_tar not in backup
+
+
 def test_deploy_missing_image_hint_points_to_release():
     deploy = (ROOT / "deploy.sh").read_text(encoding="utf-8")
     assert "docker-images 分支" not in deploy

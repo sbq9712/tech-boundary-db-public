@@ -62,6 +62,14 @@ case "$UPLOAD_PATH" in
         ;;
 esac
 
+# QA 增量索引卷经 alpine 临时容器解包。
+if [ "$RESTORE_QA" = "true" ] && ! docker image inspect alpine:3 >/dev/null 2>&1; then
+    echo "ERROR: 缺少 alpine:3 镜像（QA 增量索引卷恢复必需）。"
+    echo "  在线环境: docker pull alpine:3"
+    echo "  离线环境: cat alpine-3.tar.gz.part-* | gunzip | docker load"
+    exit 1
+fi
+
 STAGE_DIR=""
 SERVICES_STOPPED=false
 cleanup() {
