@@ -11,12 +11,17 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_compose_defaults_to_integrated_service_images():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "techdb-canonical-qa:${TECHDB_QA_IMAGE_TAG:-1001}" in compose
-    assert "techdb-api:${TECHDB_API_IMAGE_TAG:-1001}" in compose
-    assert "techdb-readonly-agent:${TECHDB_AGENT_IMAGE_TAG:-1001}" in compose
-    assert "techdb-web:${TECHDB_WEB_IMAGE_TAG:-1001}" in compose
+    # 离线交付集 server-20261004：qa=1008（含 TECHDB_QA_LLM_BASE_URL 空串回落）、
+    # api=agent=1018（6307112）、web=1016。默认值必须指向已验收 tag，杜绝静默回退旧镜像。
+    assert "techdb-canonical-qa:${TECHDB_QA_IMAGE_TAG:-1008}" in compose
+    assert "techdb-api:${TECHDB_API_IMAGE_TAG:-1019}" in compose
+    assert "techdb-readonly-agent:${TECHDB_AGENT_IMAGE_TAG:-1019}" in compose
+    assert "techdb-web:${TECHDB_WEB_IMAGE_TAG:-1016}" in compose
     assert "TECHDB_QA_IMAGE_TAG:-0801" not in compose
     assert "TECHDB_API_IMAGE_TAG:-0801" not in compose
+    for stale in ("TECHDB_QA_IMAGE_TAG:-1001", "TECHDB_API_IMAGE_TAG:-1001",
+                  "TECHDB_AGENT_IMAGE_TAG:-1001", "TECHDB_WEB_IMAGE_TAG:-1001"):
+        assert stale not in compose
 
 
 def test_deploy_script_honors_per_service_tags():
@@ -30,6 +35,27 @@ def test_deploy_script_honors_per_service_tags():
         assert name in deploy
     assert "techdb-canonical-qa:0801" not in deploy
     assert 'APP_IMAGES=("techdb-api:0801"' not in deploy
+    for name, tag in (
+        ("TECHDB_QA_IMAGE_TAG", "1008"),
+        ("TECHDB_API_IMAGE_TAG", "1019"),
+        ("TECHDB_AGENT_IMAGE_TAG", "1019"),
+        ("TECHDB_WEB_IMAGE_TAG", "1016"),
+    ):
+        assert f"{name}:-{tag}}}\"" in deploy
+
+
+def test_deploy_script_asserts_incremental_index_ready():
+    # canonical-qa 就绪断言必须覆盖增量索引（uploads 增量融合链路），否则
+    # 恢复后 incremental 索引缺失时 deploy.sh 仍报成功。
+    deploy = (ROOT / "deploy.sh").read_text(encoding="utf-8")
+    assert "incremental_index_ready" in deploy
+    assert "incremental_corrupt" in deploy
+
+
+def test_deploy_missing_image_hint_points_to_release():
+    deploy = (ROOT / "deploy.sh").read_text(encoding="utf-8")
+    assert "docker-images 分支" not in deploy
+    assert "server-20261004" in deploy
 
 
 def test_release_image_contains_full_migrated_qa_chain():

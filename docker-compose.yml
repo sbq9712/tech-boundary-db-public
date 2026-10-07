@@ -29,7 +29,7 @@ services:
   canonical-qa:
     # 每服务独立版本。1001 为当前集成基线，避免未配置 .env 时静默回退
     # 到 pre-migration 0801 QA 镜像。
-    image: techdb-canonical-qa:${TECHDB_QA_IMAGE_TAG:-1001}
+    image: techdb-canonical-qa:${TECHDB_QA_IMAGE_TAG:-1008}
     networks:
       - technet
     environment:
@@ -38,6 +38,9 @@ services:
       # canonical-qa 自身 chat/graph-ingest 生成侧需要 ZAI key（广度页问答视图已下线，
       # 生成侧需要 ZAI key（config.py 优先读 env，缺省回落宿主 env 文件）。
       TECHDB_QA_LLM_API_KEY: ${TECHDB_QA_LLM_API_KEY:-}
+      # 生成端点覆盖（离线公司服务器应指向内网 OpenAI 兼容网关；默认公网
+      # Z.AI 在内网不可达——不配置时 /api/breadth/qa/* 代理只有检索无生成）。
+      TECHDB_QA_LLM_BASE_URL: ${TECHDB_QA_LLM_BASE_URL:-}
       TECHDB_QA_INCREMENTAL_INDEX_PATH: /app/data/lightrag/incremental/index.pkl
       # 五.1 答案侧核验链（2026-09-30）：GLM-5.2 推理型输出在 60s/次内
       # 常超时（3 连超时 → UNVERIFIED），放宽 verifier 内层单次预算；
@@ -61,7 +64,7 @@ services:
       retries: 5
 
   api:
-    image: techdb-api:${TECHDB_API_IMAGE_TAG:-1001}
+    image: techdb-api:${TECHDB_API_IMAGE_TAG:-1019}
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -128,7 +131,7 @@ services:
       - "${TECHDB_API_BIND:-127.0.0.1}:8000:8000"
 
   web:
-    image: techdb-web:${TECHDB_WEB_IMAGE_TAG:-1001}
+    image: techdb-web:${TECHDB_WEB_IMAGE_TAG:-1016}
     build:
       context: .
       dockerfile: web/Dockerfile
@@ -145,7 +148,7 @@ services:
       - ./breadth/data/reports:/usr/share/nginx/html/breadth/data/reports:ro
 
   readonly-agent:
-    image: techdb-readonly-agent:${TECHDB_AGENT_IMAGE_TAG:-1001}
+    image: techdb-readonly-agent:${TECHDB_AGENT_IMAGE_TAG:-1019}
     build:
       context: .
       dockerfile: backend/Dockerfile

@@ -131,10 +131,10 @@ echo ""
 
 # 每个服务独立版本。1001 是完成 QA 迁移/Feed/上传收口后的集成基线。
 # 这里绝不能再硬编码 0801，否则一键部署会静默绕过仓库里的新版代码。
-QA_TAG="${TECHDB_QA_IMAGE_TAG:-1001}"
-API_TAG="${TECHDB_API_IMAGE_TAG:-1001}"
-AGENT_TAG="${TECHDB_AGENT_IMAGE_TAG:-1001}"
-WEB_TAG="${TECHDB_WEB_IMAGE_TAG:-1001}"
+QA_TAG="${TECHDB_QA_IMAGE_TAG:-1008}"
+API_TAG="${TECHDB_API_IMAGE_TAG:-1019}"
+AGENT_TAG="${TECHDB_AGENT_IMAGE_TAG:-1019}"
+WEB_TAG="${TECHDB_WEB_IMAGE_TAG:-1016}"
 
 QA_IMAGE="techdb-canonical-qa:${QA_TAG}"
 if ! docker image inspect "$QA_IMAGE" >/dev/null 2>&1; then
@@ -172,7 +172,8 @@ fi
 
 if ! docker image inspect postgres:16 >/dev/null 2>&1; then
     echo "❌ 错误：缺少 postgres:16 镜像"
-    echo "   请先从 docker-images 分支下载并执行 docker load。"
+    echo "   请从 GitHub Release（server-20261004）下载镜像分片并装载："
+    echo "     cat postgres-16.tar.gz.part-* | gunzip | docker load"
     exit 1
 fi
 echo ""
@@ -202,9 +203,9 @@ fi
 QA_READY=false
 for i in $(seq 1 90); do
     if docker compose exec -T canonical-qa python -c \
-        "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready']" \
+        "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready'] and d['incremental_index_ready'] and not d.get('incremental_corrupt', False)" \
         >/dev/null 2>&1; then
-        echo "  ✓ Canonical QA 模型、索引和记录映射已就绪"
+        echo "  ✓ Canonical QA 模型、索引、记录映射和增量索引已就绪"
         QA_READY=true
         break
     fi

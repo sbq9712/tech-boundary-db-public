@@ -19,8 +19,11 @@ WORKING_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── API Config ──
 ENV_FILE = os.path.expanduser("~/.config/anthropic-proxy.env")
-API_BASE = os.getenv("TECHDB_QA_LLM_BASE_URL", "https://api.z.ai/api/coding/paas/v4").rstrip("/")
-MODEL_NAME = os.getenv("TECHDB_QA_LLM_MODEL", "glm-5.2")
+# 2026-10-04（离线迁移）：compose 透传 TECHDB_QA_LLM_BASE_URL 时，未配置会以
+# 空串到达——空串视同未设置回落默认公网端点，避免 API_BASE="" 导致客户端崩。
+_raw_base = os.getenv("TECHDB_QA_LLM_BASE_URL", "").strip()
+API_BASE = (_raw_base or "https://api.z.ai/api/coding/paas/v4").rstrip("/")
+MODEL_NAME = (os.getenv("TECHDB_QA_LLM_MODEL", "").strip() or "glm-5.2")
 
 def load_api_key():
     configured = os.getenv("TECHDB_QA_LLM_API_KEY", "").strip()
