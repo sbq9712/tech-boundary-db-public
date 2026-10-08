@@ -24,7 +24,8 @@
 | postgres:16 | 官方 | 数据库 |
 | alpine:3 | 官方 | db_backup/db_restore 操作增量卷依赖 |
 
-打包：`docker save|gzip -1|split -b 1900m`；每镜像附 `.part.sha256`（分片）与
+打包：`docker save|gzip -1|split -b 1900m`（qa-1008 因上传通道单连接吞吐受限，
+2026-10-08 重切为 `-b 800m`×3，流级 sha256 不变）；每镜像附 `.part.sha256`（分片）与
 `.stream.sha256`（合并流）；Release 附总 SHA256SUMS。
 
 ### 1.3 数据资产（同一 Release）
