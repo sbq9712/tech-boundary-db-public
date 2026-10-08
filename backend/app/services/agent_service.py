@@ -362,6 +362,8 @@ def _normalize_citations(items: list[dict]) -> list[dict]:
                 # 图谱路归因（任务二 2.5「图谱非装饰」）：canonical /api/search 已
                 # 透传 via_graph；主问答链路重建 citation 时同样保留，缺键时为 None。
                 "via_graph": item.get("via_graph"),
+                "retrieval_routes": item.get("retrieval_routes") or [],
+                "graph_paths": item.get("graph_paths") or [],
                 "record_key_sha": item.get("record_key_sha"),
                 "context_truncated": bool(item.get("context_truncated")),
                 **({key: item.get(key) for key in ("document_id", "chunk_id", "chunk_metadata", "chunk_text")}

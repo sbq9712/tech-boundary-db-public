@@ -2116,6 +2116,7 @@ function libIdxDetailRowHtml(detail,colspan){
   };
   const idx=detail.index||{};
   const extra=[];
+  if(detail.observed_at)extra.push(`观察时间 ${detail.observed_at}`);
   if(idx.documents_checked!=null)extra.push(`文档 ${idx.documents_found||0}/${idx.documents_checked}`);
   if(idx.chunks!=null)extra.push(`分块 ${idx.chunks}`);
   if(idx.entity_count!=null)extra.push(`实体 ${idx.entity_count}`);

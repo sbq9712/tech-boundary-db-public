@@ -88,3 +88,11 @@ def test_persisted_run_requires_own_session_and_run():
     run.session_id = uuid.uuid4()
     with pytest.raises(HTTPException):
         get_agent_run(sid, rid, db, "alice")
+
+
+def test_route_paths_survive_portal_citation_normalization():
+    citation = {"id": 1, "document_id": "a", "primary_section": "atsc", "title": "report",
+                "retrieval_routes": ["graph", "keyword"], "graph_paths": [{"from": "A", "to": "B", "relation": "研究"}]}
+    normalized = agent._normalize_citations([citation])[0]
+    assert normalized["graph_paths"] == citation["graph_paths"]
+    assert normalized["retrieval_routes"] == citation["retrieval_routes"]

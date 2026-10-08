@@ -373,3 +373,76 @@ def test_verification_matches_each_record_not_just_type_set(db, tmp_path, monkey
     docs[keys[0]]["intelligence_types"], docs[keys[1]]["intelligence_types"] = (
         docs[keys[1]]["intelligence_types"], docs[keys[0]]["intelligence_types"])
     assert module.verify_backup(backup, upload.id) == 3
+
+
+def test_corrupted_type_flows_through_queue_into_real_incremental_index(db, tmp_path, monkeypatch):
+    """Real DB + queue execution + real index persistence; only transport/embedding substituted."""
+    import asyncio
+    import numpy as np
+    from sqlalchemy import select
+    from app.services import breadth_index_queue as queue
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "services/canonical-qa/qa-backend"))
+    from incremental_index import IncrementalIndex
+    from graph_fragment import build_fragment
+    upload, recs = _import_and_corrupt(db, tmp_path, monkeypatch, ("news", "news", "news"))
+    for rec in recs:
+        rec.content_hash = compute_content_hash_v2(rec.title, rec.document_date, rec.url, rec.body, rec.ai_summary or "", "news")
+    db.commit()
+    async def embed(texts):
+        return np.ones((len(texts), 1024), dtype=np.float32)
+    idx = IncrementalIndex(tmp_path / "index.pkl", embedding_func=embed)
+    idx.loaded = True
+    def upsert(payload):
+        return asyncio.run(idx.upsert(confidentiality=None, **payload))
+    for rec in recs:
+        upsert(queue._upsert_payload(rec, rev=0))
+    assert all(v["intelligence_types"] == ["news"] for v in idx.documents_metadata().values())
+    backup = tmp_path / "index-repair.json"
+    module = _repair_module()
+    assert module.main(["--execute", "--upload-id", str(upload.id), "--backup", str(backup)]) == 3
+    db.expire_all()
+    monkeypatch.setattr(queue, "_post_index_upsert", upsert)
+    for task in db.scalars(select(IndexTask).where(IndexTask.upload_id == upload.id)):
+        queue._execute(db, task)
+        task.status = "done"
+    db.commit()
+    reloaded = IncrementalIndex(tmp_path / "index.pkl", embedding_func=embed)
+    reloaded.load()
+    docs = reloaded.documents_metadata()
+    for rec in recs:
+        expected = "literature" if rec.title == "固态电池界面" else "news"
+        assert rec.intelligence_type == expected
+        assert docs[str(rec.id)]["intelligence_types"] == [expected]
+        assert docs[str(rec.id)]["content_shas"] == [rec.content_hash]
+        assert docs[str(rec.id)]["source_versions"] == [str(rec.source_version)]
+        assert docs[str(rec.id)]["vector_rows_ok"] == docs[str(rec.id)]["chunks"]
+        assert docs[str(rec.id)]["bm25_rows_ok"] == docs[str(rec.id)]["chunks"]
+        vector = reloaded.vector_search(np.ones(1024, dtype=np.float32) / 32, top_k=10,
+                    allowed=lambda m: m["document_id"] == str(rec.id))
+        keyword = reloaded.bm25_search(rec.title, top_k=10,
+                    allowed=lambda m: m["document_id"] == str(rec.id))
+        assert vector and keyword
+        assert all(r["meta"]["chunk_metadata"]["intelligence_type"] == expected for r in vector + keyword)
+    assert build_fragment(reloaded.meta)["nodes"]  # Graph derives from the same current rows.
+    assert module.main(["--upload-id", str(upload.id)]) == 0  # Idempotent after convergence.
+
+
+def test_concurrent_edit_after_plan_is_not_overwritten(db, tmp_path, monkeypatch):
+    upload, recs = _import_and_corrupt(db, tmp_path, monkeypatch, ("news", "news", "news"))
+    module = _repair_module()
+    original_save = module._save_backup
+    target = next(r.id for r in recs if r.title == "固态电池界面")
+    def edit_after_backup(path, payload, *, create=False):
+        original_save(path, payload, create=create)
+        if create:
+            with SessionLocal() as concurrent:
+                concurrent.get(BreadthManualRecord, target).body = "concurrent edit must survive"
+                concurrent.commit()
+    monkeypatch.setattr(module, "_save_backup", edit_after_backup)
+    backup = tmp_path / "concurrent.json"
+    assert module.main(["--execute", "--upload-id", str(upload.id), "--backup", str(backup)]) == 2
+    db.expire_all()
+    rec = db.get(BreadthManualRecord, target)
+    assert rec.body == "concurrent edit must survive" and rec.intelligence_type == "news"
+    entry = json.loads(backup.read_text())["entries"][0]
+    assert not entry["executed"] and "并发修改" in entry["error"]
