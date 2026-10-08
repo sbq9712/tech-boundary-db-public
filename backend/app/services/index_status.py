@@ -282,7 +282,9 @@ def upload_index_status(db: Session, record: UploadedFile) -> dict:
     live_records = _record_count(db, record.id)
     row_chain = is_github or session is not None or queue_total > 0
 
+    from datetime import datetime, timezone
     result: dict = {
+        "observed_at": datetime.now(timezone.utc).isoformat(),
         "id": str(record.id),
         "filename": record.original_filename,
         "primary_section": record.primary_section,

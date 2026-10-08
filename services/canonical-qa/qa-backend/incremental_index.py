@@ -455,6 +455,10 @@ class IncrementalIndex:
                     "primary_section": None,
                     "primary_sections": set(),
                     "content_sha_rows": 0,
+                    "intelligence_types": set(),
+                    "intelligence_type_rows": 0,
+                    "source_versions": set(),
+                    "source_version_rows": 0,
                     "source": None,
                     "checksum_sha256": None,
                     "vector_rows_ok": 0,
@@ -469,6 +473,11 @@ class IncrementalIndex:
                 if csha:
                     entry["content_shas"].add(csha)
                     entry["content_sha_rows"] += 1
+                for field, plural, count in (("intelligence_type", "intelligence_types", "intelligence_type_rows"),
+                                               ("source_version", "source_versions", "source_version_rows")):
+                    if md.get(field) is not None:
+                        entry[plural].add(str(md[field]))
+                        entry[count] += 1
                 ksha = str(md.get("record_key_sha") or "")
                 if ksha:
                     entry["record_key_shas"].add(ksha)
@@ -479,6 +488,8 @@ class IncrementalIndex:
                 entry["checksum_sha256"] = entry["checksum_sha256"] or (
                     meta.get("checksum_sha256") or None)
         for entry in out.values():
+            entry["intelligence_types"] = sorted(entry["intelligence_types"])
+            entry["source_versions"] = sorted(entry["source_versions"])
             entry["content_shas"] = sorted(entry["content_shas"])
             entry["record_key_shas"] = sorted(entry["record_key_shas"])
             entry["primary_sections"] = sorted(entry["primary_sections"])

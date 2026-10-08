@@ -818,12 +818,14 @@ async def _route_with_retry(route_name: str, run, routes: dict,
     - routes[route_name] 记录 executed/succeeded/raw_candidates/
       duration_ms/error（成功零命中是 succeeded+0，不是失败）。
     """
+    from retrieval_pipeline import evidence_id
     import time as _time
     t0 = _time.monotonic()
     try:
         results = await run()
         routes[route_name] = {
             "executed": True, "succeeded": True, "raw_candidates": len(results),
+            "candidate_ids": [evidence_id(r) for r in results],
             "duration_ms": int((_time.monotonic() - t0) * 1000), "error": None,
         }
         return results
@@ -835,6 +837,7 @@ async def _route_with_retry(route_name: str, run, routes: dict,
                 routes[route_name] = {
                     "executed": True, "succeeded": True,
                     "raw_candidates": len(results),
+                    "candidate_ids": [evidence_id(r) for r in results],
                     "duration_ms": int((_time.monotonic() - t0) * 1000),
                     "error": None, "retried_after": f"{exc.__class__.__name__}",
                 }
@@ -911,10 +914,7 @@ def _bm25_by_label(label: str, top_k: int = 6,
     sources（任务二 2.2）：图谱扩展召回同样受来源范围约束（图谱证据
     必须满足来源范围与版本约束）。
     """
-    try:
-        return bm25_search(label, top_k=top_k, sources=sources)
-    except Exception:
-        return []
+    return bm25_search(label, top_k=top_k, sources=sources)
 
 
 def _hydrate_texts(results: list) -> list:
@@ -940,8 +940,8 @@ def _hydrate_texts(results: list) -> list:
             if isinstance(_tags, str):
                 _tags = [_tags]
             text = {
-                "title": str(meta.get("filename") or meta.get("title")
-                             or meta.get("t") or ""),
+                "title": str(meta.get("t") or meta.get("title")
+                             or meta.get("filename") or ""),
                 "category": str(meta.get("category") or meta.get("c") or "") or "上传资料",
                 "date": str(meta.get("date") or meta.get("d") or ""),
                 "body_snippet": str(
@@ -971,7 +971,8 @@ def _matrix_cell() -> dict:
     succeeded（执行成功与否；成功零命中=true）/candidates（该路原始候选数，
     非融合计数）/duration_ms（该路自身耗时）/error（失败原因）。"""
     return {"executed": False, "succeeded": None, "candidates": 0,
-            "duration_ms": 0, "error": None}
+            "duration_ms": 0, "error": None, "candidate_ids": [],
+            "selected_ids": [], "errors": []}
 
 
 def _merge_route_info(cell: dict, info: dict) -> None:
@@ -983,6 +984,10 @@ def _merge_route_info(cell: dict, info: dict) -> None:
     - error 只在从未成功时保留；成功即清除（瞬时失败耗时已入
       duration_ms，失败→恢复可从耗时异常增长侧面观察）。
     """
+    cell.setdefault("candidate_ids", []).extend(
+        k for k in info.get("candidate_ids", []) if k not in cell.get("candidate_ids", []))
+    if info.get("error"):
+        cell.setdefault("errors", []).append(str(info["error"]))
     cell["executed"] = bool(info.get("executed")) or cell["executed"]
     cell["candidates"] += int(info.get("raw_candidates") or 0)
     cell["duration_ms"] += int(info.get("duration_ms") or 0)
@@ -1052,12 +1057,15 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
         for sub in subqueries[:4]:
             for sc in scopes:
                 sc_sources = (sc,)  # 每个源独立 top-k 池（含未归属池）
-                results, _rel, h_routes = await _hybrid_routes(sub, sources=sc_sources)
-                m = matrix[sc]
-                for route_name in ("vector", "keyword"):
-                    _merge_route_info(m[route_name], h_routes.get(route_name) or {})
-                if results:
-                    per_scope_rounds.setdefault(sc, []).extend(_hydrate_texts(results))
+                try:
+                    results, _rel, h_routes = await _hybrid_routes(sub, sources=sc_sources)
+                    m = matrix[sc]
+                    for route_name in ("vector", "keyword"):
+                        _merge_route_info(m[route_name], h_routes.get(route_name) or {})
+                    if results:
+                        per_scope_rounds.setdefault(sc, []).extend(_hydrate_texts(results))
+                except Exception as exc:
+                    trace.setdefault("source_errors", []).append({"source": sc, "error": str(exc)[:160]})
         rounds = [rs for rs in per_scope_rounds.values() if rs]
 
         # 3) novelty exclusion 先于图谱扩展（已引用记录不重复进入证据窗）
@@ -1080,73 +1088,76 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
                 sc_sources = (sc,)
                 try:
                     labels, adjacency = _merged_graph(sc)
-                except Exception as exc:  # noqa: BLE001 — 图谱路故障不牵连其他路
-                    matrix[sc]["graph"].update({
-                        "executed": True, "succeeded": False, "candidates": 0,
-                        "error": f"_merged_graph {exc.__class__.__name__}: {str(exc)[:120]}",
-                    })
-                    continue
-                entities = _pl_match_entities(base, labels) if FLAGS.get("ENTITY_RESOLUTION_ENABLED") else []
-                m = matrix[sc]["graph"]
-                m["executed"] = True
-                # 任务二 2.3：图谱正常零命中（无匹配实体/无合格扩展）不是
-                # 失败——succeeded=true + candidates=0；只有异常才 succeeded=false。
-                m["succeeded"] = True
-                m.setdefault("duration_ms", 0)
-                if sc == "breadth" and _STATIC_GRAPH_STATE.get("degraded"):
-                    m["degrade_reason"] = "static graph unbound; fragment-only"
-                if not entities:
-                    m["degrade_reason"] = m.get("degrade_reason") or "no entity matched"
-                    m["duration_ms"] += int((_time.monotonic() - t0) * 1000)
-                    continue
-                neighbor_labels, paths = _pl_graph_expand(entities, adjacency)
-                if sc == "breadth":
-                    trace.setdefault("graph_entities", []).extend(
-                        e["label"] for e in entities)
-                    trace.setdefault("graph_expansion", []).extend(paths[:4])
-                seen_ids = {_pl_result_key(r) for r in (
-                    [r for rs in rounds for r in rs] + graph_extra)}
-                # Codex P2-3：novelty 身份集持久化到图谱补充阶段——
-                # 历史已引用（document_id/record_id/url 命中）的记录不因
-                # 图谱扩展路径重入证据窗。
-                _novelty_ids = {str(e) for e in (exclude_ids or []) if str(e).strip()}
+                    entities = _pl_match_entities(base, labels) if FLAGS.get("ENTITY_RESOLUTION_ENABLED") else []
+                    m = matrix[sc]["graph"]
+                    m["executed"] = True
+                    # 任务二 2.3：图谱正常零命中（无匹配实体/无合格扩展）不是
+                    # 失败——succeeded=true + candidates=0；只有异常才 succeeded=false。
+                    m["succeeded"] = True
+                    m.setdefault("duration_ms", 0)
+                    if sc == "breadth" and _STATIC_GRAPH_STATE.get("degraded"):
+                        m["degrade_reason"] = "static graph unbound; fragment-only"
+                    if not entities:
+                        m["degrade_reason"] = m.get("degrade_reason") or "no entity matched"
+                        m["duration_ms"] += int((_time.monotonic() - t0) * 1000)
+                        continue
+                    neighbor_labels, paths = _pl_graph_expand(entities, adjacency)
+                    if sc == "breadth":
+                        trace.setdefault("graph_entities", []).extend(
+                            e["label"] for e in entities)
+                        trace.setdefault("graph_expansion", []).extend(paths[:4])
+                    seen_ids = {_pl_result_key(r) for r in graph_extra}
+                    # Codex P2-3：novelty 身份集持久化到图谱补充阶段——
+                    # 历史已引用（document_id/record_id/url 命中）的记录不因
+                    # 图谱扩展路径重入证据窗。
+                    _novelty_ids = {str(e) for e in (exclude_ids or []) if str(e).strip()}
 
-                def _novelty_hit(r: dict) -> bool:
-                    meta = r.get("meta") or {}
-                    rid = str(meta.get("document_id") or meta.get("record_id") or "")
-                    return (rid and rid in _novelty_ids) or (
-                        str(r.get("url") or "") in _novelty_ids)
-
-                from retrieval_pipeline import extract_query_terms as _eqt
-                gate_terms = set(_eqt(base)) | {e["label"] for e in entities}
-                sc_extra = 0
-                for lab in neighbor_labels[:6]:
-                    label_hit = lab in base or any(t in lab for t in gate_terms)
-                    for r in _hydrate_texts(_bm25_by_label(lab, sources=sc_sources)):
-                        if _pl_result_key(r) in seen_ids or _novelty_hit(r):
-                            continue
-                        # 增量/基础已在 bm25 候选获取阶段按源过滤（含未归属池）
-                        text = str(r.get("title", "")) + str(r.get("body_snippet", ""))
-                        if not label_hit and not any(t and t in text for t in gate_terms):
-                            continue
-                        seen_ids.add(_pl_result_key(r))
+                    def _novelty_hit(r: dict) -> bool:
                         meta = r.get("meta") or {}
-                        meta = dict(meta, via_graph=lab)
-                        graph_extra.append(dict(r, meta=meta, score=float(r.get("score") or 0)))
-                        sc_extra += 1
-                m["candidates"] += sc_extra
-                m["duration_ms"] += int((_time.monotonic() - t0) * 1000)
+                        rid = str(meta.get("document_id") or meta.get("record_id") or "")
+                        return (rid and rid in _novelty_ids) or (
+                            str(r.get("url") or "") in _novelty_ids)
+
+                    from retrieval_pipeline import extract_query_terms as _eqt
+                    gate_terms = set(_eqt(base)) | {e["label"] for e in entities}
+                    sc_extra = 0
+                    from retrieval_pipeline import evidence_id
+                    m["paths"] = paths
+                    m["entities"] = [e["label"] for e in entities]
+                    for lab in neighbor_labels[:6]:
+                        label_hit = lab in base or any(t in lab for t in gate_terms)
+                        for r in _hydrate_texts(_bm25_by_label(lab, sources=sc_sources)):
+                            if _pl_result_key(r) in seen_ids or _novelty_hit(r):
+                                continue
+                            # 增量/基础已在 bm25 候选获取阶段按源过滤（含未归属池）
+                            text = str(r.get("title", "")) + str(r.get("body_snippet", ""))
+                            if not label_hit and not any(t and t in text for t in gate_terms):
+                                continue
+                            seen_ids.add(_pl_result_key(r))
+                            meta = r.get("meta") or {}
+                            meta = dict(meta, via_graph=lab)
+                            graph_extra.append(dict(r, meta=meta, score=float(r.get("score") or 0)))
+                            sc_extra += 1
+                            m["candidate_ids"].append(evidence_id(r))
+                            m.setdefault("candidate_paths", {})[evidence_id(r)] = [p for p in paths if p.get("to") == lab]
+                    m["candidates"] += sc_extra
+                    m["duration_ms"] += int((_time.monotonic() - t0) * 1000)
+                except Exception as exc:
+                    matrix[sc]["graph"].update({"executed": True, "succeeded": False,
+                        "error": f"{exc.__class__.__name__}: {str(exc)[:160]}"})
+                finally:
+                    matrix[sc]["graph"]["duration_ms"] = int((_time.monotonic() - t0) * 1000)
             trace["graph_extra_results"] = len(graph_extra)
 
         if not rounds and not graph_extra:
             trace["source_route_matrix"] = matrix
             return [], {"status": "insufficient", "count": 0}, trace
         if rounds:
-            merged = rounds[0] if len(rounds) == 1 else _pl_rrf_merge(rounds)
+            merged = rounds[0] if len(rounds) == 1 else _pl_rrf_merge(rounds, cap=sum(map(len, rounds)))
         else:
             merged = []
         if graph_extra:
-            merged = _pl_rrf_merge([merged, graph_extra]) if merged else list(graph_extra)
+            merged = _pl_rrf_merge([merged, graph_extra], cap=len(merged) + len(graph_extra)) if merged else list(graph_extra)
             merged, graph_dup = dedup_search_results(merged)
             trace["graph_route_fused"] = len(graph_extra)
         # 跨池去重：同一文章在不同批次/子查询/来源池下实体相同
@@ -1160,7 +1171,23 @@ async def orchestrated_search(query: str, exclude_ids: list | None = None,
             trace["unattributed_included"] = unattr_n
 
         # 5) RERANKER（含 TEMPORAL / EVIDENCE_SELECTOR 窗口）
-        ranked, rerank_trace = _pl_rerank(merged, base, FLAGS, cap=final_top_k)
+        from retrieval_pipeline import select_source_evidence, evidence_id
+        ranked, rerank_trace = _pl_rerank(merged, base, FLAGS, cap=len(merged))
+        ranked, selection = select_source_evidence(ranked, base, final_top_k, _scope_of)
+        trace["source_selection"] = selection
+        selected_ids = {evidence_id(r) for r in ranked}
+        for scope, routes in matrix.items():
+            for route, cell in routes.items():
+                cell["selected_ids"] = [k for k in cell["candidate_ids"] if k in selected_ids]
+        for result in ranked:
+            key = evidence_id(result)
+            routes = matrix.get(_scope_of(result.get("meta") or {}), {})
+            result["meta"] = dict(result.get("meta") or {})
+            result["meta"]["retrieval_routes"] = [route for route, cell in routes.items() if key in cell["selected_ids"]]
+            paths = routes.get("graph", {}).get("candidate_paths", {}).get(key, [])
+            if paths:
+                result["meta"]["via_graph"] = paths[0]["to"]
+                result["meta"]["graph_paths"] = paths
         trace["rerank"] = rerank_trace
 
         # 6) EVIDENCE_GRADER：证据充足性门控 + NUMERIC_FACTS 事实点
@@ -1343,6 +1370,8 @@ def build_context(search_results: list) -> tuple:
             # meta.via_graph=<桥接实体>——引用层透传，否则图谱路的真实贡献
             # 在 /api/search 与问答引用里不可见（非装饰性无法从外部验证）。
             "via_graph": via_graph,
+            "retrieval_routes": meta.get("retrieval_routes", []),
+            "graph_paths": meta.get("graph_paths", []),
             **upload_provenance,
         })
 
@@ -1724,6 +1753,8 @@ async def index_status(
             "primary_section": entry["primary_section"],
             "primary_sections": entry.get("primary_sections", []),
             "content_sha_rows": entry.get("content_sha_rows", 0),
+            **{k: entry.get(k, [] if k.endswith("s") else 0) for k in (
+                "intelligence_types", "intelligence_type_rows", "source_versions", "source_version_rows")},
             "source": entry["source"],
             "checksum_sha256": entry["checksum_sha256"],
         }

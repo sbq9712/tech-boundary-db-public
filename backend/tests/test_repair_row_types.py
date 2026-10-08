@@ -89,7 +89,7 @@ def _import_and_corrupt(db, tmp_path, monkeypatch, corrupt_values=("新闻原文
         stored_filename=stored_rel,
         original_filename="table.xlsx",
         mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        checksum_sha256=uuid.uuid4().hex,
+        checksum_sha256=__import__("hashlib").sha256(xlsx.read_bytes()).hexdigest(),
         storage_status="stored",
         title="table.xlsx",
         primary_section="breadth",
@@ -149,9 +149,9 @@ def test_repair_dry_run_backup_execute_idempotent(db, tmp_path, monkeypatch):
 
     # backup + 执行
     backup = tmp_path / "backup.json"
-    r = _run_script("--backup", str(backup))
-    assert r.returncode == 0, r.stderr
-    assert "修复完成：2" in r.stdout
+    r = _run_script("--execute", "--upload-id", str(upload.id), "--backup", str(backup))
+    assert r.returncode == 3, r.stderr
+    assert "数据库已修复并入队：2" in r.stdout
     payload = json.loads(backup.read_text(encoding="utf-8"))
     assert len(payload["entries"]) == 2
     assert {e["new_type"] for e in payload["entries"]} == {"news", "literature"}
@@ -187,7 +187,7 @@ def test_repair_identity_drift_goes_pending(db, tmp_path, monkeypatch):
     db.commit()
 
     r = _run_script("--dry-run")
-    assert r.returncode == 0, r.stderr
+    assert r.returncode == 2, r.stderr
     assert "可修复：2" in r.stdout
     assert "待人工（不猜测）：1" in r.stdout
     assert "行身份不一致" in r.stdout
@@ -210,9 +210,9 @@ def test_repair_fixes_mislabel_defaulted_news(db, tmp_path, monkeypatch):
     assert "-> literature" in r.stdout
 
     backup = tmp_path / "bk2.json"
-    r = _run_script("--backup", str(backup))
-    assert r.returncode == 0
-    assert "修复完成：1" in r.stdout
+    r = _run_script("--execute", "--upload-id", str(upload.id), "--backup", str(backup))
+    assert r.returncode == 3
+    assert "数据库已修复并入队：1" in r.stdout
     payload = json.loads(backup.read_text(encoding="utf-8"))
     assert payload["executed"] == 1
     assert payload["entries"][0].get("actual_old_type") == "news"
@@ -254,9 +254,9 @@ def test_repair_updates_content_hash_with_type(db, tmp_path, monkeypatch):
     stale_hashes = {r.id: r.content_hash for r in recs}
 
     backup = tmp_path / "bk3.json"
-    r = _run_script("--backup", str(backup))
-    assert r.returncode == 0, r.stderr
-    assert "修复完成：1" in r.stdout  # 仅「固态电池界面」错标需要修复
+    r = _run_script("--execute", "--upload-id", str(upload.id), "--backup", str(backup))
+    assert r.returncode == 3, r.stderr
+    assert "数据库已修复并入队：1" in r.stdout  # 仅「固态电池界面」错标需要修复
 
     db.expire_all()
     changed = 0
@@ -274,3 +274,102 @@ def test_repair_updates_content_hash_with_type(db, tmp_path, monkeypatch):
     entry = next(e for e in payload["entries"] if e["executed"])
     assert entry["old_content_hash"] != entry["new_content_hash"], (
         "备份必须可审计指纹变化（canonical 去重对依据）")
+
+
+def test_repair_defaults_read_only_and_requires_scoped_backup(db, tmp_path, monkeypatch):
+    upload, recs = _import_and_corrupt(db, tmp_path, monkeypatch)
+    before = {r.id: (r.intelligence_type, r.content_hash, r.source_version) for r in recs}
+    result = _run_script("--upload-id", str(upload.id))
+    assert result.returncode == 0
+    assert "可修复：2" in result.stdout
+    for args in (("--execute",), ("--execute", "--upload-id", str(upload.id))):
+        result = _run_script(*args)
+        assert result.returncode == 2 and "必须同时指定" in result.stderr
+    for rec in recs:
+        db.refresh(rec)
+        assert before[rec.id] == (rec.intelligence_type, rec.content_hash, rec.source_version)
+
+
+def test_repair_existing_backup_prevents_database_changes(db, tmp_path, monkeypatch):
+    upload, recs = _import_and_corrupt(db, tmp_path, monkeypatch)
+    backup = tmp_path / "existing.json"
+    backup.write_text("preserve me")
+    result = _run_script("--execute", "--upload-id", str(upload.id), "--backup", str(backup))
+    assert result.returncode != 0
+    assert backup.read_text() == "preserve me"
+    for rec in recs:
+        old_type = rec.intelligence_type
+        db.refresh(rec)
+        assert rec.intelligence_type == old_type
+
+
+def test_legacy_hint_resolved_by_unique_normalized_identity(db, tmp_path, monkeypatch):
+    upload, recs = _import_and_corrupt(db, tmp_path, monkeypatch, ("news", "news", "news"))
+    from openpyxl import load_workbook
+    path = Path(__import__('os').environ['TECHDB_UPLOAD_DIR']) / upload.stored_filename
+    wb = load_workbook(path)
+    wb.active.insert_rows(2, 2)  # Physical row 5, old ordinal row 3.
+    wb.active.cell(5, 2).value = "2026/09/02"
+    wb.save(path)
+    upload.checksum_sha256 = __import__('hashlib').sha256(path.read_bytes()).hexdigest()
+    db.commit()
+    backup = tmp_path / "legacy.json"
+    result = _run_script("--execute", "--upload-id", str(upload.id), "--backup", str(backup))
+    assert result.returncode == 3, result.stdout + result.stderr
+    entry = json.loads(backup.read_text())["entries"][0]
+    assert entry["row"] == 5 and entry["row_resolution"] == "unique_identity_legacy_hint"
+    assert entry["before"]["source_ref"]["row"] == 3
+    assert entry["new_source_version"] == entry["old_source_version"] + 1
+    assert entry["state"] == "committed_queued"
+
+
+def _repair_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("repair_types", Path(__file__).parents[1] / "scripts/repair_row_intelligence_types.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_backup_precedes_mutation_and_queue_failure_rolls_back(db, tmp_path, monkeypatch):
+    upload, recs = _import_and_corrupt(db, tmp_path, monkeypatch, ("news", "news", "news"))
+    before = {r.id: (r.intelligence_type, r.content_hash, r.source_version) for r in recs}
+    backup = tmp_path / "rollback.json"
+    observed = []
+    def fail_queue(session, records):
+        entry = json.loads(backup.read_text())["entries"][0]
+        assert entry["state"] == "prepared"
+        record = records[0]
+        assert entry["before"]["intelligence_type"] == "news"
+        assert entry["old_content_hash"] == before[record.id][1]
+        observed.append(record.id)
+        raise RuntimeError("queue unavailable")
+    monkeypatch.setattr("app.services.breadth_index_queue.enqueue_record_upserts", fail_queue)
+    assert _repair_module().main(["--execute", "--upload-id", str(upload.id), "--backup", str(backup)]) == 2
+    assert observed
+    for rec in recs:
+        db.refresh(rec)
+        assert (rec.intelligence_type, rec.content_hash, rec.source_version) == before[rec.id]
+
+
+def test_verification_matches_each_record_not_just_type_set(db, tmp_path, monkeypatch):
+    upload, recs = _import_and_corrupt(db, tmp_path, monkeypatch)
+    backup = tmp_path / "verify.json"
+    module = _repair_module()
+    assert module.main(["--execute", "--upload-id", str(upload.id), "--backup", str(backup)]) == 3
+    from sqlalchemy import select
+    for task in db.scalars(select(IndexTask).where(IndexTask.upload_id == upload.id)):
+        task.status = "done"
+    db.commit()
+    entries = json.loads(backup.read_text())["entries"]
+    docs = {e["record_id"]: dict(chunks=1, live_chunks=1, primary_sections=["breadth"],
+        content_shas=[e["new_content_hash"]], content_sha_rows=1,
+        intelligence_types=[e["new_type"]], intelligence_type_rows=1,
+        source_versions=[str(e["new_source_version"])], source_version_rows=1,
+        vector_ok=True, bm25_ok=True, graph_ok=True) for e in entries}
+    monkeypatch.setattr("app.services.index_status.canonical_document_status", lambda ids: docs)
+    assert module.verify_backup(backup, upload.id) == 0
+    keys = list(docs)
+    docs[keys[0]]["intelligence_types"], docs[keys[1]]["intelligence_types"] = (
+        docs[keys[1]]["intelligence_types"], docs[keys[0]]["intelligence_types"])
+    assert module.verify_backup(backup, upload.id) == 3

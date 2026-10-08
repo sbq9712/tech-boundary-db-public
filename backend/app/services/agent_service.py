@@ -265,9 +265,9 @@ def _citation_id(item: dict, fallback: int) -> int:
 # 上游（无该字段）兼容：有 document_id 的按未归属处理、无 document_id
 # 的基线记录按广度处理——与检索侧 _meta_scope 同一口径。
 SECTION_LABELS = {
-    "industry": "行业情报",
+    "industry": "行业追踪",
     "atsc": "ATSC 内部报告",
-    "breadth": "广度情报",
+    "breadth": "广度追踪",
     "unattributed": "未归属存量",
 }
 SECTION_ORDER = ("industry", "atsc", "breadth", "unattributed")
@@ -517,7 +517,7 @@ def _build_prompt(query: str, retrieval_results: dict, history: list[dict]) -> l
 
 应答规范（SOP，任务二统一口径）：
 1. 只基于提供的资料回答，不要编造信息
-2. 回答第一行写「数据来源：」并列出实际用到的来源组（如：数据来源：行业情报、ATSC 内部报告）；没有证据的来源绝不列
+2. 回答第一行写「数据来源：」并列出实际用到的来源组（如：数据来源：行业追踪、ATSC 内部报告）；没有证据的来源绝不列
 3. 在回答中用 [1][2] 等全局编号标注引用来源（编号在所有分组间全局唯一，对应来源列表序号）
 4. 先直接回答；综合问题按行业现状与时间范围、ATSC 此前调研与适用条件及核心结论、广度新增动向对旧结论的补充或挑战展开，最后综合一致性、冲突、影响与不确定性；可按问题调整顺序和篇幅，简单问题不硬套结构
 5. 某一来源没有相关证据时如实说明「该来源无相关证据」，不要编造，也不要用其他来源顶替；转载/转录的外部内容不得写成 ATSC 或行业机构的自证结论
@@ -993,6 +993,7 @@ async def _stream_agent_response_impl(
                 "response": answer,
                 "citations": [],
                 "session_id": session_id,
+            "run_id": str(run.id),
                 "model": request_model,
                 "retrieval_summary": summary,
                 "panel_recommendations": {},
@@ -1265,6 +1266,7 @@ async def _stream_agent_response_impl(
             "response": full_response,
             "citations": final_citations,
             "session_id": session_id,
+            "run_id": str(run.id),
             "model": request_model,
             "retrieval_summary": summary,
             "panel_recommendations": {},

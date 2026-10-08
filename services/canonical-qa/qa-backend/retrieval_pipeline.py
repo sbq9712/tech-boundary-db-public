@@ -439,3 +439,55 @@ def content_safety_scan(text: str) -> list[dict]:
         if m:
             hits.append({"kind": name, "sample": m.group(0)[:24]})
     return hits
+
+
+def evidence_id(result: dict) -> str:
+    """Stable route-to-result ID, independent of text hydration and ranking."""
+    import json
+    meta = result.get("meta") or {}
+    if meta.get("kind") == "upload" or meta.get("document_id"):
+        key = ["upload", str(meta.get("document_id") or ""), str(meta.get("chunk_id") or "")]
+    elif meta.get("record_key_sha"):
+        key = ["record", meta["record_key_sha"]]
+    elif "idx" in meta:
+        key = ["base", meta["idx"]]
+    else:
+        key = list(result_identity(result))
+    return json.dumps(key, ensure_ascii=False, separators=(",", ":"))
+
+
+def select_source_evidence(ranked: list[dict], query: str, cap: int,
+                           scope_of) -> tuple[list[dict], dict]:
+    """Reserve one relevant result per real source before the final global cut.
+
+    A source must have query overlap (>=25%) or independently strong vector
+    evidence; merely belonging to ATSC does not qualify irrelevant material.
+    The bounded retrieval pool is unchanged. Remaining seats keep global rank.
+    """
+    cap = max(0, cap)
+    terms = extract_query_terms(query)
+    reserved = {}
+    for result in ranked:
+        scope = scope_of(result.get("meta") or {})
+        if scope not in ("breadth", "industry", "atsc") or scope in reserved:
+            continue
+        text = str(result.get("title") or "") + " " + str(result.get("body_snippet") or "")
+        coverage = _coverage(text, terms)
+        semantic = float(result.get("vec_score") or 0) >= 0.5
+        if (terms and coverage >= 0.25) or semantic:
+            reserved[scope] = evidence_id(result)
+    required = set(list(reserved.values())[:cap])
+    selected = set(required)
+    for result in ranked:
+        if len(selected) >= cap:
+            break
+        selected.add(evidence_id(result))
+    seen = set()
+    out = []
+    for result in ranked:
+        key = evidence_id(result)
+        if key in selected and key not in seen:
+            seen.add(key)
+            out.append(result)
+    return out, {"reserved_relevant": {s: k for s, k in reserved.items() if k in required},
+                 "selected_ids": [evidence_id(r) for r in out], "cap": cap}

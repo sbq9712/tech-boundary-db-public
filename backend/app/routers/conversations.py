@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.conversation import (
+    ConversationAgentRun,
     ConversationMessage,
     ConversationSession,
     UserResearchMemory,
@@ -233,3 +234,21 @@ def get_profile(
     if not p:
         return {"user_id": current_user, "preferred_domains": [], "preferred_depth": "balanced", "language": "zh", "role": None}
     return {"user_id": p.user_id, "preferred_domains": p.preferred_domains, "preferred_depth": p.preferred_depth, "language": p.language, "role": p.role}
+
+
+@router.get("/conversations/{session_id}/runs/{run_id}")
+def get_agent_run(session_id: UUID, run_id: UUID,
+                  db: Session = Depends(get_db),
+                  current_user: str = Depends(get_current_user)) -> dict:
+    """Persisted result of exactly one owned run; never substitute another query."""
+    session = db.get(ConversationSession, session_id)
+    if not session or session.user_id != current_user:
+        raise HTTPException(404, "session not found")
+    run = db.get(ConversationAgentRun, run_id)
+    if not run or run.session_id != session_id or run.user_id != current_user:
+        raise HTTPException(404, "run not found")
+    return {"id": str(run.id), "session_id": str(run.session_id),
+            "status": run.status, "query": run.query, "response": run.response,
+            "retrieval_summary": run.retrieval_summary,
+            "started_at": run.started_at.isoformat(),
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None}

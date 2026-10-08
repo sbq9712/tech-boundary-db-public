@@ -67,3 +67,24 @@ def test_industry_delete_does_not_include_legacy_breadth_identity():
     hashes = _mask_key_shas_for(row, "industry")
     assert hashes == [canonical_record_key_sha(row.title, row.document_date, "", "industry")]
     assert canonical_record_key_sha(row.title, row.document_date, "") not in hashes
+
+
+def test_persisted_run_requires_own_session_and_run():
+    from app.routers.conversations import get_agent_run
+    from app.models.conversation import ConversationSession, ConversationAgentRun
+    from fastapi import HTTPException
+    from datetime import datetime, timezone
+    import uuid
+    sid, rid = uuid.uuid4(), uuid.uuid4()
+    session = SimpleNamespace(user_id="alice")
+    run = SimpleNamespace(id=rid, session_id=sid, user_id="alice", status="completed",
+        query="question", response="answer", retrieval_summary={"answer_chain": {"version": "1"}},
+        started_at=datetime.now(timezone.utc), completed_at=datetime.now(timezone.utc))
+    db = SimpleNamespace(get=lambda model, key: session if model is ConversationSession else run)
+    assert get_agent_run(sid, rid, db, "alice")["response"] == "answer"
+    with pytest.raises(HTTPException) as exc:
+        get_agent_run(sid, rid, db, "bob")
+    assert exc.value.status_code == 404
+    run.session_id = uuid.uuid4()
+    with pytest.raises(HTTPException):
+        get_agent_run(sid, rid, db, "alice")

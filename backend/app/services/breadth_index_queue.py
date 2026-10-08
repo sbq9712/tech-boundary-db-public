@@ -215,6 +215,7 @@ def _upsert_payload(rec: BreadthManualRecord, rev: int = 0) -> dict:
                             origin_section=origin_section),
                         "content_sha": _rec_content_sha(rec),
                         "source_rev": int(rev),
+                        "source_version": int(rec.source_version or 0),
                     },
                 }
             )

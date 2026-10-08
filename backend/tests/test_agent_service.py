@@ -50,7 +50,7 @@ def test_prompt_uses_numeric_citations_and_keeps_prebounded_history():
     # 任务二 2.3 SOP：来源分组 + 首行「数据来源：」标注
     assert "按数据来源分组" in messages[0]["content"]
     assert "数据来源：" in messages[0]["content"]
-    assert "【广度情报】" in messages[0]["content"]
+    assert "【广度追踪】" in messages[0]["content"]
 
 
 def test_used_citations_only_returns_numeric_refs_present_in_answer():
@@ -270,13 +270,13 @@ def test_prompt_groups_evidence_by_source_in_sop_order():
     messages = _build_prompt("多源问题", {"citations": items}, [])
     prompt = messages[0]["content"]
     # 组序：行业 → ATSC → 广度（spec 2.3）
-    assert prompt.index("【行业情报】") < prompt.index("【ATSC 内部报告】") < prompt.index("【广度情报】")
+    assert prompt.index("【行业追踪】") < prompt.index("【ATSC 内部报告】") < prompt.index("【广度追踪】")
     # 引用编号全局唯一，不按组重排
-    assert "[3]" in prompt.split("【广度情报】")[1]
-    assert "[1]" in prompt.split("【行业情报】")[1]
+    assert "[3]" in prompt.split("【广度追踪】")[1]
+    assert "[1]" in prompt.split("【行业追踪】")[1]
     # 空缺来源不出现
     assert "未归属存量" not in prompt
-    assert "本轮可用来源组：行业情报、ATSC 内部报告、广度情报" in prompt
+    assert "本轮可用来源组：行业追踪、ATSC 内部报告、广度追踪" in prompt
 
 
 def test_ensure_source_header_prepends_only_when_missing():
@@ -284,10 +284,10 @@ def test_ensure_source_header_prepends_only_when_missing():
     ind = _upload_citation(id=2, section="industry")
     # 缺失 → 确定性补齐（行业在前）
     fixed = _ensure_source_header("固态电池进展 [1][2]。", [breadth, ind])
-    assert fixed.startswith("数据来源：行业情报、广度情报")
+    assert fixed.startswith("数据来源：行业追踪、广度追踪")
     assert "固态电池进展" in fixed
     # 模型自写 → 不干预
-    self_written = "数据来源：广度情报\n\n正文 [1]。"
+    self_written = "数据来源：广度追踪\n\n正文 [1]。"
     assert _ensure_source_header(self_written, [breadth]) == self_written
     # 无引用不补
     assert _ensure_source_header("无证据回答", []) == "无证据回答"
@@ -299,10 +299,10 @@ def test_ensure_source_header_only_annotates_given_citations():
     # 约定：helper 只标注传入的引用；「按答案实际引用过滤」由调用方
     # （stream 流程 _used_citations → _header_citations）负责。
     fixed = _ensure_source_header("正文 [1]。", [ind])
-    assert fixed.startswith("数据来源：行业情报")
+    assert fixed.startswith("数据来源：行业追踪")
     assert "ATSC" not in fixed.split("\n")[0]
     both = _ensure_source_header("正文 [1][2]。", [ind, atsc])
-    assert both.startswith("数据来源：行业情报、ATSC 内部报告")
+    assert both.startswith("数据来源：行业追踪、ATSC 内部报告")
 
 
 def test_retrieval_summary_counts_sections_and_inheritance():
@@ -452,7 +452,7 @@ def test_heartbeat_env_invalid_falls_back_to_default(monkeypatch, caplog):
 
 
 def test_source_header_is_corrected_after_repair_removes_a_source():
-    answer = "数据来源：行业情报、ATSC 内部报告\n\n核验后正文 [1]。"
+    answer = "数据来源：行业追踪、ATSC 内部报告\n\n核验后正文 [1]。"
     corrected = _ensure_source_header(answer, [_upload_citation(id=1, section="industry")])
-    assert corrected == "数据来源：行业情报\n\n核验后正文 [1]。"
+    assert corrected == "数据来源：行业追踪\n\n核验后正文 [1]。"
     assert _ensure_source_header("数据来源：ATSC 内部报告\n\n无法确认。", []) == "无法确认。"

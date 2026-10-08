@@ -242,6 +242,46 @@ def sse_ask(jwt, question: str, timeout: int = 280) -> dict:
             "citations": done.get("citations") or [], "done": done, "error": err}
 
 
+def route_contains_hit(cell, hits):
+    ids = set(cell.get("candidate_ids") or []) & set(cell.get("selected_ids") or [])
+    return any(json.dumps(["upload", str(h.get("document_id") or ""), str(h.get("chunk_id") or "")],
+                          ensure_ascii=False, separators=(",", ":")) in ids for h in hits)
+
+
+def positive_answer_ok(out, mark):
+    answer = out.get("answer") or ""
+    if not out.get("done") or out.get("error"):
+        return False
+    answer = answer.replace("三百五十", "350").replace("四百二十", "420")
+    numbers = []
+    for match in re.finditer(r"(\d+(?:\.\d+)?)\s*(kWh|Wh|watt-hours|瓦时)\s*(?:/|每)\s*(?:kg|千克|公斤)", answer):
+        numbers.append(float(match.group(1)) * (1000 if match.group(2) == "kWh" else 1))
+    citations = out.get("citations") or []
+    cites_target = any(mark in str(c.get("title")) and "内部评估" in str(c.get("title"))
+                       and c.get("primary_section") == "atsc"
+                       and re.search(r"\[" + re.escape(str(c.get("id"))) + r"\]", answer)
+                       for c in citations)
+    refusal = any(x in answer for x in ("无法确认", "未检索到", "未找到相关", "无法提供", "未收录"))
+    return bool(numbers) and all(abs(v - 350) < .5 for v in numbers) and cites_target and not refusal
+
+
+def persisted_answer_ok(jwt, out):
+    done = out.get("done") or {}
+    sid, rid = done.get("session_id"), done.get("run_id")
+    if not sid or not rid:
+        return False
+    status, run = api(jwt, "GET", f"/api/conversations/{sid}/runs/{rid}")
+    status2, messages = api(jwt, "GET", f"/api/conversations/{sid}/messages")
+    summary = done.get("retrieval_summary") or {}
+    chain = summary.get("answer_chain") or {}
+    persisted = any(m.get("role") == "assistant" and m.get("content") == out.get("answer")
+                    and m.get("citations") == out.get("citations")
+                    and m.get("retrieval_summary") == summary for m in messages.get("messages", []))
+    return (status == status2 == 200 and run.get("status") == "completed"
+            and run.get("response") == out.get("answer") and run.get("retrieval_summary") == summary
+            and bool(chain.get("version")) and chain.get("verification") is not None and persisted)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep", action="store_true")
@@ -301,6 +341,10 @@ def main() -> int:
              "碳化硅器件对封装热阻提出更高要求，烧结银层与氮化铝基板组合可显著降低界面热阻并提升功率循环寿命。", "功率半导体"],
             [f"{mark} 图谱对照钠硫电池储能示范", "2026-09-21", f"https://m25/r2", "新闻",
              "示范项目并网运行，规模与时长均创新高，验证长时储能经济性。", "储能新材料"],
+            [f"{mark} 广度图桥甲", "2026-09-01", f"https://m25/breadth-bridge-甲", "文献",
+             f"{mark} 广度证据：图桥测试原文，独立记录用于共现关系。", f"{mark} 广度图桥/{mark} 广度证据"],
+            [f"{mark} 广度图桥乙", "2026-09-01", f"https://m25/breadth-bridge-乙", "文献",
+             f"{mark} 广度证据：图桥测试原文，独立记录用于共现关系。", f"{mark} 广度图桥/{mark} 广度证据"],
         ], breadth_source="other", tag="b1")
         up_b = ((r1.get("files") or [{}])[0].get("id"))
         if up_b:
@@ -316,6 +360,10 @@ def main() -> int:
              "统计显示硅基负极出货量同比大幅增长，头部厂商产能利用率维持高位。", f"{mark} 行业专属分类"],
             [f"{mark} 无边孤岛供应链展望", "2026-09-01", f"https://m25/i2", "文献",
              "综述指出上游扩产节奏与下游需求错配风险，建议关注库存周期。", "市场分析"],
+            [f"{mark} 行业图桥甲", "2026-09-01", f"https://m25/industry-bridge-甲", "文献",
+             f"{mark} 行业证据：图桥测试原文，独立记录用于共现关系。", f"{mark} 行业图桥/{mark} 行业证据"],
+            [f"{mark} 行业图桥乙", "2026-09-01", f"https://m25/industry-bridge-乙", "文献",
+             f"{mark} 行业证据：图桥测试原文，独立记录用于共现关系。", f"{mark} 行业图桥/{mark} 行业证据"],
         ], tag="i1")
         up_i = ((r2.get("files") or [{}])[0].get("id"))
         if up_i:
@@ -330,6 +378,10 @@ def main() -> int:
              "内部评估认为界面阻抗是量产首要瓶颈，当时工艺水平对应能量密度约 350Wh/kg。", f"{mark} 内部专属分类"],
             [f"{mark} 内部备忘录热失控测试规范", "2025-03-10", f"https://m25/a2", "文献",
              "备忘录明确了热失控测试的触发方式与判定阈值。", "电池安全"],
+            [f"{mark} 内部图桥甲", "2026-09-01", f"https://m25/atsc-bridge-甲", "文献",
+             f"{mark} 内部证据：图桥测试原文，独立记录用于共现关系。", f"{mark} 内部图桥/{mark} 内部证据"],
+            [f"{mark} 内部图桥乙", "2026-09-01", f"https://m25/atsc-bridge-乙", "文献",
+             f"{mark} 内部证据：图桥测试原文，独立记录用于共现关系。", f"{mark} 内部图桥/{mark} 内部证据"],
         ], tag="a1")
         up_a = ((r3.get("files") or [{}])[0].get("id"))
         if up_a:
@@ -381,35 +433,26 @@ def main() -> int:
                     break
                 time.sleep(2)
             check(f"vector × {src} 召回", st == 200 and len(hits) >= 1
-                  and cell.get("succeeded") is True and cell.get("candidates", 0) > 0,
+                  and cell.get("succeeded") is True and route_contains_hit(cell, hits),
                   f"cell={cell.get('candidates')} hits={len(hits)} attempt={attempt+1}")
         for src, expect in (("breadth", "车规功率模块"), ("industry", "行业年报"), ("atsc", "内部评估报告")):
             st, d = qa_search(f"{mark} {expect}", sources=src)
             cell = ((d.get("retrieval_trace") or {}).get("source_route_matrix") or {}).get(src, {}).get("keyword", {})
             hits = [c for c in hits_marked(d, mark) if expect in str(c.get("title"))]
             check(f"keyword × {src} 召回", st == 200 and len(hits) >= 1
-                  and cell.get("succeeded") is True and cell.get("candidates", 0) > 0,
+                  and cell.get("succeeded") is True and route_contains_hit(cell, hits),
                   f"cell={cell.get('candidates')} hits={len(hits)}")
-        # graph 路：每源 scope 图谱节点存在 + 自然查询 via_graph 归因（breadth）
-        # breadth 静态图 15.8 万节点，limit=500 按度数截断不含低度数种子实体
-        # （正常行为）；breadth 路的证据由 via_graph 归因断言承担。
-        st, g = qa_graph("breadth")
-        check("graph × breadth（scope 图谱可用）",
-              st == 200 and len(g.get("nodes", [])) > 0,
-              f"nodes={len(g.get('nodes', []))}")
-        for src, entity in ((("industry", f"{mark} 行业专属分类")), (("atsc", f"{mark} 内部专属分类"))):
-            st, g = qa_graph(src)
-            labels = json.dumps(g, ensure_ascii=False)
-            check(f"graph × {src}（scope 图谱含种子实体）",
-                  st == 200 and entity in labels and len(g.get("nodes", [])) > 0,
-                  f"entity={entity} nodes={len(g.get('nodes', []))}")
-        st, d = qa_search("电池回收梯次利用政策")
-        vg = [c for c in (d.get("results") or []) if c.get("via_graph")]
-        cell = ((d.get("retrieval_trace") or {}).get("source_route_matrix") or {}).get("breadth", {}).get("graph", {})
-        check("graph 路 via_graph 归因进入终局引用（非装饰）",
-              cell.get("executed") is True and cell.get("succeeded") is True
-              and cell.get("candidates", 0) > 0 and len(vg) >= 10,
-              f"cell_cand={cell.get('candidates')} via_graph引用={len(vg)} 示例={[c.get('via_graph') for c in vg[:3]]}")
+        # Each source must supply a real path linked to the returned seed record.
+        for src, phrase, expect in (("breadth", f"{mark} 广度图桥", "广度图桥"),
+                ("industry", f"{mark} 行业图桥", "行业图桥"),
+                ("atsc", f"{mark} 内部图桥", "内部图桥")):
+            st, d = qa_search(phrase, sources=src)
+            cell = ((d.get("retrieval_trace") or {}).get("source_route_matrix") or {}).get(src, {}).get("graph", {})
+            hits = [h for h in hits_marked(d, mark) if expect in str(h.get("title"))]
+            check(f"graph × {src} 路径→种子记录→原文引用",
+                  st == 200 and cell.get("succeeded") is True and route_contains_hit(cell, hits)
+                  and any(h.get("graph_paths") and h.get("via_graph") and h.get("body_snippet") for h in hits),
+                  json.dumps({"cell": cell, "hits": hits}, ensure_ascii=False))
 
         # ── 场景 2/3：单源收窄 / 全无证据 ────────────────────
         print("== 场景：收窄/零证据 ==")
@@ -480,11 +523,6 @@ def main() -> int:
             st, d = http_json(API + "/api/assistant/graph",
                               headers={"Authorization": f"Bearer {ujwt}"})
             check("普通用户可访问图谱/检索面", st == 200, f"st={st}")
-            st, d = qa_search(f"{mark} 内部评估报告 固态电解质", sources="atsc")
-            a1 = next((h for h in hits_marked(d, mark) if "内部评估报告" in str(h.get("title"))), None)
-            check("普通用户可检索 ATSC 数据（引用 primary_section=atsc）",
-                  a1 is not None and section_of(a1) == "atsc",
-                  f"found={a1 is not None}")
             st, _ = http_json(API + "/api/uploads", "POST", b"", {
                 "Authorization": f"Bearer {ujwt}", "Content-Type": "application/json"})
             check("普通用户上传被拒（403，写权限不变）", st == 403, f"st={st}")
@@ -507,65 +545,21 @@ def main() -> int:
         if not args.no_model:
             print("== 真实模型问答抽样（portal SSE，glm-5.2）==")
             # 必须收到 done 且没有 error；片段与独立检索命中不能替代门户完成。
-            out = sse_ask(jwt, f"{mark} 内部评估报告对应的能量密度是多少？简答。", timeout=280)
+            out = sse_ask(ujwt, f"{mark} 内部评估报告对应的能量密度是多少？简答。", timeout=280)
             ans = out.get("answer") or ""
             cites = out.get("citations") or []
             secs = {str(c.get("primary_section") or "") for c in cites if isinstance(c, dict)}
             got_done = bool(out.get("done"))
-            # 已知产品边界（如实断言，不放松也不冒充）：全新单 chunk 内部种子在
-            # 不限源全局 FINAL_TOP_K=25 窗口实测排 ~42（同查询 atsc 收窄检索 rank-0，
-            # 见矩阵格）——答案层契约是「实质答案 或 诚实拒答」，两者都合法；
-            # 编造数值（给出非 350 的能量密度断言却无引用）是唯一 FAIL 路径。
-            # Codex r5 P2-1：拒答判定改为受约束短语（完整句式，不能是散落词），
-            # 冒充检测覆盖中文数字/变换单位（Wh/kg、kWh/kg、watt-hours/kg、瓦时）。
-            boundary_phrases = (
-                "数据库中没有", "数据库中未", "未检索到", "没有找到相关", "未找到相关",
-                "未见相关证据", "没有相关信息", "未收录", "知识边界",
-                "无法确认", "无法提供",
-            )
-            is_boundary = any(k in ans for k in boundary_phrases)
-            cites_a1 = any("内部评估" in str(c.get("title")) for c in cites)
-            # 中文数字 → 阿拉伯（仅能量密度常用区间）
-            _cn = {"三百五十": "350", "四百二十": "420", "四百": "400",
-                   "三百": "300", "五百": "500", "六百": "600", "四百一十": "410"}
-            ans_norm = ans
-            for cn, ar in _cn.items():
-                ans_norm = ans_norm.replace(cn, ar)
-            # 实质命中也认归一化文本（「三百五十Wh/kg」= 350）
-            substantive = "350" in ans_norm
-            # 能量密度数值断言提取：Wh/kg、kWh/kg、watt-hours/kg、瓦时/千克、瓦时每千克
-            pat = (r"(\d+(?:\.\d+)?)\s*(?:Wh|kWh|watt-hours|瓦时)"
-                   r"\s*(?:/|每)\s*(?:kg|千克|公斤)")
-            # kWh 数值换算成 Wh 再比（0.35kWh = 350Wh）
-            fab_claims = []
-            for m in re.finditer(pat, ans_norm):
-                v = float(m.group(1))
-                unit = m.group(0)
-                if "kWh" in unit:
-                    v *= 1000
-                if abs(v - 350.0) > 0.5:
-                    fab_claims.append(v)
-            # 编造 vs 澄清的边界：非 350 数值若「直接回答本报告能量密度」= 编造；
-            # 若答案已明确声明本报告无数据（is_boundary），且数值可在本轮引用
-            # （citations 标题/摘要原文）中找到出处 = 诚实澄清（run7 实测：检索层
-            # 召回真实基线记录「Donut Lab …409 Wh/kg」，模型如实转述并声明
-            # 与本报告无关——不是编造）。引用中找不到出处的数值仍是编造。
-            cite_text = " ".join(str(c.get("title")) + str(c.get("body_snippet"))
-                                 for c in cites if isinstance(c, dict))
-            def _cited(v: float) -> bool:
-                return (str(int(v)) in cite_text) or (f"{v:g}" in cite_text)
-            if is_boundary and cites:
-                fab_claims = [v for v in fab_claims if not _cited(v)]
-            fabricated = bool(fab_claims) and not cites_a1
-            ok_ans = got_done and not out.get("error") and len(ans) > 30 and (substantive or is_boundary) and not fabricated
-            check("问答实质答案或诚实拒答（绝不编造能量密度）",
-                  ok_ans,
-                  f"len={len(ans)} done={got_done} has350={substantive} boundary={is_boundary} "
-                  f"fab={fab_claims} cites_a1={cites_a1} head={ans[:48]!r} err={out.get('error')}")
+            ok_ans = positive_answer_ok(out, mark)
+            check("已知正例完成实质回答350Wh/kg并引用该ATSC报告", ok_ans,
+                  json.dumps(out, ensure_ascii=False))
+            check("同一次问答已持久化且核验报告一致", persisted_answer_ok(ujwt, out),
+                  f"session={out.get('done', {}).get('session_id')} run={out.get('done', {}).get('run_id')}")
+            cites_a1 = any(mark in str(c.get("title")) and "内部评估" in str(c.get("title")) for c in cites)
             check("门户完成且引用 ATSC 内部报告（不使用检索层兜底）",
                   got_done and not out.get("error") and "atsc" in secs and cites_a1,
                   f"secs={secs} cites={len(cites)} done={got_done}")
-            out2 = sse_ask(jwt, f"{mark} 硅基负极出货量同比增长情况？简答。", timeout=280)
+            out2 = sse_ask(ujwt, f"{mark} 硅基负极出货量同比增长情况？简答。", timeout=280)
             cites2 = out2.get("citations") or []
             ans2 = out2.get("answer") or ""
             check("门户完成且引用行业来源（不使用检索层兜底）",
@@ -573,7 +567,7 @@ def main() -> int:
                   and any(c.get("primary_section") == "industry" for c in cites2),
                   f"cites={len(cites2)} done={bool(out2.get('done'))} error={out2.get('error')}")
             # 答案层不冒充：问不存在的技术概念，答案应含知识边界/拒答表述
-            out3 = sse_ask(jwt, "量子通量超驱动矩阵技术的最新进展是什么？")
+            out3 = sse_ask(ujwt, "量子通量超驱动矩阵技术的最新进展是什么？")
             a3 = out3.get("answer") or ""
             boundary = any(k in a3 for k in
                            ("没有找到", "未找到", "未检索到", "无法", "没有相关",

@@ -88,12 +88,12 @@ def test_tags_string_normalized():
 # ── 手动上传 chunk（保持旧行为）──────────────────────────────────
 
 
-def test_manual_upload_filename_priority_kept():
+def test_manual_upload_title_not_hidden_by_generic_filename():
     fn = _load_fn([])
     meta = _meta(filename="report.pdf", t="报告标题", b="正文内容")
     out = fn([{"meta": meta, "score": 0.5}])[0]
-    # 手动上传：filename 优先（与旧实现一致）
-    assert out["title"] == "report.pdf"
+    # 资料标题用于重排，通用文件名不能遮住题意。
+    assert out["title"] == "报告标题"
     assert "正文内容" in out["body_snippet"]
 
 
