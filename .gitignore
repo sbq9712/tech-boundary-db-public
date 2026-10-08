@@ -96,6 +96,8 @@ breadth/data/reports/
 pipeline/data/processed/
 pipeline/data/csv_cache/
 pipeline/data/reports/
+# 管线运行时轮换备份（timer 生成，永不入库）
+pipeline/data/techdb-backup-*/
 pipeline/data/*.db
 pipeline/models/
 pipeline/.venv/
