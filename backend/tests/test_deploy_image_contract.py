@@ -16,7 +16,7 @@ def test_compose_defaults_to_integrated_service_images():
     assert "techdb-canonical-qa:${TECHDB_QA_IMAGE_TAG:-1008}" in compose
     assert "techdb-api:${TECHDB_API_IMAGE_TAG:-1019}" in compose
     assert "techdb-readonly-agent:${TECHDB_AGENT_IMAGE_TAG:-1019}" in compose
-    assert "techdb-web:${TECHDB_WEB_IMAGE_TAG:-1016}" in compose
+    assert "techdb-web:${TECHDB_WEB_IMAGE_TAG:-1017}" in compose
     assert "TECHDB_QA_IMAGE_TAG:-0801" not in compose
     assert "TECHDB_API_IMAGE_TAG:-0801" not in compose
     for stale in ("TECHDB_QA_IMAGE_TAG:-1001", "TECHDB_API_IMAGE_TAG:-1001",
@@ -39,7 +39,7 @@ def test_deploy_script_honors_per_service_tags():
         ("TECHDB_QA_IMAGE_TAG", "1008"),
         ("TECHDB_API_IMAGE_TAG", "1019"),
         ("TECHDB_AGENT_IMAGE_TAG", "1019"),
-        ("TECHDB_WEB_IMAGE_TAG", "1016"),
+        ("TECHDB_WEB_IMAGE_TAG", "1017"),
     ):
         assert f"{name}:-{tag}}}\"" in deploy
 
@@ -60,6 +60,16 @@ def test_db_backup_packs_uploads_via_container():
     assert '-v "${UPLOAD_PATH}:/data:ro"' in backup
     host_tar = 'tar --exclude=\'./.incoming\' -C "$UPLOAD_PATH"'
     assert host_tar not in backup
+
+
+def test_nginx_re_resolves_api_upstream_after_container_restart():
+    # Docker 内 nginx 启动时解析 upstream 域名并缓存 IP；api 容器重启换 IP 后
+    # 旧缓存导致 /api/ 全量 502（offsim A14 重启演练实证）。必须用
+    # resolver+变量 proxy_pass 强制按 TTL 重解析。
+    conf = (ROOT / "nginx.conf").read_text(encoding="utf-8")
+    assert "resolver 127.0.0.11" in conf
+    assert "set $api_upstream" in conf and "set $qa_upstream" in conf
+    assert "proxy_pass $api_upstream;" in conf and "proxy_pass $qa_upstream;" in conf
 
 
 def test_deploy_missing_image_hint_points_to_release():
