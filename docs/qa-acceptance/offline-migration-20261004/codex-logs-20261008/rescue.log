@@ -1,0 +1,616 @@
+OpenAI Codex v0.153.4
+--------
+workdir: /home/rhett/tech-boundary-db
+model: glm-5.3-flash
+provider: zhipu_glm
+approval: never
+sandbox: read-only
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 01a1197c-78d5-71c3-8763-13b07662171f
+--------
+user
+# Codex Rescue 回归核查（无人值守轮）
+
+背景：你上一轮 final-review 对 tech-boundary-db（HEAD 当时 9908ce0）给出唯一发现：
+[P3] 服务器迁移说明.md:123 QA 宿主端口健康检查误写 8765（宿主默认 8767，TECHDB_QA_PORT 可覆盖）。
+已采纳修复，commit f18c8b7（仅改该一行文档）。
+
+请做回归核查（read-only，自行用 git/文件读取验证）：
+1. `git show f18c8b7` 确认改动内容与描述一致、无其他夹带改动。
+2. 全仓 grep `8765`：确认剩余 8765 均为容器内服务地址/端口（如 http://canonical-qa:8765、compose 容器侧 8765）而非宿主访问地址。
+3. `git status --short` 确认工作树无未预期的代码改动（pipeline/.pipeline_pending.json 属管线 timer，忽略）。
+4. 快速复查 docker-compose.yml 端口映射语义（"${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8767}:8765"）与修复后文档一致性。
+
+输出：`PASS` 或编号问题列表（文件:行 + 依据）。
+
+codex
+I’ll verify the commit, scan every remaining `8765` reference in context, and compare the compose host mapping with the corrected documentation.
+exec
+/bin/bash -lc 'git show --stat --oneline f18c8b7 && git show --format=fuller --no-ext-diff f18c8b7' in /home/rhett/tech-boundary-db
+ succeeded in 0ms:
+f18c8b7 docs(migration): 修正 QA 宿主端口验证命令 8765→8767（Codex 终审 P3 采纳）
+ ...\241\345\231\250\350\277\201\347\247\273\350\257\264\346\230\216.md" | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+commit f18c8b7ca604beb1c72dbd5ab3a88d4e073af6f3
+Author:     sbq9712 <1048061403@qq.com>
+AuthorDate: Thu Oct 8 11:08:40 2026 +0800
+Commit:     sbq9712 <1048061403@qq.com>
+CommitDate: Thu Oct 8 11:08:40 2026 +0800
+
+    docs(migration): 修正 QA 宿主端口验证命令 8765→8767（Codex 终审 P3 采纳）
+    
+    Codex final-review 唯一发现：服务器迁移说明.md:123 宿主侧健康检查
+    误用容器内端口 8765；docker-compose.yml:56 与 .env.example:111 的
+    宿主默认端口为 8767（TECHDB_QA_PORT 可覆盖）。改为参数化默认 8767
+    并注明来源。容器内服务地址 http://canonical-qa:8765 不受影响。
+
+diff --git "a/\346\234\215\345\212\241\345\231\250\350\277\201\347\247\273\350\257\264\346\230\216.md" "b/\346\234\215\345\212\241\345\231\250\350\277\201\347\247\273\350\257\264\346\230\216.md"
+index 4d8bbce..777f82b 100644
+--- "a/\346\234\215\345\212\241\345\231\250\350\277\201\347\247\273\350\257\264\346\230\216.md"
++++ "b/\346\234\215\345\212\241\345\231\250\350\277\201\347\247\273\350\257\264\346\230\216.md"
+@@ -120,7 +120,7 @@ root）；同时间戳三件套 + `.sha256` 清单传目标机，先 `sha256sum
+ docker compose ps                                   # 五服务 Up，db/canonical-qa healthy
+ docker compose exec -T api alembic current          # 0033_...（以实际输出为准）
+ curl http://localhost:8080/api/health               # {"status":"ok",...}
+-curl -s http://127.0.0.1:8765/api/health | python3 -m json.tool | grep -E 'incremental|total_records'
++curl -s http://127.0.0.1:${TECHDB_QA_PORT:-8767}/api/health | python3 -m json.tool | grep -E 'incremental|total_records'  # 宿主端口默认 8767（容器内 8765），可用 .env 的 TECHDB_QA_PORT 覆盖
+ curl -I http://localhost:8080/.env                  # 404
+ curl -I http://localhost:8080/.git/config           # 404
+ curl -I http://localhost:8080/backend/app/main.py   # 404
+
+exec
+/bin/bash -lc "rg -n -C 3 'TECHDB_QA_(PORT|BIND)|8767|8765' docker-compose.yml '服务器迁移说明.md'" in /home/rhett/tech-boundary-db
+ succeeded in 0ms:
+服务器迁移说明.md-40-TECHDB_QA_INCREMENTAL_VOLUME=techdb_qa_incremental_0033
+服务器迁移说明.md-41-TECHDB_AGENT_BASE_URL=https://aigate.catl.com/v1     # 分类/AI 字段网关
+服务器迁移说明.md-42-TECHDB_QA_LLM_BASE_URL=                              # 问答生成网关；留空=镜像默认 Z.AI 端点
+服务器迁移说明.md:43:TECHDB_QA_SERVICE_URL=http://canonical-qa:8765
+服务器迁移说明.md-44-TECHDB_DOCKER_MTU=1500             # 公司 Linux 默认 1500；WSL 内跑 Docker 才需要 1410
+服务器迁移说明.md-45-```
+服务器迁移说明.md-46-
+--
+服务器迁移说明.md-120-docker compose ps                                   # 五服务 Up，db/canonical-qa healthy
+服务器迁移说明.md-121-docker compose exec -T api alembic current          # 0033_...（以实际输出为准）
+服务器迁移说明.md-122-curl http://localhost:8080/api/health               # {"status":"ok",...}
+服务器迁移说明.md:123:curl -s http://127.0.0.1:${TECHDB_QA_PORT:-8767}/api/health | python3 -m json.tool | grep -E 'incremental|total_records'  # 宿主端口默认 8767（容器内 8765），可用 .env 的 TECHDB_QA_PORT 覆盖
+服务器迁移说明.md-124-curl -I http://localhost:8080/.env                  # 404
+服务器迁移说明.md-125-curl -I http://localhost:8080/.git/config           # 404
+服务器迁移说明.md-126-curl -I http://localhost:8080/backend/app/main.py   # 404
+--
+服务器迁移说明.md-184-# pending/failed 应归零；done 持续增长
+服务器迁移说明.md-185-```
+服务器迁移说明.md-186-
+服务器迁移说明.md:187:3. **索引增长**：`curl -s http://127.0.0.1:8767/api/health`（若 QA 端口映射
+服务器迁移说明.md:188:   为 8767；按 `.env` 的 `TECHDB_QA_PORT` 为准）里 `incremental_records` 与
+服务器迁移说明.md-189-   `incremental_documents` 应增长。
+服务器迁移说明.md-190-4. **QA 召回抽查**：门户问答问一条当日导入主题，引用卡命中新记录（带日期/来源）。
+服务器迁移说明.md-191-
+--
+docker-compose.yml-51-      # 知识图谱（门户星空）：独立管线每次发布后重建，只读挂载即时生效
+docker-compose.yml-52-      - ./services/canonical-qa/graph-live/graph-export.json:/app/data/lightrag/graph-export.json:ro
+docker-compose.yml-53-    ports:
+docker-compose.yml:54:      # T1（2026-10-02）：宿主默认 8765 与退役中的旧 tech-db 栈撞车——默认改 8767
+docker-compose.yml:55:      # （容器内仍 8765；.env 可用 TECHDB_QA_PORT 覆盖）
+docker-compose.yml:56:      - "${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8767}:8765"
+docker-compose.yml-57-    healthcheck:
+docker-compose.yml-58-      # T3/G1（2026-10-02）：增断言 incremental_index_ready——增量索引文件
+docker-compose.yml-59-      # 存在但损坏（已清空重建、召回静默丢失）时容器必须显示 unhealthy。
+docker-compose.yml:60:      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready'] and d['incremental_index_ready']"]
+docker-compose.yml-61-      interval: 30s
+docker-compose.yml-62-      timeout: 5s
+docker-compose.yml-63-      start_period: 90s
+--
+docker-compose.yml-79-      TECHDB_INITIAL_ADMIN_PASSWORD: ${TECHDB_INITIAL_ADMIN_PASSWORD:?TECHDB_INITIAL_ADMIN_PASSWORD must be set in .env}
+docker-compose.yml-80-      DATA_DIR: /app/data
+docker-compose.yml-81-      HERMES_AGENT_MODE: ${HERMES_AGENT_MODE:-http}
+docker-compose.yml:82:      HERMES_AGENT_HTTP_URL: ${HERMES_AGENT_HTTP_URL:-http://readonly-agent:8765/query}
+docker-compose.yml-83-      HERMES_AGENT_CLI: ${HERMES_AGENT_CLI:-hermes}
+docker-compose.yml-84-      HERMES_AGENT_TIMEOUT_SECONDS: ${HERMES_AGENT_TIMEOUT_SECONDS:-120}
+docker-compose.yml-85-      HERMES_AGENT_TOOLSETS: ${HERMES_AGENT_TOOLSETS:-}
+--
+docker-compose.yml-94-      TECHDB_AGENT_HISTORY_MAX_CHARS: ${TECHDB_AGENT_HISTORY_MAX_CHARS:-60000}
+docker-compose.yml-95-      TECHDB_AGENT_RETRIEVAL_MAX_CHARS: ${TECHDB_AGENT_RETRIEVAL_MAX_CHARS:-30000}
+docker-compose.yml-96-      TECHDB_AGENT_MAX_OUTPUT_TOKENS: ${TECHDB_AGENT_MAX_OUTPUT_TOKENS:-10000}
+docker-compose.yml:97:      TECHDB_QA_SERVICE_URL: ${TECHDB_QA_SERVICE_URL:-http://canonical-qa:8765}
+docker-compose.yml-98-      TECHDB_QA_SERVICE_TIMEOUT_SECONDS: ${TECHDB_QA_SERVICE_TIMEOUT_SECONDS:-120}
+docker-compose.yml-99-      TECHDB_QA_INDEX_TIMEOUT_SECONDS: ${TECHDB_QA_INDEX_TIMEOUT_SECONDS:-300}
+docker-compose.yml-100-      TECHDB_QA_INDEX_TOKEN: ${TECHDB_QA_INDEX_TOKEN:-}
+--
+docker-compose.yml-154-      dockerfile: backend/Dockerfile
+docker-compose.yml-155-    networks:
+docker-compose.yml-156-      - technet
+docker-compose.yml:157:    command: uvicorn app.readonly_agent:app --host 0.0.0.0 --port 8765
+docker-compose.yml-158-    environment:
+docker-compose.yml-159-      TZ: Asia/Shanghai
+docker-compose.yml-160-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-techdb}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/${POSTGRES_DB:-tech_intel}
+--
+docker-compose.yml-177-      db:
+docker-compose.yml-178-        condition: service_healthy
+docker-compose.yml-179-    ports:
+docker-compose.yml:180:      - "${TECHDB_AGENT_BIND:-127.0.0.1}:${TECHDB_AGENT_PORT:-8766}:8765"
+docker-compose.yml-181-
+docker-compose.yml-182-volumes:
+docker-compose.yml-183-  pg_data:
+
+exec
+/bin/bash -lc 'git status --short' in /home/rhett/tech-boundary-db
+exec
+/bin/bash -lc "rg -n --hidden --glob '"'!/.git'"' '8765' ." in /home/rhett/tech-boundary-db
+ succeeded in 0ms:
+ M pipeline/.pipeline_pending.json
+
+ succeeded in 0ms:
+./deploy.sh:56:echo "✓ Canonical QA 检索服务: ${TECHDB_QA_SERVICE_URL:-http://canonical-qa:8765}"
+./deploy.sh:206:        "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready'] and d['incremental_index_ready'] and not d.get('incremental_corrupt', False)" \
+./deploy.sh:229:QA_PORT="${TECHDB_QA_PORT:-8765}"
+./.env.example:67:TECHDB_QA_SERVICE_URL=http://canonical-qa:8765
+./.env.example:109:# 宿主端口：容器内 8765，默认映射到宿主 8767（旧 tech-db 栈占用 8765，
+./pipeline/tests/e2e_three_sources_isolated.py:345:                    "-p", f"127.0.0.1:{QA_PORT}:8765",
+./docker-compose.yml:54:      # T1（2026-10-02）：宿主默认 8765 与退役中的旧 tech-db 栈撞车——默认改 8767
+./docker-compose.yml:55:      # （容器内仍 8765；.env 可用 TECHDB_QA_PORT 覆盖）
+./docker-compose.yml:56:      - "${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8767}:8765"
+./docker-compose.yml:60:      test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready'] and d['incremental_index_ready']"]
+./docker-compose.yml:82:      HERMES_AGENT_HTTP_URL: ${HERMES_AGENT_HTTP_URL:-http://readonly-agent:8765/query}
+./docker-compose.yml:97:      TECHDB_QA_SERVICE_URL: ${TECHDB_QA_SERVICE_URL:-http://canonical-qa:8765}
+./docker-compose.yml:157:    command: uvicorn app.readonly_agent:app --host 0.0.0.0 --port 8765
+./docker-compose.yml:180:      - "${TECHDB_AGENT_BIND:-127.0.0.1}:${TECHDB_AGENT_PORT:-8766}:8765"
+./部署与运行说明.md:11:| `canonical-qa` | bge-m3 + 向量/BM25 混合检索 | 127.0.0.1:8765（仅诊断） |
+./部署与运行说明.md:28:| `TECHDB_QA_SERVICE_URL` | `http://canonical-qa:8765` | Compose 内 canonical QA 服务地址 |
+./部署与运行说明.md:83:curl http://127.0.0.1:8765/api/health
+./版本变更记录.md:58:- 四个自建镜像固定 `0801` 标签，canonical QA 诊断端口为 8765，兼容 readonly-agent 宿主机端口为 8766。
+./服务器迁移说明.md:43:TECHDB_QA_SERVICE_URL=http://canonical-qa:8765
+./服务器迁移说明.md:123:curl -s http://127.0.0.1:${TECHDB_QA_PORT:-8767}/api/health | python3 -m json.tool | grep -E 'incremental|total_records'  # 宿主端口默认 8767（容器内 8765），可用 .env 的 TECHDB_QA_PORT 覆盖
+./services/canonical-qa/README.md:27:├── server.py            # FastAPI 服务器 (端口 8765)
+./services/canonical-qa/README.md:53:`http://canonical-qa:8765` 通信。
+./services/canonical-qa/README.md:76:标准部署走 docker compose（容器内 8765，默认映射宿主 127.0.0.1:8767）：
+./services/canonical-qa/README.md:86:.venv/bin/python qa-backend/server.py   # 监听 0.0.0.0:8765（容器内端口）
+./docs/qa-acceptance/triage-taxonomy-sync-and-qa-cutover.md:100:- 老服务（tech-db-fresh 8765/8097、readonly-agent 8766）未动。
+./docs/qa-acceptance/tagdb-integration-audit-20261001.md:27:- **qa.js**（breadth/qa.js，tech-db 原版移植）：唯一改动 = API 层。原版直连 qa-backend :8765（无鉴权，
+./docs/qa-acceptance/tech-db-dependency-final.md:22:- **tech-db-fresh**（宿主 8765 旧服务进程，pid 1067649）——按授权边界
+./docs/qa-acceptance/codex-three-repo-audit-20261002.md:3:1. `[部分]` 同意“代码管线已独立”，但反驳“仓库内引用仅注释/可选旧路径、可安全删除”的表述。管线入口确为本地代码：[run_breadth_pipeline.sh](/home/rhett/tech-boundary-db/scripts/run_breadth_pipeline.sh:4)、[auto_pipeline.py](/home/rhett/tech-boundary-db/pipeline/auto_pipeline.py:4)，发布后写入本地来源戳：[auto_pipeline.py](/home/rhett/tech-boundary-db/pipeline/auto_pipeline.py:1246)；恢复默认只走本地管线，`--legacy-upstream` 是显式旧路径：[hydrate_breadth_runtime.py](/home/rhett/tech-boundary-db/scripts/hydrate_breadth_runtime.py:552)。但仍有运行/运维耦合：Compose 默认占用宿主 8765，与旧站可能冲突：[docker-compose.yml](/home/rhett/tech-boundary-db/docker-compose.yml:50)；canonical QA README 仍给出 `cd /home/rhett/tech-db-fresh` 的操作步骤：[README.md](/home/rhett/tech-boundary-db/services/canonical-qa/README.md:66)；QA 对照脚本默认连旧服务：[compare_qa_old_new.py](/home/rhett/tech-boundary-db/scripts/compare_qa_old_new.py:420)；README 还引用不存在的接管脚本：[README.md](/home/rhett/tech-boundary-db/README.md:16)。`techdb-*` systemd 数量与启用状态在本仓只读扫描内无法验证，不能据此确认“7 个”。
+./docs/qa-acceptance/codex-three-repo-audit-20261002.md:22:1. `[部分]` 同意“代码管线已独立”，但反驳“仓库内引用仅注释/可选旧路径、可安全删除”的表述。管线入口确为本地代码：[run_breadth_pipeline.sh](/home/rhett/tech-boundary-db/scripts/run_breadth_pipeline.sh:4)、[auto_pipeline.py](/home/rhett/tech-boundary-db/pipeline/auto_pipeline.py:4)，发布后写入本地来源戳：[auto_pipeline.py](/home/rhett/tech-boundary-db/pipeline/auto_pipeline.py:1246)；恢复默认只走本地管线，`--legacy-upstream` 是显式旧路径：[hydrate_breadth_runtime.py](/home/rhett/tech-boundary-db/scripts/hydrate_breadth_runtime.py:552)。但仍有运行/运维耦合：Compose 默认占用宿主 8765，与旧站可能冲突：[docker-compose.yml](/home/rhett/tech-boundary-db/docker-compose.yml:50)；canonical QA README 仍给出 `cd /home/rhett/tech-db-fresh` 的操作步骤：[README.md](/home/rhett/tech-boundary-db/services/canonical-qa/README.md:66)；QA 对照脚本默认连旧服务：[compare_qa_old_new.py](/home/rhett/tech-boundary-db/scripts/compare_qa_old_new.py:420)；README 还引用不存在的接管脚本：[README.md](/home/rhett/tech-boundary-db/README.md:16)。`techdb-*` systemd 数量与启用状态在本仓只读扫描内无法验证，不能据此确认“7 个”。
+./docs/qa-acceptance/codex-repair-decisions-20261002.md:26:- **D8 接受改默认 8767**：容器内 canonical 仍是 8765，只改宿主映射默认，不影响 compose 网络内 `http://canonical-qa:8765`。已显式设置 `TECHDB_QA_PORT` 的部署不受影响。顺手清理 `.env` 里 8765/8767 重复行，避免后续误读。
+./docs/qa-acceptance/t12-real-package-import-drill.md:152:- 端口：api 8080 / canonical-qa 8767（容器 8765）。
+./DEPLOY.md:27:TECHDB_QA_SERVICE_URL=http://canonical-qa:8765
+./services/canonical-qa/qa-backend/server.py:2148:    uvicorn.run(app, host="0.0.0.0", port=8765)
+./scripts/compare_qa_old_new.py:25:    --old http://127.0.0.1:8765 --new http://127.0.0.1:8767 \
+./scripts/compare_qa_old_new.py:420:    ap.add_argument("--old", default="http://127.0.0.1:8765", help="tech-db legacy_hybrid")
+./backend/app/routers/breadth_qa.py:3:历史：tech-db 原生广度页问答视图（qa 脚本）直连 qa-backend :8765（无鉴权），
+./README.md:74:                └── Docker 内网调用 canonical-qa (:8765)
+./README.md:80:readonly-agent (:8765 容器内部；:8766 为兼容宿主机端口)
+./backend/tests/test_qa_answer_chain.py:112:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://qa:8765")
+./backend/tests/test_qa_answer_chain.py:123:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://qa:8765")
+./backend/tests/test_agent_service.py:175:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+./docs/qa-acceptance/three-repo-audit-20261002.md:25:- 本机仍有 7 个启用的 techdb-* systemd 单元在 `~/tech-db-fresh`（= github.com/sbq9712/tech-db 克隆）上运行：每 2h pipeline、每 30min data-sync（git pull + 推 auto-sync 提交回 GitHub tech-db main）、graph/vector 索引、8765 服务、cloudflared 隧道。**删除 GitHub 仓库后这些单元全部报错**（git pull/push 失败、公开站数据停更）
+./docs/qa-acceptance/three-repo-audit-20261002.md:26:- `docker-compose.yml:51` 默认映射宿主 8765，与旧 techdb-server 冲突（本机靠 override 8767 规避；新离线机无旧服务，但默认值仍是坑）
+./docs/qa-acceptance/three-repo-audit-20261002.md:94:| G11 | P1 | tech-db 退役切换未做（7 个 techdb-* 单元仍在跑、文档残留、README 幽灵脚本、compose 默认 8765） | systemd / README.md:16 / services/canonical-qa/README.md:66 / docker-compose.yml:51 |
+./docs/qa-acceptance/spec-repair-20261002.md:23:- compose：canonical-qa 宿主默认端口 8765（与旧 techdb-server 冲突）；healthcheck 未断言
+./docs/qa-acceptance/spec-repair-20261002.md:71:    改本仓库路径；compose 宿主默认端口 8765→8767（容器内 8765 不变）；本机 .env 去重
+./docs/qa-acceptance/evidence/codex_review_round4.txt:628:   312	            "--name", ISO_NAME, "-p", f"127.0.0.1:{ISO_PORT}:8765",
+./docs/qa-acceptance/evidence/codex_review_round4.txt:967:services/canonical-qa/README.md:53:`http://canonical-qa:8765` 通信。
+./docs/qa-acceptance/evidence/codex_review_round4.txt:969:services/canonical-qa/README.md:76:标准部署走 docker compose（容器内 8765，默认映射宿主 127.0.0.1:8767）：
+./docs/qa-acceptance/evidence/codex_review_round4.txt:1094:backend/tests/test_upload_ingestion.py:350:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+./docs/qa-acceptance/evidence/codex_review_round4.txt:1095:backend/tests/test_upload_ingestion.py:358:    assert captured["url"] == "http://canonical-qa:8765/api/index/upsert"
+./docs/qa-acceptance/evidence/codex_review_round4.txt:1096:backend/tests/test_upload_ingestion.py:504:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+./docs/qa-acceptance/evidence/codex_review_round4.txt:1097:backend/tests/test_upload_ingestion.py:511:    assert captured["url"] == "http://canonical-qa:8765/api/index/delete"
+./docs/qa-acceptance/evidence/codex_review_round4.txt:1174:backend/tests/test_agent_service.py:175:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+./docs/qa-acceptance/evidence/codex_review_round4.txt:1640:  2148	    uvicorn.run(app, host="0.0.0.0", port=8765)
+./docs/qa-acceptance/evidence/codex_review_round4.txt:2108:     3	tech-db 原生 qa.js 直连 qa-backend :8765（无鉴权）。本仓部署形态下
+./docs/qa-acceptance/evidence/codex_review_round4.txt:3534:+            "--name", ISO_NAME, "-p", f"127.0.0.1:{ISO_PORT}:8765",
+./backend/tests/test_upload_ingestion.py:350:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+./backend/tests/test_upload_ingestion.py:358:    assert captured["url"] == "http://canonical-qa:8765/api/index/upsert"
+./backend/tests/test_upload_ingestion.py:504:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+./backend/tests/test_upload_ingestion.py:511:    assert captured["url"] == "http://canonical-qa:8765/api/index/delete"
+./services/canonical-qa/qa-backend/Dockerfile.release:42:EXPOSE 8765
+./services/canonical-qa/qa-backend/Dockerfile.release:45:    CMD python -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready']"
+./docs/reproducible-build.md:8:的 8765 端口进程仍在运行，处置权在用户）。
+./docs/reproducible-build.md:83:- 127.0.0.1:8765 = tech-db-fresh 旧服务（宿主进程，非本仓库容器）——
+./docs/qa-acceptance/grill-decisions-20261002.md:17:- F12 docker-compose.yml canonical-qa 端口 "${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8765}:8765"；本机 override 用 8767。
+./docs/qa-acceptance/grill-decisions-20261002.md:35:D8 (P1) T1 compose 端口默认值 8765→8767：会改变所有未设 TECHDB_QA_PORT 环境的部署默认。本机 .env 设了 8767（override），生产离线机无旧服务冲突。改默认值+文档说明 vs 保持默认+只加注释警示？我倾向改默认（新机一次到位，避免与旧 techdb-server 8765 冲突）。
+./docs/tech-db-retirement.md:47:（本仓库已切换 8767 端口，canonical-qa 不再依赖 8765 的旧服务）。
+./docs/tech-db-retirement.md:79:- `docker-compose.yml`：canonical-qa 宿主默认端口 8765 → **8767**（8765 是
+./docs/tech-db-retirement.md:80:  旧 techdb-server 遗留占用；容器内仍 8765，`.env` 的 `TECHDB_QA_PORT`
+./docs/tech-db-retirement.md:83:  `ports: ["127.0.0.1:8767:8765"]`。
+./docs/qa-acceptance/repair-prompt-20261002.md:29:现状：本机仍有 7 个启用的 techdb-* systemd user 单元跑在 ~/tech-db-fresh 上（techdb-pipeline.timer 每 2h、techdb-data-sync.timer 每 30min 会 git pull 且推 auto-sync 提交回 GitHub、graph、vector、server:8765、tunnel、auto-update[已禁用]）；README.md:16 引用不存在的 scripts/auto_update_takeover.sh；services/canonical-qa/README.md:66/76/84 仍写 `cd /home/rhett/tech-db-fresh`；docker-compose.yml:51 默认映射宿主 8765 与旧服务冲突（本机靠未提交的 override 改 8767）。
+./docs/qa-acceptance/repair-prompt-20261002.md:37:3. 文档修正：删除 README.md:16 的幽灵脚本引用（改为指向真实脚本或删掉该行）；services/canonical-qa/README.md 三处 `cd /home/rhett/tech-db-fresh` 改为本仓库路径；docker-compose.yml 默认宿主端口从 8765 改为 8767（并把 override 的临时映射关系写进 README，说明 8765 是旧 techdb-server 遗留）。
+./docs/design/2026-09-30-answer-chain-legacy-hybrid.md:113:首轮三方对照（old=tech-db-fresh@8765, new=canonical-qa 0930h@8767，
+./docs/qa-acceptance/drill_restart_recovery.py:318:            "--name", ISO_NAME, "-p", f"127.0.0.1:{ISO_PORT}:8765",
+./docs/codex-reviews/2026-09-22-v6-ui-review.md:191:@@ -77,7 +82,7 @@ readonly-agent (:8765 容器内部；:8766 为兼容宿主机端口)
+./docs/codex-reviews/2026-09-22-v6-ui-review.md:577:     command: uvicorn app.readonly_agent:app --host 0.0.0.0 --port 8765
+./docs/codex-reviews/2026-09-22-v6-ui-review.md:1764:    63	TECHDB_QA_SERVICE_URL=http://canonical-qa:8765
+./docs/codex-reviews/2026-09-22-v6-ui-review.md:1792:    91	TECHDB_QA_PORT=8765
+./docs/codex-reviews/2026-09-22-v6-ui-review.md:1793:    92	# 8765 预留给上游 canonical QA 服务；兼容 readonly-agent 默认映射到 8766。
+./docs/codex-reviews/2026-09-22-v6-ui-review.md:1885:docker-compose.yml:132:    command: uvicorn app.readonly_agent:app --host 0.0.0.0 --port 8765
+./docs/codex-reviews/2026-09-22-v6-ui-review.md:2383:fb262f5a (Edmunds 2026-08-03 13:20:54 +0800 40)       - "${TECHDB_QA_BIND:-127.0.0.1}:${TECHDB_QA_PORT:-8765}:8765"
+./docs/codex-reviews/2026-09-22-v6-ui-review.md:2385:fb262f5a (Edmunds 2026-08-03 13:20:54 +0800 42)       test: ["CMD", "python", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready']"]
+./docs/qa-acceptance/evidence/codex_review_round5.txt:1402:+   312	            "--name", ISO_NAME, "-p", f"127.0.0.1:{ISO_PORT}:8765",
+./docs/qa-acceptance/evidence/codex_review_round5.txt:1741:+services/canonical-qa/README.md:53:`http://canonical-qa:8765` 通信。
+./docs/qa-acceptance/evidence/codex_review_round5.txt:1743:+services/canonical-qa/README.md:76:标准部署走 docker compose（容器内 8765，默认映射宿主 127.0.0.1:8767）：
+./docs/qa-acceptance/evidence/codex_review_round5.txt:1868:+backend/tests/test_upload_ingestion.py:350:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+./docs/qa-acceptance/evidence/codex_review_round5.txt:1869:+backend/tests/test_upload_ingestion.py:358:    assert captured["url"] == "http://canonical-qa:8765/api/index/upsert"
+./docs/qa-acceptance/evidence/codex_review_round5.txt:1870:+backend/tests/test_upload_ingestion.py:504:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+./docs/qa-acceptance/evidence/codex_review_round5.txt:1871:+backend/tests/test_upload_ingestion.py:511:    assert captured["url"] == "http://canonical-qa:8765/api/index/delete"
+./docs/qa-acceptance/evidence/codex_review_round5.txt:1948:+backend/tests/test_agent_service.py:175:    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+./docs/qa-acceptance/evidence/codex_review_round5.txt:2414:+  2148	    uvicorn.run(app, host="0.0.0.0", port=8765)
+./docs/qa-acceptance/evidence/codex_review_round5.txt:2882:+     3	tech-db 原生 qa.js 直连 qa-backend :8765（无鉴权）。本仓部署形态下
+./docs/qa-acceptance/evidence/codex_review_round5.txt:4308:++            "--name", ISO_NAME, "-p", f"127.0.0.1:{ISO_PORT}:8765",
+./docs/qa-acceptance/evidence/codex_review_round5.txt:5753:   318	            "--name", ISO_NAME, "-p", f"127.0.0.1:{ISO_PORT}:8765",
+./docs/qa-acceptance/evidence/codex_review_round5.txt:6068:   175	    monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "http://canonical-qa:8765")
+./docs/qa-acceptance/evidence/codex_review_round5.txt:7241:  2148	    uvicorn.run(app, host="0.0.0.0", port=8765)
+./docs/qa-acceptance/evidence/codex_review_round5.txt:7364:   318	            "--name", ISO_NAME, "-p", f"127.0.0.1:{ISO_PORT}:8765",
+
+codex
+The commit itself is clean and scoped. The broad scan surfaced two current operational-code candidates that need context before classification: `deploy.sh` appears to set a QA host port default of 8765, and the deployment guide has host-like `127.0.0.1:8765` examples.
+exec
+/bin/bash -lc "nl -ba '部署与运行说明.md' | sed -n '1,40p;70,95p'" in /home/rhett/tech-boundary-db
+ succeeded in 0ms:
+     1	# 前沿技术情报与预警平台部署与运行说明
+     2	
+     3	> 0801 稳定版复核：2026-08-03
+     4	
+     5	## 服务结构
+     6	
+     7	| 服务 | 作用 | 默认宿主机端口 |
+     8	|---|---|---|
+     9	| `web` | 白名单静态前端与 `/api/` 反向代理 | 8080 |
+    10	| `api` | FastAPI、上传落盘、分类任务 | 127.0.0.1:8000 |
+    11	| `canonical-qa` | bge-m3 + 向量/BM25 混合检索 | 127.0.0.1:8765（仅诊断） |
+    12	| `readonly-agent` | 旧兼容只读接口，不作为门户问答检索源 | 127.0.0.1:8766 |
+    13	| `db` | PostgreSQL 16 | 不对宿主机暴露 |
+    14	
+    15	门户问答的正式检索源是同一 Compose 内的 `canonical-qa`，接口契约来自 `sbq9712/tech-db` 的 `/api/search`、`/api/health`、`/api/stats` 和 `/api/graph`。门户后端继续负责认证、用户会话和公司内网模型生成；服务间只通过 Docker 网络通信。
+    16	
+    17	Web 镜像只包含明确列出的 HTML/JS/CSS、公开模板和广度追踪前端数据。仓库根目录、`.env`、`.git`、后端源码、备份和上传对象不会进入静态站点。
+    18	
+    19	## 环境变量
+    20	
+    21	从 `.env.example` 创建 `.env`。生产必须设置 `SECRET_KEY`、`POSTGRES_PASSWORD`、`TECHDB_INITIAL_ADMIN_PASSWORD` 和模型凭据。上传相关配置：
+    22	
+    23	| 变量 | 默认值 | 说明 |
+    24	|---|---|---|
+    25	| `TECHDB_UPLOAD_HOST_PATH` | `./uploads` | 宿主机持久目录；生产建议绝对路径 |
+    26	| `TECHDB_UPLOAD_RECOVERY_ENABLED` | `true` | 启动时校验历史对象并恢复中断分类 |
+    27	| `TECHDB_AGENT_AI_TIMEOUT_SECONDS` | `180` | 分类和其他 AI 请求超时 |
+    28	| `TECHDB_QA_SERVICE_URL` | `http://canonical-qa:8765` | Compose 内 canonical QA 服务地址 |
+    29	| `TECHDB_QA_SERVICE_TIMEOUT_SECONDS` | `120` | 检索请求超时；需覆盖 CPU 首次加载 bge-m3 的冷启动 |
+    30	| `TECHDB_AGENT_PORT` | `8766` | 兼容 readonly-agent 的宿主机端口 |
+    31	| `TECHDB_FORCE_BUILD` | `false` | 是否忽略已导入镜像并强制源码重建 |
+    32	
+    33	容器内上传路径固定为 `/app/uploads`，不要在 `.env` 中把宿主机路径写成容器路径。
+    34	
+    35	## 启动
+    36	
+    37	```bash
+    38	cp .env.example .env
+    39	# 编辑生产配置
+    40	./deploy.sh
+    70	```
+    71	
+    72	备份保留最近 30 组（可用 `TECHDB_BACKUP_KEEP` 调整），每组包含数据库、上传对象和 SHA-256 清单。文件对象在数据库 dump 后归档，因为对象落盘后不可变，这保证 dump 中引用的文件都能进入同组归档。
+    73	
+    74	恢复是破坏性操作，会要求输入 `yes`。脚本先把上传归档解到同盘暂存目录，拒绝 `..`/绝对路径成员；恢复后旧上传目录仍保留，便于回退。
+    75	
+    76	## 运维检查
+    77	
+    78	```bash
+    79	docker compose exec -T api alembic current
+    80	docker compose exec -T db psql -U techdb -d tech_intel \
+    81	  -c "select classification_status, count(*) from uploaded_files group by 1;"
+    82	curl http://localhost:8080/api/health
+    83	curl http://127.0.0.1:8765/api/health
+    84	```
+    85	
+    86	生产安全检查：
+    87	
+    88	```bash
+    89	for p in /.env /.git/config /backend/app/main.py /scripts/db_backup.sh; do
+    90	  curl -o /dev/null -s -w "$p %{http_code}\n" "http://localhost:8080$p"
+    91	done
+    92	```
+    93	
+    94	四项都应返回 404。
+    95	
+
+exec
+/bin/bash -lc "nl -ba deploy.sh | sed -n '35,70p;185,245p'" in /home/rhett/tech-boundary-db
+ succeeded in 0ms:
+    35	    local value="${!name:-}"
+    36	    if [ -z "$value" ]; then
+    37	        echo "❌ 错误：${name} 未设置"
+    38	        exit 1
+    39	    fi
+    40	    for placeholder in "$@"; do
+    41	        if [ "$value" = "$placeholder" ]; then
+    42	            echo "❌ 错误：${name} 仍是模板占位值"
+    43	            exit 1
+    44	        fi
+    45	    done
+    46	}
+    47	
+    48	require_config SECRET_KEY replace_with_a_random_64_hex_string
+    49	require_config POSTGRES_PASSWORD replace_with_a_strong_database_password
+    50	require_config TECHDB_INITIAL_ADMIN_PASSWORD replace_with_a_strong_admin_password
+    51	require_config TECHDB_AGENT_API_KEY your_api_key_here replace_with_company_gateway_api_key
+    52	
+    53	echo "✓ API Key 已配置"
+    54	echo "✓ 模型: $TECHDB_AGENT_MODEL"
+    55	echo "✓ 端点: $TECHDB_AGENT_BASE_URL"
+    56	echo "✓ Canonical QA 检索服务: ${TECHDB_QA_SERVICE_URL:-http://canonical-qa:8765}"
+    57	echo ""
+    58	
+    59	# 准备上传文件持久目录。相对路径统一相对于项目根目录解析。
+    60	UPLOAD_PATH="${TECHDB_UPLOAD_HOST_PATH:-./uploads}"
+    61	case "$UPLOAD_PATH" in
+    62	    /*) ;;
+    63	    *) UPLOAD_PATH="$SCRIPT_DIR/${UPLOAD_PATH#./}" ;;
+    64	esac
+    65	mkdir -p "$UPLOAD_PATH"
+    66	if [ ! -d "$UPLOAD_PATH" ] || [ ! -w "$UPLOAD_PATH" ]; then
+    67	    echo "❌ 错误：上传目录不可写: $UPLOAD_PATH"
+    68	    exit 1
+    69	fi
+    70	echo "✓ 上传目录: $UPLOAD_PATH"
+   185	
+   186	# 等待数据库就绪
+   187	echo "⏳ 等待服务就绪..."
+   188	DB_READY=false
+   189	for i in $(seq 1 30); do
+   190	    if docker compose exec -T db pg_isready -U "${POSTGRES_USER:-techdb}" -d "${POSTGRES_DB:-tech_intel}" &>/dev/null; then
+   191	        echo "  ✓ 数据库已就绪"
+   192	        DB_READY=true
+   193	        break
+   194	    fi
+   195	    sleep 2
+   196	done
+   197	if [ "$DB_READY" != "true" ]; then
+   198	    echo "❌ 数据库在 60 秒内未就绪"
+   199	    docker compose ps
+   200	    exit 1
+   201	fi
+   202	
+   203	QA_READY=false
+   204	for i in $(seq 1 90); do
+   205	    if docker compose exec -T canonical-qa python -c \
+   206	        "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)); assert d['vector_index_ready'] and d['bm25_ready'] and d['index_mapping_ready'] and d['incremental_index_ready'] and not d.get('incremental_corrupt', False)" \
+   207	        >/dev/null 2>&1; then
+   208	        echo "  ✓ Canonical QA 模型、索引、记录映射和增量索引已就绪"
+   209	        QA_READY=true
+   210	        break
+   211	    fi
+   212	    sleep 2
+   213	done
+   214	if [ "$QA_READY" != "true" ]; then
+   215	    echo "❌ Canonical QA 在 180 秒内未就绪"
+   216	    docker compose logs --tail=100 canonical-qa
+   217	    exit 1
+   218	fi
+   219	
+   220	# 检查服务状态
+   221	echo ""
+   222	echo "📊 服务状态："
+   223	docker compose ps
+   224	echo ""
+   225	
+   226	# 获取端口
+   227	WEB_PORT="${TECHDB_WEB_PORT:-8080}"
+   228	AGENT_PORT="${TECHDB_AGENT_PORT:-8766}"
+   229	QA_PORT="${TECHDB_QA_PORT:-8765}"
+   230	
+   231	echo "========================================"
+   232	echo "✅ 部署完成"
+   233	echo "========================================"
+   234	echo ""
+   235	echo "访问地址："
+   236	echo "  前端：  http://localhost:${WEB_PORT}"
+   237	echo "  API：  http://localhost:8000"
+   238	echo "  QA 诊断：http://localhost:${QA_PORT}/api/health"
+   239	echo "  兼容 Agent：http://localhost:${AGENT_PORT}/health"
+   240	echo ""
+   241	echo "常用命令："
+   242	echo "  查看日志：docker compose logs -f"
+   243	echo "  停止服务：docker compose down"
+   244	echo "  重启服务：docker compose restart"
+   245	echo "  注意：不要在生产环境执行 docker compose down -v（会删除数据库卷）"
+
+exec
+/bin/bash -lc "nl -ba .env.example | sed -n '55,120p'" in /home/rhett/tech-boundary-db
+ succeeded in 0ms:
+    55	# 单轮检索材料字符预算；历史对话另计。
+    56	TECHDB_AGENT_RETRIEVAL_MAX_CHARS=30000
+    57	
+    58	# 默认回答保持紧凑；用户明确要求长报告时，后续可按请求类型动态调整。
+    59	TECHDB_AGENT_MAX_OUTPUT_TOKENS=10000
+    60	
+    61	# ------------------------------------------------------------------------------
+    62	# GitHub canonical 问答检索服务
+    63	# ------------------------------------------------------------------------------
+    64	# 本仓库自包含的 canonical-qa：已迁入原 TechDB 的 hybrid retrieval、
+    65	# evidence/citation/verification 能力。与门户共同部署在服务器 Docker 网络，
+    66	# 运行时不依赖 sbq9712/tech-db 仓库。
+    67	TECHDB_QA_SERVICE_URL=http://canonical-qa:8765
+    68	# CPU 首次加载 bge-m3 可能需要约 50 秒；应覆盖检索服务冷启动。
+    69	TECHDB_QA_SERVICE_TIMEOUT_SECONDS=120
+    70	
+    71	# 上传资料写入增量索引的最长等待时间。首次加载 bge-m3 时可能较慢。
+    72	TECHDB_QA_INDEX_TIMEOUT_SECONDS=300
+    73	
+    74	# API 与 canonical-qa 之间的内部写入令牌；生产环境必须设置随机强值。
+    75	# 生成方式：openssl rand -hex 32（api 与 canonical-qa 两侧必须同值）
+    76	# ⚠️ 未配置或保留占位符时，canonical-qa 全部写端点（/api/index/upsert、
+    77	#    /api/index/delete、/api/index/record-mutate）将返回 503 拒绝写入，
+    78	#    广度问答增量索引随之停止更新——这是刻意的安全闸门（T8，2026-10-02）。
+    79	# 同步脚本侧令牌另需写入 runtime/qa-index-sync/token（0600），见
+    80	# scripts/sync_qa_index.py 文档与 DEPLOY.md。
+    81	TECHDB_QA_INDEX_TOKEN=replace_with_a_random_internal_index_token
+    82	
+    83	# canonical-qa 自身 chat/graph-ingest 生成侧需要 ZAI key（广度页问答视图已下线，
+    84	# 保留的 /api/breadth/qa/* 代理仍走此链路）（qa-backend/config.py 优先读该 env，缺省回落
+    85	# 宿主 ~/.config/anthropic-proxy.env）。缺省留空 = 问答视图只有检索无生成。
+    86	# ⚠️ 离线公司服务器注意：该生成端点默认指向公网 Z.AI，内网不可达。如公司网关
+    87	#    提供 OpenAI 兼容端点，请在下方设置 BASE_URL 覆盖为内网地址（并填 API_KEY）；
+    88	#    门户问答主链路的生成走 TECHDB_AGENT_*（上方公司网关），不受此项影响。
+    89	# TECHDB_QA_LLM_API_KEY=
+    90	# TECHDB_QA_LLM_BASE_URL=
+    91	
+    92	# 上传资料的增量向量/BM25 索引保存在 Docker 卷中，独立于只读基线索引。
+    93	TECHDB_QA_INCREMENTAL_VOLUME=techdb_qa_incremental_0801
+    94	
+    95	# canonical-qa 集成镜像已经内置并校验模型、基线索引、记录与图谱资产；
+    96	# 公司离线服务器启动不重建基线 embedding，也不从 Hugging Face 下载模型。
+    97	# 新上传资料只更新独立增量索引；需要全量重建时在有算力的构建环境完成后再交付镜像。
+    98	
+    99	# ------------------------------------------------------------------------------
+   100	# 服务端口与绑定
+   101	# ------------------------------------------------------------------------------
+   102	# 前端端口（默认 8080）
+   103	TECHDB_WEB_PORT=8080
+   104	# API/Agent 默认只绑定回环地址；如需外部访问请配置网关代理
+   105	TECHDB_API_BIND=127.0.0.1
+   106	TECHDB_AGENT_BIND=127.0.0.1
+   107	# canonical QA 诊断端口只绑定服务器回环地址；门户通过 Docker 网络访问。
+   108	TECHDB_QA_BIND=127.0.0.1
+   109	# 宿主端口：容器内 8765，默认映射到宿主 8767（旧 tech-db 栈占用 8765，
+   110	# compose 默认值即 8767——与 docker-compose.yml 端口段一致）。
+   111	TECHDB_QA_PORT=8767
+   112	# 8766 预留给 readonly-agent 默认映射。
+   113	TECHDB_AGENT_PORT=8766
+   114	# Docker 网络 MTU：普通 Linux 服务器默认 1500；仅当宿主是 WSL（eth0 MTU=1410）
+   115	# 等特殊环境时改为 1410，否则容器间大包会被静默丢弃（表现为偶发超时/卡死）。
+   116	# 查看宿主 MTU：ip link show eth0
+   117	TECHDB_DOCKER_MTU=1500
+   118	
+   119	# 已导入已验收镜像时保持 false；仅在明确需要从源码重建 api/agent/web 时改为 true。
+   120	TECHDB_FORCE_BUILD=false
+
+exec
+/bin/bash -lc 'git show f18c8b7 --name-status --format= && git merge-base --is-ancestor f18c8b7 HEAD && echo ANCESTOR=YES && git rev-parse --short HEAD' in /home/rhett/tech-boundary-db
+ succeeded in 0ms:
+M	"\346\234\215\345\212\241\345\231\250\350\277\201\347\247\273\350\257\264\346\230\216.md"
+ANCESTOR=YES
+f18c8b7
+
+codex
+Two mismatches are now confirmed in live deployment code/docs. I’m checking whether `deploy.sh` sources `.env` into the shell before line 229, since that determines whether its fallback can actually expose the wrong host port.
+exec
+/bin/bash -lc "nl -ba deploy.sh | sed -n '1,35p;220,242p'" in /home/rhett/tech-boundary-db
+ succeeded in 0ms:
+     1	#!/bin/bash
+     2	set -e
+     3	
+     4	SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+     5	cd "$SCRIPT_DIR"
+     6	
+     7	echo "========================================"
+     8	echo "技术边界数据库 - 一键部署"
+     9	echo "========================================"
+    10	echo ""
+    11	
+    12	# 检查 .env 是否存在
+    13	if [ ! -f .env ]; then
+    14	    if [ -f .env.example ]; then
+    15	        echo "⚠️  未找到 .env，正在从模板创建..."
+    16	        cp .env.example .env
+    17	        echo "❌ 请编辑 .env 文件，填写 TECHDB_AGENT_API_KEY 后重新运行此脚本"
+    18	        echo "   命令：nano .env  或  vim .env"
+    19	        exit 1
+    20	    else
+    21	        echo "❌ 错误：未找到 .env 和 .env.example"
+    22	        exit 1
+    23	    fi
+    24	fi
+    25	
+    26	# 加载环境变量
+    27	set -a
+    28	source .env
+    29	set +a
+    30	
+    31	# 拒绝空值和模板占位值，避免把示例配置误当成生产配置。
+    32	require_config() {
+    33	    local name="$1"
+    34	    shift
+    35	    local value="${!name:-}"
+   220	# 检查服务状态
+   221	echo ""
+   222	echo "📊 服务状态："
+   223	docker compose ps
+   224	echo ""
+   225	
+   226	# 获取端口
+   227	WEB_PORT="${TECHDB_WEB_PORT:-8080}"
+   228	AGENT_PORT="${TECHDB_AGENT_PORT:-8766}"
+   229	QA_PORT="${TECHDB_QA_PORT:-8765}"
+   230	
+   231	echo "========================================"
+   232	echo "✅ 部署完成"
+   233	echo "========================================"
+   234	echo ""
+   235	echo "访问地址："
+   236	echo "  前端：  http://localhost:${WEB_PORT}"
+   237	echo "  API：  http://localhost:8000"
+   238	echo "  QA 诊断：http://localhost:${QA_PORT}/api/health"
+   239	echo "  兼容 Agent：http://localhost:${AGENT_PORT}/health"
+   240	echo ""
+   241	echo "常用命令："
+   242	echo "  查看日志：docker compose logs -f"
+
+exec
+/bin/bash -lc "git blame -L 7,15 -- '部署与运行说明.md' && git blame -L 76,84 -- '部署与运行说明.md' && git blame -L 224,239 -- deploy.sh" in /home/rhett/tech-boundary-db
+ succeeded in 476ms:
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800  7) | 服务 | 作用 | 默认宿主机端口 |
+^da43d02 (Edmunds 2026-06-29 16:03:39 +0800  8) |---|---|---|
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800  9) | `web` | 白名单静态前端与 `/api/` 反向代理 | 8080 |
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800 10) | `api` | FastAPI、上传落盘、分类任务 | 127.0.0.1:8000 |
+fb262f5a (Edmunds 2026-08-03 13:20:54 +0800 11) | `canonical-qa` | bge-m3 + 向量/BM25 混合检索 | 127.0.0.1:8765（仅诊断） |
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800 12) | `readonly-agent` | 旧兼容只读接口，不作为门户问答检索源 | 127.0.0.1:8766 |
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800 13) | `db` | PostgreSQL 16 | 不对宿主机暴露 |
+^da43d02 (Edmunds 2026-06-29 16:03:39 +0800 14) 
+fb262f5a (Edmunds 2026-08-03 13:20:54 +0800 15) 门户问答的正式检索源是同一 Compose 内的 `canonical-qa`，接口契约来自 `sbq9712/tech-db` 的 `/api/search`、`/api/health`、`/api/stats` 和 `/api/graph`。门户后端继续负责认证、用户会话和公司内网模型生成；服务间只通过 Docker 网络通信。
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800 76) ## 运维检查
+^da43d02 (Edmunds 2026-06-29 16:03:39 +0800 77) 
+^da43d02 (Edmunds 2026-06-29 16:03:39 +0800 78) ```bash
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800 79) docker compose exec -T api alembic current
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800 80) docker compose exec -T db psql -U techdb -d tech_intel \
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800 81)   -c "select classification_status, count(*) from uploaded_files group by 1;"
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800 82) curl http://localhost:8080/api/health
+fb262f5a (Edmunds 2026-08-03 13:20:54 +0800 83) curl http://127.0.0.1:8765/api/health
+^da43d02 (Edmunds 2026-06-29 16:03:39 +0800 84) ```
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 224) echo ""
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 225) 
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 226) # 获取端口
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 227) WEB_PORT="${TECHDB_WEB_PORT:-8080}"
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800 228) AGENT_PORT="${TECHDB_AGENT_PORT:-8766}"
+fb262f5a (Edmunds 2026-08-03 13:20:54 +0800 229) QA_PORT="${TECHDB_QA_PORT:-8765}"
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 230) 
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 231) echo "========================================"
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 232) echo "✅ 部署完成"
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 233) echo "========================================"
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 234) echo ""
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 235) echo "访问地址："
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 236) echo "  前端：  http://localhost:${WEB_PORT}"
+d7120465 (Edmunds 2026-07-23 15:33:01 +0800 237) echo "  API：  http://localhost:8000"
+fb262f5a (Edmunds 2026-08-03 13:20:54 +0800 238) echo "  QA 诊断：http://localhost:${QA_PORT}/api/health"
+8a15f50a (Edmunds 2026-08-03 10:34:11 +0800 239) echo "  兼容 Agent：http://localhost:${AGENT_PORT}/health"
+
+codex
+`PASS` 不能成立：`f18c8b7` 本身无夹带，但回归范围外的当前文件仍把 8765 写成宿主 QA 地址/默认端口。
+
+1. [deploy.sh:229](/home/rhett/tech-boundary-db/deploy.sh:229) — `QA_PORT="${TECHDB_QA_PORT:-8765}"`，与 [docker-compose.yml:56](/home/rhett/tech-boundary-db/docker-compose.yml:56) 的 `${TECHDB_QA_PORT:-8767}:8765` 不一致。虽然 [deploy.sh:28](/home/rhett/tech-boundary-db/deploy.sh:28) 会 source `.env`，但仅当 `.env` 缺失 `TECHDB_QA_PORT` 时，脚本完成提示的宿主 QA 地址会错误落到 8765；应为 `-8767`。
+2. [部署与运行说明.md:11](/home/rhett/tech-boundary-db/部署与运行说明.md:11) — 表格明确称 canonical-qa 默认宿主机端口为 `127.0.0.1:8765`，与 compose 宿主默认 8767 不一致；同文件 [83](/home/rhett/tech-boundary-db/部署与运行说明.md:83) 还给出宿主侧 `curl http://127.0.0.1:8765/api/health`。
+3. [服务器迁移说明.md:123](/home/rhett/tech-boundary-db/服务器迁移说明.md:123) — 原发现已正确修复为 `${TECHDB_QA_PORT:-8767}`；`git show f18c8b7` 只改动这一行，commit 已在 HEAD 历史中。
+4. [docker-compose.yml:56](/home/rhett/tech-boundary-db/docker-compose.yml:56) — 映射语义为 `host_bind:host_port:container_port`，当前修复后的文档与该语义一致。
+5. 工作树仅 `M pipeline/.pipeline_pending.json`，属你指定忽略的管线 timer 状态文件。
+
+其余 `8765` 命中里，容器内健康检查、服务名 URL、`EXPOSE 8765`、application 监听端口、测试容器 `${QA_PORT}:8765`，以及审计/评审历史记录均属容器侧或历史叙述，不是当前宿主访问地址问题。
+tokens used
+69,584
+`PASS` 不能成立：`f18c8b7` 本身无夹带，但回归范围外的当前文件仍把 8765 写成宿主 QA 地址/默认端口。
+
+1. [deploy.sh:229](/home/rhett/tech-boundary-db/deploy.sh:229) — `QA_PORT="${TECHDB_QA_PORT:-8765}"`，与 [docker-compose.yml:56](/home/rhett/tech-boundary-db/docker-compose.yml:56) 的 `${TECHDB_QA_PORT:-8767}:8765` 不一致。虽然 [deploy.sh:28](/home/rhett/tech-boundary-db/deploy.sh:28) 会 source `.env`，但仅当 `.env` 缺失 `TECHDB_QA_PORT` 时，脚本完成提示的宿主 QA 地址会错误落到 8765；应为 `-8767`。
+2. [部署与运行说明.md:11](/home/rhett/tech-boundary-db/部署与运行说明.md:11) — 表格明确称 canonical-qa 默认宿主机端口为 `127.0.0.1:8765`，与 compose 宿主默认 8767 不一致；同文件 [83](/home/rhett/tech-boundary-db/部署与运行说明.md:83) 还给出宿主侧 `curl http://127.0.0.1:8765/api/health`。
+3. [服务器迁移说明.md:123](/home/rhett/tech-boundary-db/服务器迁移说明.md:123) — 原发现已正确修复为 `${TECHDB_QA_PORT:-8767}`；`git show f18c8b7` 只改动这一行，commit 已在 HEAD 历史中。
+4. [docker-compose.yml:56](/home/rhett/tech-boundary-db/docker-compose.yml:56) — 映射语义为 `host_bind:host_port:container_port`，当前修复后的文档与该语义一致。
+5. 工作树仅 `M pipeline/.pipeline_pending.json`，属你指定忽略的管线 timer 状态文件。
+
+其余 `8765` 命中里，容器内健康检查、服务名 URL、`EXPOSE 8765`、application 监听端口、测试容器 `${QA_PORT}:8765`，以及审计/评审历史记录均属容器侧或历史叙述，不是当前宿主访问地址问题。
+EXIT=0
