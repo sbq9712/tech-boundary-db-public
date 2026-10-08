@@ -226,7 +226,7 @@ echo ""
 # 获取端口
 WEB_PORT="${TECHDB_WEB_PORT:-8080}"
 AGENT_PORT="${TECHDB_AGENT_PORT:-8766}"
-QA_PORT="${TECHDB_QA_PORT:-8765}"
+QA_PORT="${TECHDB_QA_PORT:-8767}"
 
 echo "========================================"
 echo "✅ 部署完成"
