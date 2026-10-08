@@ -134,7 +134,7 @@ echo ""
 QA_TAG="${TECHDB_QA_IMAGE_TAG:-1008}"
 API_TAG="${TECHDB_API_IMAGE_TAG:-1019}"
 AGENT_TAG="${TECHDB_AGENT_IMAGE_TAG:-1019}"
-WEB_TAG="${TECHDB_WEB_IMAGE_TAG:-1016}"
+WEB_TAG="${TECHDB_WEB_IMAGE_TAG:-1017}"
 
 QA_IMAGE="techdb-canonical-qa:${QA_TAG}"
 if ! docker image inspect "$QA_IMAGE" >/dev/null 2>&1; then

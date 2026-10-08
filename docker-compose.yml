@@ -131,7 +131,7 @@ services:
       - "${TECHDB_API_BIND:-127.0.0.1}:8000:8000"
 
   web:
-    image: techdb-web:${TECHDB_WEB_IMAGE_TAG:-1016}
+    image: techdb-web:${TECHDB_WEB_IMAGE_TAG:-1017}
     build:
       context: .
       dockerfile: web/Dockerfile

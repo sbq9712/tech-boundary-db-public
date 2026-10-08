@@ -5,7 +5,7 @@
 - Linux 服务器，Docker 24+，Docker Compose V2
 - x86_64 Linux 服务器，建议至少 8GB 内存；磁盘需覆盖六个镜像（约 12GB 解压后）、PostgreSQL 和上传资料
 - 公司内网或本地 OpenAI 兼容模型端点
-- GitHub Release `server-20261004` 提供的六个镜像分片（qa=1008、api=1019、readonly-agent=1019、web=1016、postgres:16、alpine:3）与六类数据资产；服务器部署不依赖公网构建或下载模型
+- GitHub Release `server-20261004` 提供的六个镜像分片（qa=1008、api=1019、readonly-agent=1019、web=1017、postgres:16、alpine:3）与六类数据资产；服务器部署不依赖公网构建或下载模型
 - 装载：`cat <镜像>.tar.gz.part-* | gunzip | docker load`（`docker-images` 分支已废弃）
 
 ## 首次部署
@@ -33,7 +33,7 @@ TECHDB_QA_INCREMENTAL_VOLUME=techdb_qa_incremental_0033
 # MTU：公司 Linux 默认 1500（TECHDB_DOCKER_MTU）；WSL 内跑 Docker 需 1410
 ```
 
-`deploy.sh` 会创建并检查上传目录、准备 PostgreSQL 卷、优先复用已导入的交付镜像（默认 tag 见 `.env.example`，qa=1008/api=1019/agent=1019/web=1016），并执行 Alembic 迁移（当前 head `0033`）。只有镜像缺失或 `TECHDB_FORCE_BUILD=true` 时才从源码构建。访问入口为 `http://<服务器>:8080`。
+`deploy.sh` 会创建并检查上传目录、准备 PostgreSQL 卷、优先复用已导入的交付镜像（默认 tag 见 `.env.example`，qa=1008/api=1019/agent=1019/web=1017），并执行 Alembic 迁移（当前 head `0033`）。只有镜像缺失或 `TECHDB_FORCE_BUILD=true` 时才从源码构建。访问入口为 `http://<服务器>:8080`。
 
 ## 持久数据
 

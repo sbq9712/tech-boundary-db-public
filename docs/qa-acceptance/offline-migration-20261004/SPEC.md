@@ -20,7 +20,7 @@
 | techdb-canonical-qa:1008 | qa-assets pin | bge-m3 固定 revision+基线向量/BM25+图谱+jieba |
 | techdb-api:1019 | 终版 commit | 业务后端（alembic 0001→0033+分类/嵌入解耦） |
 | techdb-readonly-agent:1019 | 终版 commit（重建） | 兼容 Agent（0801 树已过期） |
-| techdb-web:1016 | 6307112 | 门户静态（含 breadth 数据内嵌副本） |
+| techdb-web:1017 | 6307112 | 门户静态（含 breadth 数据内嵌副本） |
 | postgres:16 | 官方 | 数据库 |
 | alpine:3 | 官方 | db_backup/db_restore 操作增量卷依赖 |
 
@@ -129,7 +129,7 @@
 | techdb-canonical-qa:1008 | <image id> |
 | techdb-api:1019 | <image id> |
 | techdb-readonly-agent:1019 | <image id> |
-| techdb-web:1016 | <image id> |
+| techdb-web:1017 | <image id> |
 | postgres:16 | <image id> |
 | alpine:3 | <image id> |
 | 快照时间戳 | 20261004_214740 |
