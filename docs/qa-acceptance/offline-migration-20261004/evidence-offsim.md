@@ -90,7 +90,12 @@ offsim 栈 `db_backup.sh`（alpine 容器打包）三件套 6 秒生成；宿主
 
 ## A17 manifest.json
 
-见 Release server-20261004（T10 产出后回填核对结论：字段与 SHA256SUMS/指纹矩阵一致）。
+已发布 Release server-20261004（2026-10-08，draft=false）。远端断言 PASS：
+17 资产齐全（15 分片 + manifest.json + SHA256SUMS），manifest↔SHA256SUMS↔
+资产列表三方一致，指纹矩阵（Release body）与 manifest image_id 全量一致，
+code_commit=9908ce04dc39。本地侧另做过全量 re-hash（14→15 分片后按新
+SHA256SUMS 重算）全部 OK。resplit 记录：qa-1008 1900m×2→800m×3（通道
+单连接吞吐受限），流级 sha256 不变，docker load 语义不变。
 
 ## A18 internal 网络双向断言
 
