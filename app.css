@@ -2634,7 +2634,10 @@ a:hover{color:var(--brand-lighter)}
 .lib-up-fname small{display:block;color:var(--text-tertiary);font-weight:400;font-size:11px;margin-top:2px}
 /* 2026-10-03：导入方式内联选择（每行一个情报 / 整个文件一个情报）——
    不再需要打开「表格导入配置」弹窗才能改导入方式 */
-.lib-up-mode{display:flex;gap:6px;margin-top:6px;white-space:nowrap}
+.lib-up-mode{display:flex;flex-direction:column;gap:6px;white-space:nowrap}
+.lib-up-mode-cell{min-width:150px}
+.lib-up-datebox[hidden]{display:none!important}
+.lib-up-row-date{color:var(--text-secondary);white-space:nowrap}
 .lib-up-mode label{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--border-subtle);border-radius:999px;font-size:11.5px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all .15s}
 .lib-up-mode label:hover{border-color:var(--brand);color:var(--brand)}
 .lib-up-mode label.is-on{border-color:var(--brand);background:var(--brand-bg,#eef4ff);color:var(--brand);font-weight:600}

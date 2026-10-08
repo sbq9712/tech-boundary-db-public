@@ -1,0 +1,60 @@
+name: Evidence integrity contracts
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: techdb_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U test -d techdb_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PYTHONPATH: ${{ github.workspace }}/backend
+      DATABASE_URL: postgresql+psycopg2://test:test@localhost:5432/techdb_test
+      TECHDB_UPLOAD_RECOVERY_ENABLED: 'false'
+      TECHDB_BREADTH_INDEX_WORKER_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Lightweight contract dependencies (no model inference)
+        run: >-
+          python -m pip install fastapi==0.115.6 sqlalchemy==2.0.36
+          psycopg2-binary==2.9.10 alembic==1.14.0 pytest==8.3.4
+          httpx==0.28.1 python-multipart==0.0.20 openpyxl==3.1.5
+          numpy==1.26.4 rank-bm25==0.2.2 jieba==0.42.1
+      - name: Migrate real PostgreSQL
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Backend identity, index health, row types and real SSE generator
+        run: >-
+          python -m pytest -q backend/tests/test_agent_service.py
+          backend/tests/test_evidence_integrity.py backend/tests/test_qa_verification_chain.py backend/tests/test_upload_index_status.py
+          backend/tests/test_portal_qa_stream_regression.py backend/tests/test_table_row_types.py
+          backend/tests/test_feed_v2_import_and_queue.py backend/tests/test_repair_row_types.py
+      - name: Canonical deterministic contracts
+        run: >-
+          python -m pytest -q services/canonical-qa/qa-backend/tests
+          --ignore=services/canonical-qa/qa-backend/tests/test_triage_taxonomy_metadata.py
+      - name: Feed package, sequence and frontend
+        run: |
+          python -m pytest -q scripts/test_feed_package_contract.py scripts/tests pipeline/tests/test_engine_triage.py
+          node --test tests/js/*.mjs
+          node --check app.js
+          node --check breadth/app.js
+          python -m compileall -q backend/app backend/scripts scripts services/canonical-qa/qa-backend

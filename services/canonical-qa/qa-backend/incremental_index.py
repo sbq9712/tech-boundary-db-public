@@ -453,6 +453,8 @@ class IncrementalIndex:
                     "content_shas": set(),
                     "record_key_shas": set(),
                     "primary_section": None,
+                    "primary_sections": set(),
+                    "content_sha_rows": 0,
                     "source": None,
                     "checksum_sha256": None,
                     "vector_rows_ok": 0,
@@ -466,17 +468,20 @@ class IncrementalIndex:
                 csha = str(md.get("content_sha") or "")
                 if csha:
                     entry["content_shas"].add(csha)
+                    entry["content_sha_rows"] += 1
                 ksha = str(md.get("record_key_sha") or "")
                 if ksha:
                     entry["record_key_shas"].add(ksha)
                 entry["primary_section"] = entry["primary_section"] or (
                     md.get("primary_section") or None)
+                entry["primary_sections"].add(str(md.get("primary_section") or ""))
                 entry["source"] = entry["source"] or (md.get("source") or None)
                 entry["checksum_sha256"] = entry["checksum_sha256"] or (
                     meta.get("checksum_sha256") or None)
         for entry in out.values():
             entry["content_shas"] = sorted(entry["content_shas"])
             entry["record_key_shas"] = sorted(entry["record_key_shas"])
+            entry["primary_sections"] = sorted(entry["primary_sections"])
         return out
 
     def vector_search(

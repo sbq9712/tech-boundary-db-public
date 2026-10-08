@@ -1,0 +1,10 @@
+[Unit]
+Description=Tech Boundary daily changes-only feed package
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/tech-boundary-db/pipeline.env
+ExecStart=/bin/bash -c 'exec /bin/bash "$BOUNDARY_REPO/scripts/run_daily_feed.sh"'
+TimeoutStartSec=4h

@@ -409,3 +409,52 @@ async def test_stream_missing_evidence_key_is_unknown_not_crash(env, monkeypatch
         assert run.status == "completed"
     finally:
         db2.close()
+
+
+@pytest.mark.parametrize("unavailable", [False, True])
+async def test_followup_cannot_resurrect_deleted_history(env, monkeypatch, unavailable):
+    db, user, session_id = env
+    _patch_model(monkeypatch)
+    _patch_chain_off(monkeypatch)
+    db.add(ConversationMessage(session_id=uuid.UUID(session_id), role="user", content="钠电池进展？"))
+    db.add(ConversationMessage(session_id=uuid.UUID(session_id), role="assistant",
+                               content="已删除报告的旧事实[1]", citations_json=[_result(1)]))
+    db.commit()
+    _patch_retrieval(monkeypatch, {"results": [], "is_relevant": False,
+                                  "evidence": {"status": "insufficient"}})
+    refreshed = []
+    async def refresh(citations):
+        refreshed.extend(citations)
+        if unavailable:
+            raise QAServiceError("history_refresh_unavailable", "暂不可用")
+        return []
+    monkeypatch.setattr(agent_service, "refresh_canonical_citations", refresh)
+    events = _parse_events(await _collect(agent_service.stream_agent_response(
+        "详细说说", session_id, db, current_user=user)))
+    done = next(p for e, p in events if e == "done")
+    assert refreshed
+    assert done["citations"] == []
+    assert "已删除报告" not in done["response"]
+    assert done["retrieval_summary"]["history_citations_revalidated"] == 0
+
+
+async def test_final_citations_follow_verified_rewrite(env, monkeypatch):
+    db, user, session_id = env
+    _patch_model(monkeypatch)
+    _patch_retrieval(monkeypatch, {"results": [_result(1), _result(2)], "is_relevant": True,
+                                  "evidence": {"status": "sufficient"}})
+    monkeypatch.setattr(agent_service, "_QA_CHAIN_AVAILABLE", True)
+    monkeypatch.setattr(agent_service, "_qa_chain_flags", lambda: {
+        "EPISTEMIC_ENABLED": False, "ANSWER_REPAIR_ENABLED": False, "ANSWER_STATUS_ENABLED": True})
+    async def repair(*args, **kwargs):
+        return {"answer": "核验后仅保留第二份证据[2]。", "verification": {"status": "UNVERIFIED"}}
+    monkeypatch.setattr(agent_service, "run_answer_verification", repair)
+    events = _parse_events(await _collect(agent_service.stream_agent_response(
+        "钠离子电池进展", session_id, db, current_user=user)))
+    done = next(p for e, p in events if e == "done")
+    assert [c["id"] for c in done["citations"]] == [2]
+    assert done["retrieval_summary"]["displayed_citations"] == 1
+    saved = db.scalars(select(ConversationMessage).where(
+        ConversationMessage.session_id == uuid.UUID(session_id),
+        ConversationMessage.role == "assistant")).one()
+    assert [c["id"] for c in saved.citations_json] == [2]

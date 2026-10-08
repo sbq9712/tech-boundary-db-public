@@ -1944,7 +1944,7 @@ window.addEventListener("DOMContentLoaded",async()=>{await loadCurrentUser();ren
 
 /* ── 资料库（in-app 视图，替代独立页跳转，保留左侧导航） ── */
 let libRefreshTimer=null,libOffset=0,libTotal=0,libIsAdmin=false,libCanManage=false;
-const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引未完成",embedding_skipped:"索引未完成",embedding_legacy_unindexed:"历史未索引",ready:"可检索",imported:"已导入",indexed:"已入索引",index_failed:"索引失败",index_processing:"索引构建中",index_queued:"排队待索引",import_failed:"导入失败",no_new_records:"零新增记录",legacy_unknown:"状态未知"};
+const libStatusLabels={pending:"待分类",processing:"分类中",document_processing:"文档解析中",classified:"已分类",unclassified:"未分类",irrelevant:"不相关",failed:"分类失败",legacy_unclassified:"历史未分类",embedding_pending:"待索引",embedding_processing:"索引中",embedding_failed:"索引未完成",embedding_skipped:"索引未完成",embedding_legacy_unindexed:"历史未索引",ready:"已建索引，待核验",imported:"已导入",indexed:"队列完成，待核验",index_failed:"索引失败",index_processing:"索引构建中",index_queued:"排队待索引",import_failed:"导入失败",no_new_records:"零新增记录",legacy_unknown:"状态未知"};
 function reviewedEmptyCard(){return `<div class="dashboard-card reviewed-empty"><div class="reviewed-empty-mark">无</div><strong>暂无已审核报告</strong><span>深度调研完成审核后将展示在这里</span></div>`;}
 /* v7 资料库三分区：广度追踪(breadth) / 行业追踪(industry) / ATSC内部报告(atsc)。
    广度追踪下再分 GitHub广度情报(github) / 其他广度情报(other)。
@@ -2126,7 +2126,7 @@ function libIdxDetailRowHtml(detail,colspan){
   return `<td colspan="${colspan}"><div class="status-sub" style="display:flex;flex-direction:column;gap:2px">
     ${cell("breadth_visible","广度可见")}${cell("vector","向量索引")}${cell("keyword","关键词索引")}${cell("graph","知识图谱")}
     <div>${extra.length?escapeHtml(extra.join(" · ")):"—"}</div>
-    <div class="status-sub">模式 ${escapeHtml(detail.ingestion_mode||"-")} · searchable=${detail.searchable==null?"unknown（服务不可达）":(detail.searchable?"是":"否")}</div>
+    <div class="status-sub">模式 ${escapeHtml(detail.ingestion_mode||"-")} · searchable=${detail.searchable==null?"unknown（尚未确认）":(detail.searchable?"是":"否")}</div>
   </div></td>`;
 }
 async function libOpenIdxDetail(fileId,btn){
@@ -2149,6 +2149,18 @@ async function libOpenIdxDetail(fileId,btn){
   row.dataset.idxDetailFor=fileId;
   row.innerHTML=libIdxDetailRowHtml(detail,Math.max(1,tr.children.length||6));
   tr.after(row);
+  const badge=tr.querySelector("[data-index-status]");
+  const status=detail?(detail.searchable===true?"ready":detail.status||"legacy_unknown"):"legacy_unknown";
+  if(badge){badge.className="status "+status;badge.textContent=detail&&detail.searchable===true?"三路可检索":libStatusLabels[status]||status;}
+  let retry=tr.querySelector("button[data-retry-index]");
+  if(libIsAdmin&&detail&&detail.retryable&&!retry&&badge){
+    retry=document.createElement("button");retry.className="secondary-btn";
+    retry.dataset.retryIndex=fileId;retry.textContent="重试构建索引";
+    retry.onclick=()=>libRetry(fileId,"embedding/retry",retry);
+    badge.parentElement.appendChild(retry);
+  }else if(retry&&detail&&!detail.retryable){retry.remove();}
+  const active=detail&&Object.values(detail.states||{}).some(s=>["queued","processing"].includes(s.state));
+  if(active&&!libRefreshTimer)libRefreshTimer=setTimeout(()=>loadLibrary(),3000);
 }
 async function libToggleIndexDetail(fileId,btn){
   /* 任务一 1.2：展开/收起单个上传的索引详情行；重试后可再点开核对最终结果。 */
@@ -2220,7 +2232,7 @@ async function loadLibrary(){
       const canRetryIdx=libIsAdmin&&["index_failed","import_failed","legacy_unknown","index_queued"].includes(status);
       return `<tr>
       <td class="fname">${escapeHtml(f.title||f.original_filename)}${f.note?`<small>${escapeHtml(f.note)}</small>`:""}</td>
-      <td><span class="status ${escapeHtml(status)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub}${canRetryIdx?`<div class="cat-actions"><button class="secondary-btn" data-retry-index="${escapeHtml(f.id)}">重试构建索引</button></div>`:""}</td>
+      <td><span data-index-status class="status ${escapeHtml(status)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub}${canRetryIdx?`<div class="cat-actions"><button class="secondary-btn" data-retry-index="${escapeHtml(f.id)}">重试构建索引</button></div>`:""}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
       <td>${escapeHtml(f.original_filename)}</td>
@@ -2260,7 +2272,7 @@ async function loadLibrary(){
     return `<tr>
       <td class="fname">${escapeHtml(f.title||f.original_filename)}${aiMark}${f.note?`<small>${escapeHtml(f.note)}</small>`:""}</td>
       <td class="category-cell" title="${escapeHtml(categoryTitle||nodeName)}">${escapeHtml(nodeName)}${catActions}</td>
-      <td><span class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub?`<div class="status-sub">${escapeHtml(statusSub)}</div>`:""}${canRetryIndex?`<div class="cat-actions"><button class="secondary-btn" data-retry-index="${escapeHtml(f.id)}">重试构建索引</button></div>`:""}</td>
+      <td><span data-index-status class="status ${escapeHtml(status)}" title="${escapeHtml(statusDetail)}">${escapeHtml(libStatusLabels[status]||status)}</span>${statusSub?`<div class="status-sub">${escapeHtml(statusSub)}</div>`:""}${canRetryIndex?`<div class="cat-actions"><button class="secondary-btn" data-retry-index="${escapeHtml(f.id)}">重试构建索引</button></div>`:""}</td>
       <td>${escapeHtml(docDate)}</td>
       <td>${escapeHtml(f.submitted_by)}</td>
       <td class="size-cell">${libFmtTime(f.created_at)}</td>
@@ -2283,6 +2295,7 @@ async function loadLibrary(){
   tb.querySelectorAll("button[data-lib-delete]").forEach(b=>b.onclick=()=>libDelete(b.dataset.libDelete,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-classify]").forEach(b=>b.onclick=()=>libClassify(b.dataset.libClassify,b.dataset.libName,b));
   tb.querySelectorAll("button[data-lib-asset]").forEach(b=>b.onclick=()=>{const [id,asset]=b.dataset.libAsset.split("|");libAsset(id,asset,b.dataset.libName,b);});
+  tb.querySelectorAll("button[data-lib-idx-detail]").forEach(b=>b.onclick=()=>libToggleIndexDetail(b.dataset.libIdxDetail,b));
   libRestoreIdxDetails(tb);
   scheduleLibPolling(data.files);
   loadSyncedBreadthBlock();
@@ -2549,7 +2562,7 @@ function openUploadModal(section,sub){
     <div class="lib-upload-head"><h2>上传资料</h2><button class="lib-upload-close" id="upCloseBtn" type="button" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="lib-upload-body">
       <div class="lib-upload-drop" id="upDrop"><input id="upInput" type="file" multiple hidden><div class="lib-upload-hint">拖曳文件至此处，或 <button class="lib-upload-pick" id="upPick" type="button">点击选择文件</button></div><div class="lib-upload-types">支持当前 Docling 文档格式（含扫描件、图片与演示文稿），后台完成解析与索引</div></div>
-      <div class="lib-upload-tablewrap" id="upTableWrap" hidden><table class="lib-upload-table"><thead><tr><th>文件</th><th>资料标题</th><th>资料日期</th><th>行业图景节点</th><th>备注</th><th>同步广度</th><th></th></tr></thead><tbody id="upList"></tbody></table></div>
+      <div class="lib-upload-tablewrap" id="upTableWrap" hidden><table class="lib-upload-table"><thead><tr><th>文件</th><th>导入方式</th><th>资料标题</th><th>资料日期</th><th>行业图景节点</th><th>备注</th><th>同步广度</th><th></th></tr></thead><tbody id="upList"></tbody></table></div>
       <div id="upSyncBreadthWrap" style="display:none;margin-top:10px;font-size:13px;color:var(--text-secondary,#475467);">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
           <input type="checkbox" id="upSyncBreadth">
@@ -2860,7 +2873,7 @@ function upRenderList(){
   list.innerHTML=upPending.map((f,i)=>{
     const meta=upRowStateMeta(f);
     const isTable=upIsTableRowFile(f.name);
-    const rowLocked=isTable&&(f.rowMode||"row")==="row"&&f.rowSheet; /* 逐行模式：日期来自各行 */
+    const rowLocked=isTable&&(f.rowMode||"row")==="row"; /* 预览未完成时也不接受文件日期 */
     /* 2026-10-03（用户反馈）：导入方式（每行一个情报 / 整个文件一个情报）
        直接内联在文件行里选择，不再需要点开「表格导入配置」弹窗才能改。
        弹窗保留工作表选择 + 列映射（仅逐行模式有意义）。 */
@@ -2870,9 +2883,10 @@ function upRenderList(){
         <label class="${f.rowMode==="file"?"is-on":""}"><input type="radio" name="upMode-${i}" value="file" ${f.rowMode==="file"?"checked":""}>整个文件一个情报</label>
       </div>`:"";
     return `<tr data-up-row="${i}" class="${meta.cls.trim()}">
-      <td class="lib-up-fname" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}<small>${libFmtSize(f.size)}</small>${modeSel}</td>
+      <td class="lib-up-fname" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}<small>${libFmtSize(f.size)}</small></td>
+      <td class="lib-up-mode-cell">${modeSel||'<span>整个文件一个情报</span>'}</td>
       <td><input class="lib-upload-input lib-up-title" type="text" placeholder="留空则自动识别" aria-label="资料标题" value="${escapeHtml(f.upTitle||"")}"></td>
-      <td><div class="lib-up-datebox" data-up-datebox="${i}" ${rowLocked?'title="逐行模式：日期取自每行的日期列，无需文件级日期"':""}>
+      <td>${rowLocked?'<span class="lib-up-row-date">取自每行</span>':""}<div class="lib-up-datebox" data-up-datebox="${i}" ${rowLocked?'hidden title="逐行模式：日期取自每行的日期列，无需文件级日期"':""}>
         <fieldset ${rowLocked?'disabled':""} style="border:0;padding:0;margin:0;display:inline;">
         <input class="lib-upload-input lib-up-seg lib-up-seg-y" inputmode="numeric" maxlength="4" placeholder="YYYY" aria-label="资料日期 年" value="${escapeHtml(f.upY||"")}">/<input class="lib-upload-input lib-up-seg lib-up-seg-m" inputmode="numeric" maxlength="2" placeholder="MM" aria-label="资料日期 月" value="${escapeHtml(f.upM||"")}">/<input class="lib-upload-input lib-up-seg lib-up-seg-d" inputmode="numeric" maxlength="2" placeholder="DD" aria-label="资料日期 日" value="${escapeHtml(f.upD||"")}">
         <input class="lib-up-native-date" type="date" tabindex="-1" aria-hidden="true" value="${escapeHtml(f.upDate||"")}">
@@ -2881,7 +2895,7 @@ function upRenderList(){
       </div></td>
       <td><select class="lib-upload-input lib-up-cat" aria-label="行业图景节点">${upTaxonomy?upTaxonomyOptions():'<option value="">不指定，通过AI自动识别</option>'}</select></td>
       <td><input class="lib-upload-input lib-up-note" type="text" placeholder="选填" aria-label="备注" value="${escapeHtml(f.upNote||"")}"></td>
-      <td>${upSyncColVisible()?'<input type="checkbox" class="lib-up-sync" data-up-sync="${i}" aria-label="同步该文件到广度情报" '+(f.upSyncBreadth?'checked':'')+'>':'<span class="lib-up-sync-na">—</span>'}</td>
+      <td>${upSyncColVisible()?'<input type="checkbox" class="lib-up-sync" aria-label="同步该文件到广度情报" '+(f.upSyncBreadth?'checked':'')+'>':'<span class="lib-up-sync-na">—</span>'}</td>
       <td class="lib-up-op">${isTable&&(f.rowMode||"row")==="row"?`<button class="lib-upload-rm" type="button" data-up-cfg="${i}" title="工作表 / 列映射">${escapeHtml(upRowCfgLabel(f))}</button>`:""}<span class="lib-up-state">${escapeHtml(meta.text)}</span><button class="lib-upload-rm" type="button" data-up-rm="${i}">移除</button></td>
     </tr>`;}).join("");
   /* 已选分类回显（value 不能直接内联在 select 上） */
@@ -2957,7 +2971,7 @@ async function upSubmit(){
   let dateErr=0;
   for(const f of targets){
     /* 逐行模式的表格文件：日期来自各行，不要求/不提交文件级日期（四.2） */
-    if(upIsTableRowFile(f.name)&&(f.rowMode||"row")==="row"&&f.rowSheet)continue;
+    if(upIsTableRowFile(f.name)&&(f.rowMode||"row")==="row")continue;
     if(upNormalizeDate(f.upDate)==null){f.upState="err";f.upMsg="✗ 日期";dateErr++;}
   }
   if(dateErr){upRenderList();upShowResult(`${dateErr} 行的资料日期不合法——已标红，请修正后再上传`,"err");submit.disabled=false;return;}

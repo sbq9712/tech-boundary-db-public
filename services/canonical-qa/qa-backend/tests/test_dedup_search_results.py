@@ -6,6 +6,7 @@
 语义与 tech-db 原版一致：keep-first，调用方（rrf_fuse 输出）按分数降序，
 因此 first 即最高分。
 """
+import ast
 import json
 import re
 import tempfile
@@ -26,6 +27,9 @@ def _load_fn(lite_records: list):
     lite = tmp / "lite.json"
     lite.write_text(json.dumps(lite_records), encoding="utf-8")
     ns = {"LITE_PATH": lite, "json": json, "_records": None}
+    ns.update(VALID_SOURCES=("breadth", "industry", "atsc"), UNATTRIBUTED_SCOPE="unattributed")
+    scope = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name == "_meta_scope")
+    exec(compile(ast.Module(body=[scope], type_ignores=[]), str(SERVER_SRC), "exec"), ns)
     exec(m1.group(0) + m2.group(0), ns)
     return ns["dedup_search_results"]
 
@@ -76,3 +80,11 @@ def test_distinct_articles_kept(dedup):
 
 def test_empty_input(dedup):
     assert dedup([]) == ([], 0)
+
+
+def test_independent_sources_with_same_title_url_survive(dedup):
+    items = [r(i, kind="upload", document_id=f"doc-{scope}", t="同名", d="2026-10-08",
+               u="https://same/report", chunk_metadata={"primary_section": scope})
+             for i, scope in enumerate(("breadth", "industry", "atsc"))]
+    result, dropped = dedup(items)
+    assert dropped == 0 and len(result) == 3

@@ -1,0 +1,10 @@
+[Unit]
+Description=Tech Boundary daily feed publication
+
+[Timer]
+OnCalendar=*-*-* 23:30:00 Asia/Shanghai
+Persistent=true
+Unit=tech-boundary-feed.service
+
+[Install]
+WantedBy=timers.target

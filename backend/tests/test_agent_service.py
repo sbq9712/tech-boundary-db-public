@@ -130,10 +130,8 @@ def test_prior_numeric_citations_are_removed_from_history_prompt():
     assert _clean_history_content("assistant", "事实见 [1] 和 [23]") == "事实见  和 "
 
 
-def test_display_citations_fall_back_to_first_evidence_without_explicit_refs():
-    candidates = [sample_citation(id=index) for index in range(1, 12)]
-    selected = agent_service._used_citations("没有显式引用", candidates) or candidates[:8]
-    assert [item["id"] for item in selected] == list(range(1, 9))
+def test_no_references_means_no_displayed_citations():
+    assert agent_service._used_citations("没有显式引用", [sample_citation()]) == []
 
 
 def test_first_question_title_matches_github_rule():
@@ -272,13 +270,13 @@ def test_prompt_groups_evidence_by_source_in_sop_order():
     messages = _build_prompt("多源问题", {"citations": items}, [])
     prompt = messages[0]["content"]
     # 组序：行业 → ATSC → 广度（spec 2.3）
-    assert prompt.index("【行业情报】") < prompt.index("【ATSC 标准文档】") < prompt.index("【广度情报】")
+    assert prompt.index("【行业情报】") < prompt.index("【ATSC 内部报告】") < prompt.index("【广度情报】")
     # 引用编号全局唯一，不按组重排
     assert "[3]" in prompt.split("【广度情报】")[1]
     assert "[1]" in prompt.split("【行业情报】")[1]
     # 空缺来源不出现
     assert "未归属存量" not in prompt
-    assert "本轮可用来源组：行业情报、ATSC 标准文档、广度情报" in prompt
+    assert "本轮可用来源组：行业情报、ATSC 内部报告、广度情报" in prompt
 
 
 def test_ensure_source_header_prepends_only_when_missing():
@@ -304,7 +302,7 @@ def test_ensure_source_header_only_annotates_given_citations():
     assert fixed.startswith("数据来源：行业情报")
     assert "ATSC" not in fixed.split("\n")[0]
     both = _ensure_source_header("正文 [1][2]。", [ind, atsc])
-    assert both.startswith("数据来源：行业情报、ATSC 标准文档")
+    assert both.startswith("数据来源：行业情报、ATSC 内部报告")
 
 
 def test_retrieval_summary_counts_sections_and_inheritance():

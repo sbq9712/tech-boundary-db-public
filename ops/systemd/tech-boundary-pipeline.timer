@@ -1,0 +1,10 @@
+[Unit]
+Description=Tech Boundary breadth pipeline every four hours
+
+[Timer]
+OnCalendar=*-*-* 00,04,08,12,16,20:00:00 Asia/Shanghai
+Persistent=true
+Unit=tech-boundary-pipeline.service
+
+[Install]
+WantedBy=timers.target

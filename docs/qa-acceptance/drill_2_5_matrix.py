@@ -506,9 +506,7 @@ def main() -> int:
         # ── 场景 10：真实模型问答抽样 ─────────────────────────
         if not args.no_model:
             print("== 真实模型问答抽样（portal SSE，glm-5.2）==")
-            # 模型为 glm-5.2 真实服务；nginx SSE 300s 上限（web/nginx.conf
-            # proxy_read_timeout）——超长生成会截断，演练按「片段+检索层」
-            # 双通道断言，不因基础设施超时掩盖检索/归因事实。
+            # 必须收到 done 且没有 error；片段与独立检索命中不能替代门户完成。
             out = sse_ask(jwt, f"{mark} 内部评估报告对应的能量密度是多少？简答。", timeout=280)
             ans = out.get("answer") or ""
             cites = out.get("citations") or []
@@ -559,30 +557,21 @@ def main() -> int:
             if is_boundary and cites:
                 fab_claims = [v for v in fab_claims if not _cited(v)]
             fabricated = bool(fab_claims) and not cites_a1
-            ok_ans = len(ans) > 30 and (substantive or is_boundary) and not fabricated
+            ok_ans = got_done and not out.get("error") and len(ans) > 30 and (substantive or is_boundary) and not fabricated
             check("问答实质答案或诚实拒答（绝不编造能量密度）",
                   ok_ans,
                   f"len={len(ans)} done={got_done} has350={substantive} boundary={is_boundary} "
                   f"fab={fab_claims} cites_a1={cites_a1} head={ans[:48]!r} err={out.get('error')}")
-            # 归因双通道：done.citations.primary_section=atsc 或答案文本标注；
-            # 双双缺失时检索层兜底核验（同查询 /api/search 证明 atsc 域可达）
-            st, d = qa_search(f"{mark} 内部评估报告 固态电解质", sources="atsc")
-            a1 = next((h for h in hits_marked(d, mark) if "内部评估" in str(h.get("title"))), None)
-            check("问答/检索 ATSC 归因一致（primary_section=atsc）",
-                  "atsc" in secs or any("内部评估" in str(c.get("title")) for c in cites)
-                  or ("内部评估" in ans) or (a1 is not None and section_of(a1) == "atsc"),
-                  f"secs={secs} cites={len(cites)} ans_mark={'内部评估' in ans} fallback={a1 is not None}")
+            check("门户完成且引用 ATSC 内部报告（不使用检索层兜底）",
+                  got_done and not out.get("error") and "atsc" in secs and cites_a1,
+                  f"secs={secs} cites={len(cites)} done={got_done}")
             out2 = sse_ask(jwt, f"{mark} 硅基负极出货量同比增长情况？简答。", timeout=280)
             cites2 = out2.get("citations") or []
             ans2 = out2.get("answer") or ""
-            st, d = qa_search(f"{mark} 行业年报 硅基负极", sources="industry")
-            i1 = next((h for h in hits_marked(d, mark) if "行业年报" in str(h.get("title"))), None)
-            check("行业题答案引用行业来源（citations 或检索层归因）",
-                  any("industry" == str(c.get("primary_section") or "") for c in cites2)
-                  or any("行业年报" in str(c.get("title")) for c in cites2)
-                  or ("行业年报" in ans2)
-                  or (i1 is not None and section_of(i1) == "industry"),
-                  f"cites={len(cites2)} ans_mark={'行业年报' in ans2} fallback={i1 is not None}")
+            check("门户完成且引用行业来源（不使用检索层兜底）",
+                  bool(out2.get("done")) and not out2.get("error")
+                  and any(c.get("primary_section") == "industry" for c in cites2),
+                  f"cites={len(cites2)} done={bool(out2.get('done'))} error={out2.get('error')}")
             # 答案层不冒充：问不存在的技术概念，答案应含知识边界/拒答表述
             out3 = sse_ask(jwt, "量子通量超驱动矩阵技术的最新进展是什么？")
             a3 = out3.get("answer") or ""
@@ -590,7 +579,7 @@ def main() -> int:
                            ("没有找到", "未找到", "未检索到", "无法", "没有相关",
                             "不存在", "暂无", "未收录", "知识边界"))
             check("无法支持主张时不冒充（答案层知识边界）",
-                  bool(a3) and boundary,
+                  bool(out3.get("done")) and not out3.get("error") and bool(a3) and boundary,
                   f"len={len(a3)} boundary={boundary} head={a3[:60]}")
         else:
             print("  [SKIP] 真实模型问答抽样（--no-model）")

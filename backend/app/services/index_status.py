@@ -189,6 +189,81 @@ def _route_state(*, executed: bool, ok_count: int, total: int,
     return {"state": "partial", "reason": error or "%d/%d documents healthy" % (ok_count, total)}
 
 
+def _verified_document_routes(doc: dict, expected_hash: str | None,
+                              origin: str, *, row_mode: bool) -> dict:
+    """Validate identity/version before trusting any individual route's health."""
+    routes = {"vector": "vector_ok", "keyword": "bm25_ok", "graph": "graph_ok"}
+    if not int(doc.get("chunks") or 0):
+        return {r: {"state": "not_started", "reason": "索引尚无该文档"} for r in routes}
+    issue, issue_state = None, "unknown"
+    shas = doc.get("content_shas") or []
+    actual_hashes = shas if row_mode else (
+        [doc["checksum_sha256"]] if doc.get("checksum_sha256") else shas)
+    scopes = doc.get("primary_sections") or [doc.get("primary_section")]
+    if not expected_hash or not actual_hashes:
+        issue = "内容指纹缺失，尚不能确认索引版本"
+    elif set(actual_hashes) != {expected_hash}:
+        issue, issue_state = "索引内容版本与当前资料不一致", "failed"
+    elif row_mode and doc.get("content_sha_rows", doc["chunks"]) != doc["chunks"]:
+        issue = "部分分块缺少内容指纹"
+    if not all(scopes):
+        issue = issue or "索引缺少原始来源归属"
+    elif set(scopes) != {origin}:
+        issue, issue_state = "索引来源归属与当前资料不一致", "failed"
+    if doc.get("live_chunks", doc["chunks"]) != doc["chunks"]:
+        issue, issue_state = "索引记录已被屏蔽或正在变更", "failed"
+    result = {}
+    for route, health_key in routes.items():
+        health = doc.get(health_key)
+        if issue:
+            result[route] = {"state": issue_state, "reason": issue}
+        elif health is None:
+            result[route] = {"state": "unknown", "reason": "服务未提供该路健康校验"}
+        else:
+            result[route] = {"state": "complete" if health else "failed",
+                             "reason": None if health else (doc.get("graph_error")
+                                        if route == "graph" else "健康校验未通过")}
+    if result["graph"]["state"] == "complete" and not doc.get("entity_count"):
+        result["graph"]["note"] = "无可抽取实体（不构成构建失败）"
+    return result
+
+
+def _apply_verified_states(result: dict, docs: dict, identities: dict,
+                           *, row_mode: bool) -> None:
+    per_doc = [_verified_document_routes(docs.get(did) or {}, fingerprint, origin,
+                                        row_mode=row_mode)
+               for did, (fingerprint, origin) in identities.items()]
+    waiting = ("processing" if result["queue"].get("processing") else
+               "queued" if result["queue"].get("pending") else None)
+    if result["queue"].get("failed"):
+        waiting = None
+    for route in ("vector", "keyword", "graph"):
+        states = [d[route] for d in per_doc]
+        complete = sum(d["state"] == "complete" for d in states)
+        if complete == len(states) and states:
+            value = {"state": "complete", "reason": None}
+            if route == "graph" and all(d.get("note") for d in states):
+                value["note"] = states[0]["note"]
+        elif waiting:
+            value = {"state": waiting, "reason": f"当前版本已确认 {complete}/{len(states)} 篇"}
+        elif complete:
+            value = {"state": "partial", "reason": f"当前版本已确认 {complete}/{len(states)} 篇"}
+        else:
+            value = next((d for d in states if d["state"] == "failed"), None)
+            value = value or next((d for d in states if d["state"] == "unknown"), None)
+            value = value or {"state": "not_started", "reason": "索引尚无当前版本文档"}
+        result["states"][route] = value
+    route_states = [result["states"][r]["state"] for r in ("vector", "keyword", "graph")]
+    result["searchable"] = (True if all(s == "complete" for s in route_states)
+                            else None if "unknown" in route_states and not any(
+                                s in ("failed", "partial", "queued", "processing", "not_started")
+                                for s in route_states) else False)
+    if result["status"] == "indexed" and result["searchable"] is not True:
+        result["status"] = "legacy_unknown"
+    result["retryable"] = result["status"] in (
+        "legacy_unknown", "index_failed", "import_failed", "failed")
+
+
 def upload_index_status(db: Session, record: UploadedFile) -> dict:
     """详情端点聚合（任务一 1.1 状态契约 + 1.3 摄取模式判定）。
 
@@ -299,51 +374,15 @@ def upload_index_status(db: Session, record: UploadedFile) -> dict:
                     "unattributed": sum(
                         1 for d in found.values() if not d.get("primary_section")),
                 }
-                total_docs = len(record_ids)
-                vec_n = sum(1 for d in found.values() if d.get("vector_ok"))
-                bm_n = sum(1 for d in found.values() if d.get("bm25_ok"))
-                # 图谱（1.1）：增量图谱由存活 chunk 实时推导——chunk 在即
-                # 「参与图谱构建」；无可抽取实体（entity_count=0）≠构建失败。
-                graph_ok = len(found)
-                # Codex#4：不把内部哨兵串 documents_missing 直接当用户面
-                # reason——转为可读文案（缺哪些文档由 documents_missing 计数
-                # 单独暴露，见 result["index"]）。
-                graph_state = _route_state(
-                    executed=True, ok_count=graph_ok, total=total_docs,
-                    error=(f"有 {len(missing)} 篇文档未见于增量索引"
-                           if missing else None))
-                if not missing and graph_ok == total_docs and all(
-                        int(d.get("entity_count") or 0) == 0 for d in found.values()):
-                    graph_state["note"] = "无可抽取实体（不构成构建失败）"
-                result["states"] = {
-                    "breadth_visible": {
-                        "state": "complete" if breadth_visible else "not_started",
-                        "reason": None},
-                    "vector": _route_state(
-                        executed=len(found) > 0 or total_docs > 0,
-                        ok_count=vec_n, total=total_docs,
-                        error=None),
-                    "keyword": _route_state(
-                        executed=len(found) > 0 or total_docs > 0,
-                        ok_count=bm_n, total=total_docs,
-                        error=None),
-                    "graph": graph_state,
+                result["states"] = {}
+                _apply_verified_states(result, docs, {
+                    str(r[0]): (r[1], str(r[2] or "breadth")) for r in rows
+                }, row_mode=True)
+                visible = sum(bool(r[3]) for r in rows)
+                result["states"]["breadth_visible"] = {
+                    "state": "complete" if visible == len(rows) else "partial" if visible else "not_started",
+                    "reason": None if visible == len(rows) else f"已显示 {visible}/{len(rows)} 条",
                 }
-                # searchable（1.1）：三路全绿才可检索——向量+关键词+图谱参与
-                # （chunk 全在即图谱参与；实体可为 0）。部分缺失/哈希错位/
-                # 单路不健康都不可检索。
-                result["searchable"] = (
-                    bool(found)
-                    and not missing
-                    and not hash_missing
-                    and vec_n == total_docs
-                    and bm_n == total_docs
-                    and graph_ok == total_docs
-                )
-                if status == "indexed" and not result["searchable"]:
-                    # 队列说 done 但索引有缺口（部分/全部丢失、向量或 BM25
-                    # 不健康、内容指纹错位）——如实降级，重试=幂等重放恢复
-                    result["status"] = "legacy_unknown"
         else:
             # 名下无存活记录：无可核对对象——不是错误，如实 0 文档不可检索
             result["index"] = {
@@ -374,8 +413,10 @@ def upload_index_status(db: Session, record: UploadedFile) -> dict:
         result["status"] = (
             "indexed" if record.embedding_status == "ready" else record.embedding_status
         )
-        breadth_visible = (record.primary_section == "breadth"
-                           or bool(getattr(record, "sync_breadth", False)))
+        breadth_visible = bool(live_records and db.scalar(
+            select(func.count()).select_from(BreadthManualRecord).where(
+                BreadthManualRecord.upload_id == record.id,
+                BreadthManualRecord.in_breadth_nav.is_(True))))
         if docs is None:
             result["index"] = {"error": "canonical_unreachable"}
             result["states"] = {
@@ -396,7 +437,8 @@ def upload_index_status(db: Session, record: UploadedFile) -> dict:
             bm_ok = bool(d.get("bm25_ok"))
             expected = record.checksum_sha256
             shas = d.get("content_shas") or []
-            hash_ok = (not expected or not shas) or (expected in shas)
+            hash_ok = bool(expected and (d.get("checksum_sha256") == expected
+                                       or set(shas) == {expected}))
             result["index"] = {
                 "documents_found": 1 if chunks else 0,
                 "chunks": chunks,
@@ -406,25 +448,15 @@ def upload_index_status(db: Session, record: UploadedFile) -> dict:
                 "primary_section": d.get("primary_section"),
                 "content_hash_ok": bool(hash_ok),
             }
-            def _doc_route(ok: bool) -> dict:
-                if not chunks:
-                    return {"state": "not_started",
-                            "reason": "索引无该文档 chunk"}
-                return {"state": "complete" if ok else "failed",
-                        "reason": None if ok else "健康校验未通过"}
-            graph_state = _doc_route(chunks > 0)
-            if chunks and int(d.get("entity_count") or 0) == 0:
-                graph_state["note"] = "无可抽取实体（不构成构建失败）"
             result["states"] = {
                 "breadth_visible": {
-                    "state": "complete" if breadth_visible else "not_started",
-                    "reason": None},
-                "vector": _doc_route(vec_ok),
-                "keyword": _doc_route(bm_ok),
-                "graph": graph_state,
-            }
-            result["searchable"] = bool(chunks and vec_ok and bm_ok and hash_ok)
-            if record.embedding_status == "ready" and not result["searchable"]:
-                # DB 说 ready 但索引没有/不健康/指纹错位——以 canonical 为准
-                result["status"] = "legacy_unknown"
+                    "state": "complete" if breadth_visible else "not_started", "reason": None}}
+            _apply_verified_states(result, docs, {
+                str(record.id): (record.checksum_sha256, record.primary_section or "breadth")
+            }, row_mode=False)
+    # A completed queue is not evidence of a healthy, current index.
+    if result["status"] == "indexed" and result["searchable"] is not True:
+        result["status"] = "legacy_unknown"
+    result["retryable"] = result["status"] in (
+        "legacy_unknown", "index_failed", "import_failed", "failed")
     return result

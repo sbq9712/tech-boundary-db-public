@@ -40,6 +40,7 @@ const moduleSrc = [
   extractFn('scheduleLibPolling'),
   extractFn('stopLibPolling'),
   extractConst('LIB_ROUTE_STATE_LABELS'),
+  extractConst('libStatusLabels'),
   extractConst('libIdxDetailOpen'),
   extractFn('libIdxDetailRowHtml'),
   extractFn('libOpenIdxDetail'),
@@ -73,7 +74,8 @@ function loadModule(env) {
   const fn = new Function(
     'libRefreshTimer', 'loadLibrary', 'document', 'apiFetch',
     'setTimeout', 'clearTimeout', 'CSS', 'escapeHtml',
-    `${moduleSrc}
+    `const libIsAdmin=false;
+     ${moduleSrc}
      return { scheduleLibPolling, stopLibPolling, libToggleIndexDetail, libOpenIdxDetail, libRestoreIdxDetails, libIdxDetailOpen, LIB_ROUTE_STATE_LABELS };`);
   return fn(
     env.libRefreshTimer, env.loadLibrary, env.document, env.apiFetch,
@@ -120,10 +122,11 @@ test('stopLibPolling：显式终止（离开页面）', () => {
 });
 
 function makeDetailDom() {
-  const made = { rows: [] };
+  const made = { rows: [], badge: {className: "status indexed", textContent: "队列完成，待核验"} };
   const tr = {
     children: [{}, {}, {}, {}, {}, {}], // 6 列 → colspan=6
     after: (el) => made.rows.push(el),
+    querySelector: (sel) => sel === "[data-index-status]" ? made.badge : null,
   };
   const btn = { disabled: false, textContent: '', dataset: { libIdxDetail: null } };
   const tb = {
@@ -202,6 +205,7 @@ test('libToggleIndexDetail：服务不可达如实提示（不显示伪数据）
   const mod = loadModule(env);
   await mod.libToggleIndexDetail('file-3', dom.btn);
   assert.ok(dom.made.rows[0].innerHTML.includes('暂不可用'));
+  assert.equal(dom.made.badge.textContent, '状态未知');
 });
 
 test('libRestoreIdxDetails：轮询重渲染后恢复展开行（E2E 发现的丢行缺陷）', async () => {

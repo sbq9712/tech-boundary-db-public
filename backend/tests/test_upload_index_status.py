@@ -199,7 +199,8 @@ def test_upload_index_status_canonical_unreachable_is_unknown(db, monkeypatch):
     db.add(rec)
     db.commit()
     result = upload_index_status(db, upload)
-    assert result["status"] == "indexed"
+    assert result["status"] == "legacy_unknown"
+    assert result["retryable"] is True
     assert result["searchable"] is None
     assert result["index"] == {"error": "canonical_unreachable"}
     # 名下无存活记录：如实 0 文档、searchable=False（不是 unknown）
@@ -231,7 +232,8 @@ def test_upload_index_status_docling_searchable(db, monkeypatch):
     monkeypatch.setattr(
         index_status, "canonical_document_status",
         lambda ids: {ids[0]: {"chunks": 94, "vector_ok": True, "bm25_ok": True,
-                              "primary_section": "atsc"}},
+                              "primary_section": "atsc", "graph_ok": True,
+                              "checksum_sha256": upload.checksum_sha256}},
     )
     result = upload_index_status(db, upload)
     assert result["status"] == "indexed"
@@ -252,7 +254,7 @@ def test_upload_index_status_github_verifies_record_docs(db, monkeypatch):
         title="t",
         body="b",
         category="c",
-        origin_section="breadth",
+        origin_section="breadth", content_hash="current-hash",
     )
     db.add(rec)
     db.commit()
@@ -267,7 +269,8 @@ def test_upload_index_status_github_verifies_record_docs(db, monkeypatch):
     monkeypatch.setattr(
         index_status, "canonical_document_status",
         lambda ids: {str(rec.id): {"chunks": 2, "vector_ok": True, "bm25_ok": True,
-                                   "primary_section": "breadth"}},
+                                   "primary_section": "breadth", "graph_ok": True,
+                                   "content_shas": [rec.content_hash]}},
     )
     result = upload_index_status(db, upload)
     assert result["status"] == "indexed"
@@ -291,7 +294,7 @@ def test_upload_index_status_row_table_verifies_record_docs(db, monkeypatch):
         title="行业行",
         body="b",
         category="c",
-        origin_section="industry",
+        origin_section="industry", content_hash="current-hash",
     )
     db.add(rec)
     db.commit()
@@ -300,7 +303,8 @@ def test_upload_index_status_row_table_verifies_record_docs(db, monkeypatch):
     monkeypatch.setattr(
         index_status, "canonical_document_status",
         lambda ids: {str(rec.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True,
-                                   "primary_section": "industry"}},
+                                   "primary_section": "industry", "graph_ok": True,
+                                   "content_shas": [rec.content_hash]}},
     )
     result = upload_index_status(db, upload)
     assert result["status"] == "indexed"
@@ -482,17 +486,18 @@ def test_upload_index_status_partial_docs_not_searchable(db, monkeypatch):
     _mk_task(db, upload, "done")
     rec_a = BreadthManualRecord(upload_id=upload.id, user_id="status-test",
                                 title="a", body="b", category="c",
-                                origin_section="breadth")
+                                origin_section="breadth", content_hash="a-current")
     rec_b = BreadthManualRecord(upload_id=upload.id, user_id="status-test",
                                 title="b", body="b", category="c",
-                                origin_section="breadth")
+                                origin_section="breadth", content_hash="b-current")
     db.add_all([rec_a, rec_b])
     db.commit()
 
     monkeypatch.setattr(
         index_status, "canonical_document_status",
         lambda ids: {str(rec_a.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True,
-                                     "primary_section": "breadth"}},
+                                     "primary_section": "breadth", "graph_ok": True,
+                                   "content_shas": [rec_a.content_hash]}},
     )
     result = upload_index_status(db, upload)
     assert result["index"]["documents_missing"] == 1
@@ -505,9 +510,9 @@ def test_upload_index_status_partial_docs_not_searchable(db, monkeypatch):
         index_status, "canonical_document_status",
         lambda ids: {
             str(rec_a.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True,
-                            "primary_section": "breadth"},
+                            "primary_section": "breadth", "graph_ok": True, "content_shas": [rec_a.content_hash]},
             str(rec_b.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True,
-                            "primary_section": "breadth"},
+                            "primary_section": "breadth", "graph_ok": True, "content_shas": [rec_b.content_hash]},
         },
     )
     result = upload_index_status(db, upload)
@@ -518,8 +523,10 @@ def test_upload_index_status_partial_docs_not_searchable(db, monkeypatch):
     monkeypatch.setattr(
         index_status, "canonical_document_status",
         lambda ids: {
-            str(rec_a.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True},
-            str(rec_b.id): {"chunks": 1, "vector_ok": False, "bm25_ok": True},
+            str(rec_a.id): {"chunks": 1, "vector_ok": True, "bm25_ok": True, "graph_ok": True,
+                            "primary_section": "breadth", "content_shas": [rec_a.content_hash]},
+            str(rec_b.id): {"chunks": 1, "vector_ok": False, "bm25_ok": True, "graph_ok": True,
+                            "primary_section": "breadth", "content_shas": [rec_b.content_hash]},
         },
     )
     result = upload_index_status(db, upload)
@@ -548,7 +555,7 @@ def test_doc_with_sync_projection_takes_document_chain(db, monkeypatch):
     def _fake(ids):
         seen.extend(ids)
         return {ids[0]: {"chunks": 7, "vector_ok": True, "bm25_ok": True,
-                         "entity_count": 2, "primary_section": "industry",
+                         "entity_count": 2, "primary_section": "industry", "graph_ok": True,
                          "content_shas": [upload.checksum_sha256]}}
     monkeypatch.setattr(index_status, "canonical_document_status", _fake)
     result = upload_index_status(db, upload)
@@ -597,7 +604,7 @@ def test_row_chain_with_tasks_verifies_record_docs(db, monkeypatch):
     def _fake(ids):
         seen.extend(ids)
         return {str(rec.id): {"chunks": 2, "vector_ok": True, "bm25_ok": True,
-                              "entity_count": 0, "primary_section": "industry",
+                              "entity_count": 0, "primary_section": "industry", "graph_ok": True,
                               "content_shas": ["sha-abc"]}}
     monkeypatch.setattr(index_status, "canonical_document_status", _fake)
     result = upload_index_status(db, upload)
@@ -626,7 +633,7 @@ def test_row_chain_content_hash_mismatch_degrades(db, monkeypatch):
     monkeypatch.setattr(
         index_status, "canonical_document_status",
         lambda ids: {str(rec.id): {"chunks": 3, "vector_ok": True, "bm25_ok": True,
-                                   "entity_count": 1, "primary_section": "breadth",
+                                   "entity_count": 1, "primary_section": "breadth", "graph_ok": True,
                                    "content_shas": ["sha-old"]}})
     result = upload_index_status(db, upload)
     assert result["searchable"] is False
@@ -649,7 +656,7 @@ def test_states_single_route_failure_not_masked(db, monkeypatch):
     monkeypatch.setattr(
         index_status, "canonical_document_status",
         lambda ids: {str(rec1.id): {"chunks": 2, "vector_ok": False, "bm25_ok": True,
-                                    "entity_count": 1, "primary_section": "breadth",
+                                    "entity_count": 1, "primary_section": "breadth", "graph_ok": True,
                                     "content_shas": ["sha-1"]}})
     result = upload_index_status(db, upload)
     assert result["states"]["vector"]["state"] == "failed"

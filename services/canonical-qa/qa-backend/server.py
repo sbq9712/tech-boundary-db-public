@@ -133,7 +133,8 @@ def _meta_record_key_sha(meta: dict) -> str:
     ksha = str(md.get("record_key_sha") or "")
     if ksha:
         return ksha
-    return _record_key_sha_of(meta.get("t", ""), meta.get("d", ""), meta.get("u", ""))
+    return _record_key_sha_of(meta.get("t", ""), meta.get("d", ""), meta.get("u", ""),
+                              origin=md.get("primary_section") or "breadth")
 
 
 def _result_allowed(meta: dict, is_base: bool) -> bool:
@@ -1216,6 +1217,11 @@ def dedup_search_results(results: list) -> tuple:
         meta = result.get("meta") or {}
         rid = str(meta.get("record_id", "") or "")
         if meta.get("kind") == "upload":
+            scope = _meta_scope(meta, is_base=False)
+            # 独立行业/内部资料的身份是文档，而不是标题、日期或所引用的
+            # URL；仅 breadth 记录与其管线基线副本共享文章身份。
+            if scope != "breadth":
+                return f"doc:{scope}:{meta.get('document_id', rid or meta.get('idx', ''))}", meta
             # uploads are chunk-level. Chunk 级带 u/t 时（pipeline 同步与
             # feed 导入的记录型 chunk）与基础索引记录用同一组身份键
             # （url → 标题），避免"同一篇文章 = 基础索引一份 + 增量一份"
@@ -1321,6 +1327,8 @@ def build_context(search_results: list) -> tuple:
         citations.append({
             "id": i + 1,
             "record_id": orig_idx,
+            "record_key_sha": (_meta_record_key_sha(meta) if meta.get("kind") == "upload"
+                               else _record_key_sha_of(title, date, url)),
             "primary_section": primary_section,
             "title": title,
             "date": date,
@@ -1528,6 +1536,57 @@ class IndexDeleteRequest(BaseModel):
     document_id: str = Field(min_length=1)
 
 
+class CitationSelector(BaseModel):
+    document_id: str | None = Field(default=None, max_length=300)
+    chunk_id: str | None = Field(default=None, max_length=300)
+    record_key_sha: str | None = Field(default=None, max_length=64)
+    title: str | None = Field(default=None, max_length=2000)
+    date: str | None = Field(default=None, max_length=100)
+    url: str | None = Field(default=None, max_length=8000)
+
+
+class ResolveCitationsRequest(BaseModel):
+    citations: list[CitationSelector] = Field(max_length=10)
+
+
+def _resolve_citation_results(selectors: list[dict]) -> list[dict]:
+    """Refresh by stable identity; row positions and historical body text are never trusted."""
+    with _incremental_index._state_lock:
+        metas = list(_incremental_index.meta)
+    records = load_records()
+    by_document: dict[str, list] = {}
+    by_key: dict[str, list] = {}
+    for meta in metas:
+        if not _result_allowed(meta, False):
+            continue
+        by_document.setdefault(str(meta.get("document_id") or ""), []).append(meta)
+        by_key.setdefault(_meta_record_key_sha(meta), []).append(meta)
+    base = {_record_key_sha_of(r.get("t", ""), r.get("d", ""), r.get("u", "")): i
+            for i, r in enumerate(records)}
+    out = []
+    for selector in selectors[:10]:
+        did = selector.get("document_id")
+        key = selector.get("record_key_sha") or _record_key_sha_of(
+            selector.get("title", ""), selector.get("date", ""), selector.get("url", ""))
+        matches = by_document.get(str(did), []) if did else by_key.get(key, [])
+        if matches:
+            match = next((m for m in matches if m.get("chunk_id") == selector.get("chunk_id")), matches[0])
+            out.append({"meta": match, "score": 0.0})
+        elif (not did and key in base and key not in _record_ops_store.tombstones
+              and not _record_ops_store.is_base_masked(key)):
+            out.append({"meta": {"idx": base[key]}, "score": 0.0})
+    return out
+
+
+@app.post("/api/index/resolve-citations")
+async def resolve_citations(req: ResolveCitationsRequest,
+                            x_techdb_index_token: str | None = Header(default=None)):
+    _check_index_token(x_techdb_index_token)
+    results = _resolve_citation_results([s.model_dump() for s in req.citations])
+    _context, citations = build_context(results)
+    return {"results": citations, "resolved": len(citations)}
+
+
 class MetadataPatchRequest(BaseModel):
     """任务二 2.1：增量索引归属回填——按 document_id 原位补 chunk_metadata。
 
@@ -1588,9 +1647,11 @@ async def index_status(
     docs = _incremental_index.documents_metadata()
     wanted = [d.strip() for d in document_ids.split(",") if d.strip()] if document_ids else None
     fragment_entities: dict[str, set[str]] = {}
+    entity_errors: dict[str, str] = {}
+    scope_health: dict[str, str | None] = {}
+    by_doc: dict[str, list[dict]] = {}
     try:
         # 与图谱碎片同源的实体归属：document_id → 实体集（按记录分组抽取）
-        by_doc: dict[str, list[dict]] = {}
         with _incremental_index._state_lock:
             for meta in list(_incremental_index.meta):
                 did = str(meta.get("document_id") or "")
@@ -1619,6 +1680,21 @@ async def index_status(
             fragment_entities[did] = {name for _etype, name in pairs}
     except Exception as exc:
         print(f"[index-status] entity extraction degraded: {exc}", flush=True)
+        entity_errors = {did: "entity_extraction_failed" for did in by_doc}
+
+    # Exercise the same scoped graph construction/cache used by graph retrieval.
+    # A chunk merely being present does not prove this route is operational.
+    for entry in docs.values():
+        scope = entry.get("primary_section") or "unattributed"
+        if scope in scope_health:
+            continue
+        try:
+            if not FLAGS.get("SEMANTIC_GRAPH_ENABLED"):
+                raise RuntimeError("graph_route_disabled")
+            _merged_graph(scope)
+            scope_health[scope] = None
+        except Exception as exc:
+            scope_health[scope] = f"graph_unavailable:{type(exc).__name__}"
 
     out_docs: dict[str, dict] = {}
     unattributed: list[str] = []
@@ -1630,14 +1706,24 @@ async def index_status(
         # Codex P1-4：真实健康信号（对齐数组逐行校验），缺键回退旧语义（chunks>0）
         vec_ok = entry.get("vector_rows_ok", chunks) == chunks
         bm_ok = entry.get("bm25_rows_ok", chunks) == chunks
+        scope = entry.get("primary_section") or "unattributed"
+        live_chunks = sum(1 for m in by_doc.get(did, []) if _result_allowed(m, False))
+        graph_error = entity_errors.get(did) or scope_health.get(scope)
+        if live_chunks != chunks:
+            graph_error = "document_masked_or_changed"
         out_docs[did] = {
             "chunks": chunks,
             "vector_ok": vec_ok,
             "bm25_ok": bm_ok,
+            "graph_ok": graph_error is None and live_chunks == chunks,
+            "graph_error": graph_error,
+            "live_chunks": live_chunks,
             "entity_count": len(entities),
             "content_shas": entry["content_shas"],
             "record_key_shas": entry["record_key_shas"],
             "primary_section": entry["primary_section"],
+            "primary_sections": entry.get("primary_sections", []),
+            "content_sha_rows": entry.get("content_sha_rows", 0),
             "source": entry["source"],
             "checksum_sha256": entry["checksum_sha256"],
         }

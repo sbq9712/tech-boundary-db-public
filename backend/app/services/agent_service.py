@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import uuid
+from functools import partial
 from datetime import datetime, timezone
 from typing import AsyncIterator
 
@@ -24,7 +25,8 @@ from app.models.conversation import (
     ConversationMessage,
     ConversationSession,
 )
-from app.services.github_qa import QAServiceError, search_canonical_raw
+from app.services.github_qa import QAServiceError, search_canonical_raw, refresh_canonical_citations
+from app.services.evidence_budget import budget_citations
 from app.services.model_catalog import get_catalog
 
 logger = logging.getLogger(__name__)
@@ -83,14 +85,15 @@ def _qa_chain_flags() -> dict:
     }
 
 
-async def _qa_llm_rewrite(answer: str, drop_ids=None, claims=None, issues=None) -> str:
+async def _qa_llm_rewrite(answer: str, drop_ids=None, claims=None, issues=None,
+                          *, query: str = "") -> str:
     """RT-026 修复改写闭包（BoundedRepairLoop regenerate_fn 注入契约）。
 
     只修问题句、不新增事实；任何失败返回空串（= 放弃改写，走降级）。"""
     if not AI_API_KEY or not answer.strip():
         return ""
     prompt = build_rewrite_prompt(
-        _qa_llm_rewrite_ctx.get("query", ""), answer,
+        query, answer,
         claims=claims, issues=issues, drop_ids=drop_ids)
     try:
         return str(await asyncio.wait_for(
@@ -103,8 +106,6 @@ async def _qa_llm_rewrite(answer: str, drop_ids=None, claims=None, issues=None) 
         logger.warning("qa repair rewrite degraded", exc_info=True)
         return ""
 
-
-_qa_llm_rewrite_ctx: dict = {}  # 请求级 {"query": ...}，仅修复改写提示词用
 
 FOLLOW_UP_MARKERS = (
     "这些", "那些", "上述", "前面", "刚才", "其中", "这个", "那个", "该技术", "它们", "其",
@@ -216,8 +217,11 @@ def _history_exclude_ids(history: list[dict]) -> list[str]:
 
 
 def _citation_key(item: dict) -> tuple:
+    if item.get("document_id"):
+        return ("document", _citation_primary_section(item), str(item["document_id"]),
+                str(item.get("chunk_id") or ""))
     return (
-        str(item.get("record_id") or ""),
+        str(item.get("record_id") if item.get("record_id") is not None else ""),
         str(item.get("chunk_id") or ""),
         str(item.get("url") or ""),
         str(item.get("title") or ""),
@@ -262,7 +266,7 @@ def _citation_id(item: dict, fallback: int) -> int:
 # 的基线记录按广度处理——与检索侧 _meta_scope 同一口径。
 SECTION_LABELS = {
     "industry": "行业情报",
-    "atsc": "ATSC 标准文档",
+    "atsc": "ATSC 内部报告",
     "breadth": "广度情报",
     "unattributed": "未归属存量",
 }
@@ -317,7 +321,7 @@ def _retrieval_summary(
         "citation_sections": sec_counts,
         "evidence": evidence,
         "retrieval_trace": retrieval_trace,
-        "provider": "sbq9712/tech-db canonical hybrid retrieval",
+        "provider": "tech-boundary-db canonical three-source retrieval",
     }
 
 
@@ -362,6 +366,8 @@ def _normalize_citations(items: list[dict]) -> list[dict]:
                 # 图谱路归因（任务二 2.5「图谱非装饰」）：canonical /api/search 已
                 # 透传 via_graph；主问答链路重建 citation 时同样保留，缺键时为 None。
                 "via_graph": item.get("via_graph"),
+                "record_key_sha": item.get("record_key_sha"),
+                "context_truncated": bool(item.get("context_truncated")),
                 **({key: item.get(key) for key in ("document_id", "chunk_id", "chunk_metadata", "chunk_text")}
                    if item.get("document_id") else {}),
             }
@@ -447,6 +453,29 @@ def _safety_scan(text: str) -> list[dict]:
     return hits
 
 
+def _citation_block(citation: dict) -> tuple[str, str]:
+    cid = citation["id"]
+    summary = str(citation.get("chunk_text") or citation.get("body_snippet") or "")
+    metadata = citation.get("chunk_metadata") or {}
+    location = " / ".join(filter(None, [
+        metadata.get("section_title"),
+        "页 " + ", ".join(map(str, metadata["page_numbers"])) if metadata.get("page_numbers") else "",
+    ]))
+    if location:
+        summary = location + "\n" + summary
+    context = (
+        f"[{cid}] [{citation['category'] or '未分类'}] {citation['title']} ({citation['date'] or '日期未知'})\n"
+        f"来源: {citation['source'] or '未知'}\n"
+        f"摘要: {summary or '无摘要'}\n"
+        f"检索相似度: {citation.get('similarity') if citation.get('similarity') is not None else '未知'}"
+    )
+    source = (
+        f"[{cid}] {citation['title']} ({citation['date'] or '日期未知'}, {citation['source'] or '来源未知'})"
+    )
+    return context, source
+
+
+
 def _build_prompt(query: str, retrieval_results: dict, history: list[dict]) -> list[dict]:
     """Build upstream-compatible evidence prompt bounded context.
 
@@ -458,26 +487,8 @@ def _build_prompt(query: str, retrieval_results: dict, history: list[dict]) -> l
         list(retrieval_results.get("citations") or retrieval_results.get("results") or [])
     )
 
-    def _citation_block(citation: dict) -> tuple[str, str]:
-        cid = citation["id"]
-        summary = str(citation.get("chunk_text") or citation.get("body_snippet") or "")
-        metadata = citation.get("chunk_metadata") or {}
-        location = " / ".join(filter(None, [
-            metadata.get("section_title"),
-            "页 " + ", ".join(map(str, metadata["page_numbers"])) if metadata.get("page_numbers") else "",
-        ]))
-        if location:
-            summary = location + "\n" + summary
-        context = (
-            f"[{cid}] [{citation['category'] or '未分类'}] {citation['title']} ({citation['date'] or '日期未知'})\n"
-            f"来源: {citation['source'] or '未知'}\n"
-            f"摘要: {summary or '无摘要'}\n"
-            f"检索相似度: {citation.get('similarity') if citation.get('similarity') is not None else '未知'}"
-        )
-        source = (
-            f"[{cid}] {citation['title']} ({citation['date'] or '日期未知'}, {citation['source'] or '来源未知'})"
-        )
-        return context, source
+    citations, budget_truncated = budget_citations(
+        citations, AI_RETRIEVAL_MAX_CHARS, SECTION_LABELS, SECTION_ORDER, _citation_block)
 
     # 按来源分组（保持组内原检索序），无归属并入「未归属存量」组
     grouped: dict[str, list[dict]] = {}
@@ -500,8 +511,8 @@ def _build_prompt(query: str, retrieval_results: dict, history: list[dict]) -> l
         )
 
     context = "\n\n---\n\n".join(context_blocks) or "数据库中没有相关信息。"
-    if len(context) > AI_RETRIEVAL_MAX_CHARS:
-        context = context[:AI_RETRIEVAL_MAX_CHARS].rstrip() + "\n\n（检索材料已按上下文预算截断；不要推断截断部分的内容。）"
+    if budget_truncated:
+        context += "\n\n（检索材料已按上下文预算截断；不要推断截断部分的内容。）"
     source_list = "\n\n".join(source_blocks) or "无"
     used_labels = "、".join(
         SECTION_LABELS[s] for s in SECTION_ORDER if grouped.get(s)
@@ -510,9 +521,9 @@ def _build_prompt(query: str, retrieval_results: dict, history: list[dict]) -> l
 
 应答规范（SOP，任务二统一口径）：
 1. 只基于提供的资料回答，不要编造信息
-2. 回答第一行写「数据来源：」并列出实际用到的来源组（如：数据来源：行业情报、ATSC 标准文档）；没有证据的来源绝不列
+2. 回答第一行写「数据来源：」并列出实际用到的来源组（如：数据来源：行业情报、ATSC 内部报告）；没有证据的来源绝不列
 3. 在回答中用 [1][2] 等全局编号标注引用来源（编号在所有分组间全局唯一，对应来源列表序号）
-4. 默认结构：先给直接回答；涉及多个来源时按 行业情报 → ATSC 标准文档 → 广度情报 分述，最后用「综合」小节给一致性、冲突与影响；简单问题直接短答，不硬套结构
+4. 先直接回答；综合问题按行业现状与时间范围、ATSC 此前调研与适用条件及核心结论、广度新增动向对旧结论的补充或挑战展开，最后综合一致性、冲突、影响与不确定性；可按问题调整顺序和篇幅，简单问题不硬套结构
 5. 某一来源没有相关证据时如实说明「该来源无相关证据」，不要编造，也不要用其他来源顶替；转载/转录的外部内容不得写成 ATSC 或行业机构的自证结论
 6. 推断性结论显式标注（如「（推断）」），与资料原文陈述区分
 7. 如果资料中没有相关信息，诚实回答“数据库中没有相关信息”
@@ -871,6 +882,10 @@ async def _stream_agent_response_impl(
         return
 
     request_model = resolve_model(selected_model)
+    # 核验链 LLM 调用（分类/事实核验/声明映射/修复改写）与生成同模型——
+    # 冻结「相同模型与配置」的可比性（五.4 前提）。
+    if _QA_CHAIN_AVAILABLE:
+        _qa_llm_compat.current_model.set(request_model)
     if retry:
         retry_run = db.scalar(
             select(ConversationAgentRun)
@@ -929,12 +944,25 @@ async def _stream_agent_response_impl(
         yield _sse("error", {"code": exc.code, "error": exc.public_message, "retryable": True})
         return
 
-    prior_citations = _latest_history_citations(history) if retrieval_query != effective_query else []
+    prior_citations = []
+    history_refresh_error = None
+    previous = _latest_history_citations(history) if retrieval_query != effective_query else []
+    if previous:
+        try:
+            prior_citations = _normalize_citations(await refresh_canonical_citations(previous[:10]))
+        except QAServiceError as exc:
+            history_refresh_error = exc.code
+            logger.warning("history evidence refresh unavailable: %s", exc.code)
     citations = _merge_citations(current_citations, prior_citations)
+    citations, context_truncated = budget_citations(
+        citations, AI_RETRIEVAL_MAX_CHARS, SECTION_LABELS, SECTION_ORDER, _citation_block)
     summary = _retrieval_summary(
         citations, current_citations, prior_citations,
         history, history_chars, retrieval_query, exclude_ids, raw_payload,
     )
+    summary["context_truncated"] = context_truncated
+    summary["history_refresh_error"] = history_refresh_error
+    summary["history_citations_revalidated"] = len(prior_citations)
     # 任务二 2.1（回归修复）：证据状态从统一摘要契约读取（summary.evidence
     # 由 _retrieval_summary 从真实检索 payload 提取）；此处不再引用已移入
     # _retrieval_summary 内部作用域的局部变量 evidence（该引用曾使主路径在
@@ -944,6 +972,9 @@ async def _stream_agent_response_impl(
     evidence_status = str(
         (_evidence.get("status") if isinstance(_evidence, dict) else None) or "unknown"
     )
+    if prior_citations and evidence_status == "insufficient":
+        evidence_status = "unknown"  # Revalidated history is evidence, not proof of sufficiency.
+        summary["evidence"] = {**(_evidence or {}), "status": "unknown"}
     if not citations:
         answer = "抱歉，数据库中没有足够的情报来回答这个问题。请尝试用更具体的关键词或换个角度提问。"
         assistant = ConversationMessage(
@@ -1015,12 +1046,6 @@ async def _stream_agent_response_impl(
         "temperature": 0.3,
         "max_tokens": AI_MAX_OUTPUT_TOKENS,
     }
-    # 核验链 LLM 调用（分类/事实核验/声明映射/修复改写）与生成同模型——
-    # 冻结「相同模型与配置」的可比性（五.4 前提）。
-    if _QA_CHAIN_AVAILABLE:
-        _qa_llm_compat.current_model.set(request_model)
-        _qa_llm_rewrite_ctx.clear()
-        _qa_llm_rewrite_ctx["query"] = effective_query
     full_response = ""
     finish_reason: str | None = None
     stream_error: Exception | None = None
@@ -1123,8 +1148,6 @@ async def _stream_agent_response_impl(
     if truncated:
         yield _sse("status", {"stage": "truncated", "message": "回答达到输出上限，内容可能未完。"})
 
-    final_citations = _used_citations(full_response, citations) or citations[:8]
-    summary["displayed_citations"] = len(final_citations)
 
     # ── 答案侧真实核验链（五.1/五.2，2026-09-30；legacy_hybrid 同序）──
     # epistemic 事实核验（fail-safe：异常/超时一律 UNVERIFIED，绝不 PASSED）
@@ -1161,7 +1184,8 @@ async def _stream_agent_response_impl(
             evidence_status=evidence_status,
             flags=qa_flags,
             safety_scan=_safety_scan,
-            llm_rewrite=_qa_llm_rewrite if qa_flags["ANSWER_REPAIR_ENABLED"] else None,
+            llm_rewrite=partial(_qa_llm_rewrite, query=effective_query)
+                if qa_flags["ANSWER_REPAIR_ENABLED"] else None,
         )
         # 修复链改写了答案 ⇒ SSE replace（前端已有该事件的处理路径）
         if chain_report.get("answer") and chain_report["answer"] != full_response:
@@ -1209,8 +1233,11 @@ async def _stream_agent_response_impl(
     # 放在核验链之后：核验指标只评估模型正文；补齐行是确定性元信息，
     # 不参与 claim/grounding。模型按 SOP 自写时不干预。
     _pre_header = full_response
+    # 修复链可能删除/新增引用；最终展示与持久化必须使用最终答案的引用。
+    final_citations = _used_citations(full_response, citations)
+    summary["displayed_citations"] = len(final_citations)
     # Codex P2-1：SOP「数据来源」只用真实引用——答案没有数字引用时不补头，
-    # 不拿候选证据冒充被引用来源（final_citations 兜底仅用于展示列表）。
+    # 引用列表与核验后的最终正文一致，不把未引用候选当成证据。
     _header_citations = _used_citations(full_response, citations)
     full_response = _ensure_source_header(full_response, _header_citations)
     summary["sop_source_header_added"] = full_response != _pre_header

@@ -19,7 +19,7 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
 # 本地模式语义
-export SKIP_INDEX_BUILD=1          # Step10 搜索索引不在本管线范围
+export SKIP_INDEX_BUILD=1          # 不运行旧索引构建；Step10 使用 canonical 同步链
 export PIPELINE_MAX_DAYS="${PIPELINE_MAX_DAYS:-7}"
 export TOKENIZERS_PARALLELISM=false
 

@@ -42,7 +42,7 @@ def _extract_func_src(src: str, *names: str) -> str:
 
 def _load_build_context(lite_records: list):
     src = SERVER_SRC.read_text(encoding="utf-8")
-    func_src = _extract_func_src(src, "load_records", "build_context")
+    func_src = _extract_func_src(src, "load_records", "_record_key_sha_of", "_meta_record_key_sha", "build_context")
     tmp = Path(tempfile.mkdtemp())
     lite = tmp / "lite.json"
     lite.write_text(json.dumps(lite_records), encoding="utf-8")

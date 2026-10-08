@@ -70,6 +70,28 @@ def _service_error(exc: Exception) -> QAServiceError:
     return QAServiceError("qa_service_error", "检索服务返回异常，请稍后重试。", str(exc))
 
 
+async def refresh_canonical_citations(citations: list[dict]) -> list[dict]:
+    """Resolve historical identities against the live canonical index, never cached text."""
+    base_url = _require_url()
+    token = os.getenv("TECHDB_QA_INDEX_TOKEN", "").strip()
+    if not token:
+        raise QAServiceError("history_refresh_unconfigured", "历史证据暂时无法重新核对。")
+    selectors = [{key: item.get(key) for key in
+                  ("document_id", "chunk_id", "record_key_sha", "title", "date", "url")}
+                 for item in citations[:10]]
+    try:
+        async with httpx.AsyncClient(timeout=qa_service_timeout()) as client:
+            response = await client.post(
+                f"{base_url}/api/index/resolve-citations",
+                headers={"X-TechDB-Index-Token": token},
+                json={"citations": selectors})
+            response.raise_for_status()
+            payload = response.json()
+        return [c for c in payload.get("results", []) if isinstance(c, dict)]
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError) as exc:
+        raise _service_error(exc) from exc
+
+
 async def search_canonical(
     query: str,
     top_k: int = 25,

@@ -745,7 +745,10 @@ async function load() {
       {
         const keys = new Set(arr.map(r => String(r.t || '') + '|' + String(r.d || '') + '|' + String(r.u || '')));
         for (const m of manual) {
-          const key = String(m.t || '') + '|' + String(m.d || '') + '|' + String(m.u || '');
+          const articleKey = String(m.t || '') + '|' + String(m.d || '') + '|' + String(m.u || '');
+          // 行业/ATSC 同步的是独立资料的展示投影，不与同名广度文章合并。
+          const key = ['industry', 'atsc'].includes(m.origin_section)
+            ? 'document|' + m.origin_section + '|' + m.id : articleKey;
           if (keys.has(key)) continue; // 幂等：同一记录不重复入表
           keys.add(key);
           arr.push({

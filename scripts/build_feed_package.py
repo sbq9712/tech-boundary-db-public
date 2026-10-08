@@ -353,7 +353,7 @@ def data_version_of(records: list[dict]) -> str:
     return _DATA_VERSION
 
 
-def main_since_last(records: list[dict], no_push: bool) -> int:
+def main_since_last(records: list[dict], no_push: bool, daily: bool = False) -> int:
     """v2 每日收口：打包自上次成功发布以来的实际变化（ADD/UPDATE/DELETE）。
 
     watermark 只在确认「本地包已写好且（若推送）推送成功」后提交——
@@ -369,18 +369,21 @@ def main_since_last(records: list[dict], no_push: bool) -> int:
     lock_path = WATERMARK_PATH.with_suffix(".lock")
     with open(lock_path, "w") as lock_fh:
         fcntl.flock(lock_fh, fcntl.LOCK_EX)
-        return _main_since_last_locked(records, no_push)
+        return _main_since_last_locked(records, no_push, daily=daily)
 
 
-def _main_since_last_locked(records: list[dict], no_push: bool) -> int:
+def _main_since_last_locked(records: list[dict], no_push: bool, daily: bool = False) -> int:
     wm = load_watermark()
     data, count, summary = build_changes_slice(records, wm)
     n_changes = summary["added"] + summary["updated"] + summary["deleted"]
     log(f"变化: +{summary['added']} ~{summary['updated']} -{summary['deleted']} "
         f"（记录 {count} 条，包 {len(data):,} bytes）")
     if n_changes == 0:
-        log("自上次成功发布以来无变化，不产包（幂等）")
-        return 0
+        published_today = str(wm.get("updated_at") or "")[:10] == datetime.now(CST).strftime("%Y-%m-%d")
+        if not daily or published_today:
+            log("无变化且无需当日空包，幂等跳过")
+            return 0
+        log("每日收口：发布明确的零变化包，保持自然日可审计")
 
     workdir = Path(tempfile.mkdtemp(prefix="feed-pkg-"))
     try:
@@ -508,7 +511,10 @@ def main() -> int:
     g.add_argument("--yesterday", action="store_true", help="v1 兼容：打包昨天（按记录日期切片）")
     g.add_argument("--today", action="store_true", help="v1 兼容：打包今天（按记录日期切片）")
     parser.add_argument("--no-push", action="store_true", help="只生成本地 workdir，不推送")
+    parser.add_argument("--daily", action="store_true", help="配合 --since-last：无变化也发布当日空包，同日空包幂等")
     args = parser.parse_args()
+    if args.daily and not args.since_last:
+        parser.error("--daily requires --since-last")
 
     if not LITE_PATH.exists():
         log(f"ERROR: 主存储不存在: {LITE_PATH}")
@@ -520,7 +526,7 @@ def main() -> int:
 
     now = datetime.now(CST)
     if args.since_last:
-        return main_since_last(records, args.no_push)
+        return main_since_last(records, args.no_push, daily=args.daily)
     if args.yesterday:
         dates = [(now - timedelta(days=1)).strftime("%Y-%m-%d")]
     elif args.today:

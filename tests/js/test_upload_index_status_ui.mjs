@@ -19,7 +19,7 @@ const labelsMatch = src.match(/const libStatusLabels=\{[^}]*\};/);
 check('libStatusLabels 存在', !!labelsMatch);
 const labels = labelsMatch ? labelsMatch[0] : '';
 for (const [k, v] of [
-  ['indexed', '已入索引'], ['index_failed', '索引失败'],
+  ['indexed', '队列完成，待核验'], ['index_failed', '索引失败'],
   ['index_processing', '索引构建中'], ['index_queued', '排队待索引'],
   ['import_failed', '导入失败'], ['no_new_records', '零新增记录'],
   ['legacy_unknown', '状态未知'],
