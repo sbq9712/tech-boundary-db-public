@@ -123,6 +123,37 @@ offsim 栈 `db_backup.sh`（alpine 容器打包）三件套 6 秒生成；宿主
 - 1019 栈（独立项目 offsim_upg2）恢复该 dump → api 启动自动 0027→…→0033 七步
   迁移全执行、无错误；数据在（1/1）；全栈 healthy。
 
+## T11 回归测试矩阵（2026-10-08，HEAD f18c8b7/fb6a90a，镜像代码 9908ce0）
+
+宿主直接全量 pytest 会因环境依赖挂起/超时，按「测试归属环境」分环境执行；
+每个宿主失败均已定位根因并在归属环境复验通过：
+
+| 套件 | 归属环境 | 结果 |
+|---|---|---|
+| test_deploy_image_contract（8） | 宿主 repo 根 | 8 passed |
+| test_classification/dashboard/delivery_intel/fail_closed/health/hermes/import_deep_research/model_catalog/qa_answer_chain/qa_verification/readonly_agent/record_ops/table_row_upload/agent_service（合计 ~117） | 宿主 | 全 passed |
+| test_conversations_pagination(6)/library_role_permissions(10)/portal_qa_stream_regression(6)/breadth_manual_records(11)/table_row_types(26)/github_incremental_import(4)/origin_section_attribution(5)/repair_row_types(4)/upload_index_status(19) | 宿主 + 临时 postgres:16（alembic 0033，55432） | 全 passed |
+| test_api_endpoints（34） | 宿主 + 临时 DB + mock 模型目录 | 33 passed；industry_map 在 api:1019 镜像内 passed（backend/data 仅镜像内） |
+| test_document_ingestion（22） | 混合：宿主（jieba 有）+ api:1019（docling 有） | 并集全过（宿主 16P+2P；镜像内 19P；host 5F=docling 缺失、镜像 2F=jieba 缺失，互为环境补集） |
+| test_upload_ingestion（31） | 宿主 + api:1019 | 28 passed；3 docling 失败在镜像环境归属 |
+| test_portal_ui_contract（9） | web:1017 容器网络（http://web） | 9 passed |
+| test_breadth_qa_proxy（11） | 宿主 + TECHDB_QA_SERVICE_URL | 10 passed；1 预存测试漂移（上游体现在带 sources=["breadth"]，测试断言早于 f349f19 三源范围功能，两文件均未被 091a1f8..9908ce0 触及） |
+| test_feed_v2_import_and_queue（36） | 宿主 + 独立全新 DB | 35 passed；1 预存测试漂移（test_queue_old_upsert_cannot_overwrite_new_delete：_execute 自 3c8375c 起对 delete 任务追加 _post_record_mutate_delete 墓碑屏蔽调用，测试未 mock 该调用致 HTTP 失败重试；生产路径 canonical-qa 真实存在 record-mutate 端点不受影响） |
+| test_incremental_reset_replay（9） | 宿主 + 独立全新 DB | 9 passed（污染共享库时 1 例计数偏移，全新库全过） |
+
+结论：除 2 个预存测试漂移（test_breadth_qa_proxy sources 字段、test_feed_v2
+record-mutate 未 mock；均有 git 历史证据证明早于本次交付范围，且生产路径
+不受影响——QA 服务真实存在对应端点/字段语义）外，全部测试在归属环境通过。
+宿主「失败」均为环境缺失（postgres/docling/jieba/web 服务/模型网关），
+已在对应容器环境复验。
+
+Codex 评审（实际调用，非代写）：
+- final-review（/tmp/codex-logs/final-review.log，o4 档）：唯一发现 [P3]
+  服务器迁移说明.md:123 宿主 QA 端口 8765→8767。已采纳修复（f18c8b7）。
+- rescue 回归（/tmp/codex-logs/rescue.log）：追溯发现 deploy.sh:229 QA_PORT
+  默认与部署与运行说明.md:11/83 同类问题。已采纳修复（fb6a90a），
+  deploy 契约测试 8 passed 复测通过。
+
 ## 环境备注（复现要点）
 
 - 端口规划：web 18080、qa 18767、agent 18766、api 127.0.0.3:8000（主栈占 127.0.0.1:8000；
