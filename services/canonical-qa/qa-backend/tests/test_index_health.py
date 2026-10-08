@@ -79,3 +79,40 @@ def test_server_maps_health_fields_and_fallback_keeps_sources():
         "return {")[0]
     # P2-2 运行时半边：显式 unattributed 不被 VALID_SOURCES 过滤吞掉回退全源
     assert "if x in VALID_SOURCES) or VALID_SOURCES" not in src
+
+
+def test_status_exercises_scoped_graph_and_reports_failure(tmp_path):
+    """Run the real endpoint with deterministic index/graph dependencies."""
+    import ast
+    import asyncio
+    import threading
+    from types import SimpleNamespace
+    source = Path(__file__).resolve().parent.parent / "server.py"
+    node = next(n for n in ast.parse(source.read_text()).body
+                if isinstance(n, ast.AsyncFunctionDef) and n.name == "index_status")
+    node.decorator_list = []
+    doc = {"chunks": 1, "vector_rows_ok": 1, "bm25_rows_ok": 1,
+           "primary_section": "industry", "primary_sections": ["industry"],
+           "content_shas": ["new"], "content_sha_rows": 1, "record_key_shas": [],
+           "source": "industry-import", "checksum_sha256": "file-sha"}
+    meta = {"document_id": "d1", "chunk_metadata": {"primary_section": "industry"}}
+    calls = []
+    def graph(scope):
+        calls.append(scope)
+        raise RuntimeError("broken graph cache")
+    ns = {"Header": lambda **kw: None, "_check_index_token": lambda token: None,
+          "_incremental_index": SimpleNamespace(documents_metadata=lambda: {"d1": doc},
+              meta=[meta], _state_lock=threading.RLock(), record_count=1, document_count=1),
+          "_gfrag": SimpleNamespace(extract_entities=lambda rec: []),
+          "_result_allowed": lambda meta, base: True,
+          "_merged_graph": graph, "FLAGS": {"SEMANTIC_GRAPH_ENABLED": True}}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), "exec"), ns)
+    result = asyncio.run(ns["index_status"]("d1", "test"))["documents"]["d1"]
+    assert calls == ["industry"]
+    assert result["vector_ok"] and result["bm25_ok"] and not result["graph_ok"]
+    ns["_merged_graph"] = lambda scope: ([], {})
+    result = asyncio.run(ns["index_status"]("d1", "test"))["documents"]["d1"]
+    assert result["graph_ok"] and result["entity_count"] == 0
+    ns["_result_allowed"] = lambda meta, base: False
+    result = asyncio.run(ns["index_status"]("d1", "test"))["documents"]["d1"]
+    assert not result["graph_ok"] and result["live_chunks"] == 0

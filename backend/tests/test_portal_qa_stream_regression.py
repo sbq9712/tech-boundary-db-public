@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -416,9 +417,12 @@ async def test_followup_cannot_resurrect_deleted_history(env, monkeypatch, unava
     db, user, session_id = env
     _patch_model(monkeypatch)
     _patch_chain_off(monkeypatch)
-    db.add(ConversationMessage(session_id=uuid.UUID(session_id), role="user", content="钠电池进展？"))
+    now = datetime.now(timezone.utc)
+    db.add(ConversationMessage(session_id=uuid.UUID(session_id), role="user", content="钠电池进展？",
+                               created_at=now - timedelta(seconds=2)))
     db.add(ConversationMessage(session_id=uuid.UUID(session_id), role="assistant",
-                               content="已删除报告的旧事实[1]", citations_json=[_result(1)]))
+                               content="已删除报告的旧事实[1]", citations_json=[_result(1)],
+                               created_at=now - timedelta(seconds=1)))
     db.commit()
     _patch_retrieval(monkeypatch, {"results": [], "is_relevant": False,
                                   "evidence": {"status": "insufficient"}})

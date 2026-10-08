@@ -1461,12 +1461,9 @@ def test_long_body_accepted_and_truncated():
         _validate_record_shapes([dict(base, b="x" * 200_001)])
 
 
-def test_delete_masks_legacy_and_namespaced_keys_for_industry(monkeypatch, tmp_path):
-    """Codex#2：行业/ATSC 删除必须同时墓碑两代身份键。
-
-    命名空间化（3.2）前的存量 chunk/墓碑用旧 breadth 公式 [t,d,u]；
-    只按新键发 record-mutate 旧 chunk 不会被屏蔽（僵尸双版本）。
-    """
+@pytest.mark.parametrize("legacy_payload", [False, True])
+def test_industry_delete_cleans_document_without_masking_breadth(monkeypatch, tmp_path, legacy_payload):
+    """旧行业 chunk 按 document_id 精确删除；全局 breadth 墓碑会误删独立资料。"""
     monkeypatch.setenv("BREADTH_DATA_PATH", "/nonexistent-breadth-data")
     monkeypatch.setenv("TECHDB_QA_SERVICE_URL", "")
     db = SessionLocal()
@@ -1483,6 +1480,12 @@ def test_delete_masks_legacy_and_namespaced_keys_for_industry(monkeypatch, tmp_p
         rec_id = rec.id
 
         bq.enqueue_record_delete(db, rec_id, up.id, row=rec)
+        db.flush()
+        if legacy_payload:
+            # Pre-upgrade queued jobs may still carry the unsafe legacy field.
+            task = db.query(bq.IndexTask).filter_by(target_key=str(rec_id)).one()
+            task.payload = {**task.payload, "record_key_sha_legacy": bq.canonical_record_key_sha(
+                rec.title, rec.document_date, rec.url)}
         db.delete(rec)
         db.commit()
 
@@ -1491,7 +1494,8 @@ def test_delete_masks_legacy_and_namespaced_keys_for_industry(monkeypatch, tmp_p
                             lambda ksha: seen.append(ksha))
         monkeypatch.setattr(bq, "_index_delete",
                             lambda doc_id: None) if hasattr(bq, "_index_delete") else None
-        monkeypatch.setattr(bq, "_post_index_delete", lambda doc_id: None)
+        deleted_docs = []
+        monkeypatch.setattr(bq, "_post_index_delete", lambda doc_id: deleted_docs.append(doc_id))
         assert bq.process_batch(db) == 1
 
         expected_new = bq.canonical_record_key_sha(
@@ -1499,8 +1503,9 @@ def test_delete_masks_legacy_and_namespaced_keys_for_industry(monkeypatch, tmp_p
         expected_legacy = bq.canonical_record_key_sha(
             "行业旧记录", "2026-01-01", "https://ind/1")
         assert expected_new in seen, "命名空间键必须墓碑"
-        assert expected_legacy in seen, "旧 breadth 公式键必须一并墓碑（存量 chunk）"
-        assert set(seen) == {expected_new, expected_legacy}, seen
+        assert expected_legacy not in seen, "广度身份必须保留，不能跨源写墓碑"
+        assert seen == [expected_new]
+        assert deleted_docs == [str(rec_id)], "旧 chunk 仍须按文档身份清理"
 
         status = db.execute(text(
             "SELECT status FROM breadth_index_tasks WHERE target_key=:k"

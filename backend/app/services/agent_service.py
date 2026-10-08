@@ -326,14 +326,10 @@ def _retrieval_summary(
 
 
 def _ensure_source_header(answer: str, citations: list[dict]) -> str:
-    """SOP 兜底：答案缺「数据来源：」行时按实际引用来源确定性补齐。
-
-    只在缺失时前置一行（模型按 SOP 自写时不干预）；来源组按行业→ATSC→
-    广度→未归属排序，只用真实引用到的组——没有证据的来源绝不标注。
-    """
+    """按最终引用确定来源头；核验改写后也纠正模型留下的旧来源声明。"""
     text = answer or ""
-    if _SOURCE_HEADER_RE.search(text.lstrip()[:32]):
-        return text
+    had_header = bool(_SOURCE_HEADER_RE.search(text.lstrip()[:32]))
+    body = text.lstrip().partition("\n")[2].lstrip() if had_header else text.lstrip()
     used = []
     for c in citations:
         ps = _citation_primary_section(c)
@@ -341,9 +337,9 @@ def _ensure_source_header(answer: str, citations: list[dict]) -> str:
             used.append(ps)
     ordered = [s for s in SECTION_ORDER if s in used]
     if not ordered:
-        return text
+        return body if had_header else text
     labels = "、".join(SECTION_LABELS[s] for s in ordered)
-    return f"数据来源：{labels}\n\n{text.lstrip()}"
+    return f"数据来源：{labels}\n\n{body}"
 
 
 def _normalize_citations(items: list[dict]) -> list[dict]:
@@ -1231,7 +1227,7 @@ async def _stream_agent_response_impl(
             answer_status = "UNVERIFIED"
     # ── 任务二 2.3 SOP 兜底：答案缺「数据来源：」行时按实际引用确定性补齐 ──
     # 放在核验链之后：核验指标只评估模型正文；补齐行是确定性元信息，
-    # 不参与 claim/grounding。模型按 SOP 自写时不干预。
+    # 不参与 claim/grounding。模型自写的来源声明同样按最终引用核对。
     _pre_header = full_response
     # 修复链可能删除/新增引用；最终展示与持久化必须使用最终答案的引用。
     final_citations = _used_citations(full_response, citations)

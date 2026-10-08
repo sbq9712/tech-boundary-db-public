@@ -449,3 +449,10 @@ def test_heartbeat_env_invalid_falls_back_to_default(monkeypatch, caplog):
     assert fn("") == 15.0
     assert fn(None) == 15.0
     assert any("TECHDB_AGENT_HEARTBEAT_SECONDS" in r.message for r in caplog.records)
+
+
+def test_source_header_is_corrected_after_repair_removes_a_source():
+    answer = "数据来源：行业情报、ATSC 内部报告\n\n核验后正文 [1]。"
+    corrected = _ensure_source_header(answer, [_upload_citation(id=1, section="industry")])
+    assert corrected == "数据来源：行业情报\n\n核验后正文 [1]。"
+    assert _ensure_source_header("数据来源：ATSC 内部报告\n\n无法确认。", []) == "无法确认。"
